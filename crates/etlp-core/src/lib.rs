@@ -7,18 +7,23 @@
 
 mod error;
 mod media;
+mod playback;
 mod player;
 
 pub use error::{CoreError, Result};
 pub use media::{IntroMarkers, Subtitle};
+pub use playback::PlaybackData;
 pub use player::PlayerKind;
 
 use serde::{Deserialize, Serialize};
 
 /// The media server a playback request originated from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Server {
+    #[default]
     Emby,
     Jellyfin,
     Plex,
