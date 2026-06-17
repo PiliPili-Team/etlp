@@ -6,9 +6,11 @@
 //! the thin API clients, and finally the payload/episode-list parsing.
 
 pub mod dto;
+pub mod emby;
 pub mod subtitle;
 pub mod version;
 
-pub use dto::MediaStream;
+pub use dto::{Item, ItemList, MediaSource, MediaStream, PlaybackInfo};
+pub use emby::EmbyClient;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
