@@ -87,7 +87,14 @@ impl Config {
             }
         })?;
         let trimmed = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
-        let ini = Ini::load_from_str(trimmed).map_err(|source| {
+        // Disable backslash escaping so Windows paths like `F:\media` survive
+        // verbatim, matching Python's configparser (which does not unescape).
+        let opt = ini::ParseOption {
+            enabled_quote: false,
+            enabled_escape: false,
+            ..ini::ParseOption::default()
+        };
+        let ini = Ini::load_from_str_opt(trimmed, opt).map_err(|source| {
             ConfigError::Parse {
                 path: path.to_path_buf(),
                 source,
@@ -162,6 +169,33 @@ impl Config {
         split_by: char,
     ) -> Vec<String> {
         matching::split_list(self.get_or(section, option, ""), split_by)
+    }
+
+    /// All `(key, value)` entries in a section, in file order. Used to read the
+    /// `[src]` / `[dst]` path-translation tables.
+    #[must_use]
+    pub fn section_entries(&self, section: &str) -> Vec<(String, String)> {
+        match self.ini.section(Some(section)) {
+            Some(props) => props
+                .iter()
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Pair the ordered `[src]` prefixes with their matching `[dst]` prefixes
+    /// by key, producing `(src_prefix, dst_prefix)` translation pairs.
+    #[must_use]
+    pub fn path_translation_pairs(&self) -> Vec<(String, String)> {
+        let dst = self.ini.section(Some("dst"));
+        self.section_entries("src")
+            .into_iter()
+            .filter_map(|(key, src_prefix)| {
+                dst.and_then(|d| d.get(&key))
+                    .map(|dst_prefix| (src_prefix, dst_prefix.to_owned()))
+            })
+            .collect()
     }
 }
 
@@ -246,5 +280,28 @@ speed = 1.5
         let dir = tempdir().expect("tempdir");
         let err = Config::load_from_dir(dir.path()).unwrap_err();
         assert!(matches!(err, ConfigError::NotFound(_)));
+    }
+
+    #[test]
+    fn path_translation_pairs_zip_src_dst_by_key() {
+        let body = "\
+[src]
+a = /mnt/disk1
+b = /mnt/disk2/media
+
+[dst]
+a = E:
+b = F:\\media
+";
+        let dir = tempdir().expect("tempdir");
+        write_config(dir.path(), "embyToLocalPlayer.ini", body);
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(
+            cfg.path_translation_pairs(),
+            vec![
+                ("/mnt/disk1".to_owned(), "E:".to_owned()),
+                ("/mnt/disk2/media".to_owned(), "F:\\media".to_owned()),
+            ]
+        );
     }
 }
