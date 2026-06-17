@@ -5,6 +5,10 @@
 //! version selection and comparison land first, followed by the JSON DTOs,
 //! the thin API clients, and finally the payload/episode-list parsing.
 
+pub mod dto;
+pub mod subtitle;
 pub mod version;
 
+pub use dto::MediaStream;
+pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
