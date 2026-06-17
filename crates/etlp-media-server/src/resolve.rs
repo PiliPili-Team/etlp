@@ -51,20 +51,26 @@ fn force_disk_mode_by_path(file_path: &str, prefixes: &[String]) -> bool {
         .any(|p| !p.is_empty() && file_path.starts_with(p.as_str()))
 }
 
-/// Resolve the play mode and `media_path` for a source.
+/// Determine `(file_path, is_strm, is_http_source)` from a source.
+///
+/// Shared by [`resolve_stream`] and the payload orchestrator (which needs the
+/// `file_path` to build the stream URL before resolving the play mode).
 #[must_use]
-pub fn resolve_stream(input: &ResolveInput) -> StreamResolution {
-    let source_path = input.source_path;
+pub fn classify_source(
+    source_path: &str,
+    main_ep_path: &str,
+    item_type: Option<&str>,
+    container: Option<&str>,
+) -> (String, bool, bool) {
     // file_path: live channels use the source path, else the item path.
-    let initial = if input.item_type == Some("TvChannel") {
+    let initial = if item_type == Some("TvChannel") {
         source_path
     } else {
-        input.main_ep_path
+        main_ep_path
     };
     let is_strm = (initial != source_path && initial.ends_with(".strm"))
-        || input.container == Some("strm");
+        || container == Some("strm");
     let is_http_source = source_path.starts_with("http");
-
     // Keep the item path only for an http strm; otherwise use the source path.
     // (`!is_strm || (is_strm && !is_http_source)` simplifies to the below.)
     let file_path = if !is_strm || !is_http_source {
@@ -72,6 +78,19 @@ pub fn resolve_stream(input: &ResolveInput) -> StreamResolution {
     } else {
         initial.to_owned()
     };
+    (file_path, is_strm, is_http_source)
+}
+
+/// Resolve the play mode and `media_path` for a source.
+#[must_use]
+pub fn resolve_stream(input: &ResolveInput) -> StreamResolution {
+    let source_path = input.source_path;
+    let (file_path, is_strm, is_http_source) = classify_source(
+        source_path,
+        input.main_ep_path,
+        input.item_type,
+        input.container,
+    );
 
     let mut mount_disk_mode = input.mount_disk_enable;
     if (is_strm && !input.strm_direct) || is_http_source {
