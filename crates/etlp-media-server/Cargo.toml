@@ -13,6 +13,7 @@ workspace = true
 etlp-core = { path = "../etlp-core" }
 etlp-config = { path = "../etlp-config" }
 etlp-net = { path = "../etlp-net" }
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

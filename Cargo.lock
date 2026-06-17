@@ -194,6 +194,7 @@ dependencies = [
  "etlp-config",
  "etlp-core",
  "etlp-net",
+ "regex",
  "serde",
  "serde_json",
  "thiserror",
