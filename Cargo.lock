@@ -196,8 +196,10 @@ dependencies = [
  "etlp-net",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
+ "url",
  "wiremock",
 ]
 

@@ -8,6 +8,7 @@
 pub mod dto;
 pub mod emby;
 pub mod meta;
+pub mod parse;
 pub mod path_map;
 pub mod received;
 pub mod resolve;
@@ -24,6 +25,7 @@ pub use dto::{
     Chapter, Item, ItemList, MediaSource, MediaStream, PlaybackInfo,
 };
 pub use emby::EmbyClient;
+pub use parse::{EmbyParseConfig, ParseError, parse_received_data_emby};
 pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
