@@ -17,6 +17,7 @@ pub mod resolve;
 pub mod stream_url;
 pub mod subtitle;
 pub mod version;
+pub mod version_filter;
 
 pub use meta::{emby_title, intro_markers};
 pub use path_map::translate_path;
@@ -35,3 +36,4 @@ pub use prefer::version_prefer_for_playlist;
 pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
+pub use version_filter::{episode_key, filter_by_raw_name, shortest_episode};
