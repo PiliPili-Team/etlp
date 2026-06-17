@@ -13,6 +13,7 @@ pub mod meta;
 pub mod parse;
 pub mod path_map;
 pub mod playlist;
+pub mod plex;
 pub mod prefer;
 pub mod received;
 pub mod resolve;
@@ -38,6 +39,7 @@ pub use parse::{EmbyParseConfig, ParseError, parse_received_data_emby};
 pub use playlist::{
     PlaylistWindow, build_window, locate_current, playlist_window,
 };
+pub use plex::{PlexParseConfig, PlexReceivedData, parse_received_data_plex};
 pub use prefer::version_prefer_for_playlist;
 pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
