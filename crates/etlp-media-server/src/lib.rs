@@ -10,6 +10,7 @@ pub mod emby;
 pub mod meta;
 pub mod parse;
 pub mod path_map;
+pub mod playlist;
 pub mod received;
 pub mod resolve;
 pub mod stream_url;
@@ -26,6 +27,9 @@ pub use dto::{
 };
 pub use emby::EmbyClient;
 pub use parse::{EmbyParseConfig, ParseError, parse_received_data_emby};
+pub use playlist::{
+    PlaylistWindow, build_window, locate_current, playlist_window,
+};
 pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
