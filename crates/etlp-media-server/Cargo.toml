@@ -1,0 +1,21 @@
+[package]
+name = "etlp-media-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Emby/Jellyfin/Plex clients and playback payload parsing for etlp"
+
+[lints]
+workspace = true
+
+[dependencies]
+etlp-core = { path = "../etlp-core" }
+etlp-config = { path = "../etlp-config" }
+etlp-net = { path = "../etlp-net" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

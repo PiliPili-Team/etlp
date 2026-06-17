@@ -188,6 +188,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "etlp-media-server"
+version = "0.1.0"
+dependencies = [
+ "etlp-config",
+ "etlp-core",
+ "etlp-net",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "etlp-net"
 version = "0.1.0"
 dependencies = [
