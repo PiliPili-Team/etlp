@@ -1,11 +1,23 @@
 //! Core domain types and trait contracts shared across the etlp workspace.
 //!
 //! This crate carries no business logic and performs no IO. It defines the
-//! vocabulary (media-server kinds, player kinds, playback data) and the trait
-//! boundaries that upper layers depend on, so they can be mocked in tests.
+//! vocabulary (media-server kinds, player kinds, subtitle/intro descriptors)
+//! and—incrementally—the trait boundaries that upper layers depend on, so they
+//! can be mocked in tests.
+
+mod error;
+mod media;
+mod player;
+
+pub use error::{CoreError, Result};
+pub use media::{IntroMarkers, Subtitle};
+pub use player::PlayerKind;
+
+use serde::{Deserialize, Serialize};
 
 /// The media server a playback request originated from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Server {
     Emby,
     Jellyfin,
@@ -22,6 +34,13 @@ impl Server {
             Server::Plex => "plex",
         }
     }
+
+    /// Whether this server speaks the Emby/Jellyfin API dialect (as opposed to
+    /// Plex). Emby and Jellyfin share most endpoints.
+    #[must_use]
+    pub fn is_emby_like(self) -> bool {
+        matches!(self, Server::Emby | Server::Jellyfin)
+    }
 }
 
 #[cfg(test)]
@@ -33,5 +52,18 @@ mod tests {
         assert_eq!(Server::Emby.as_str(), "emby");
         assert_eq!(Server::Jellyfin.as_str(), "jellyfin");
         assert_eq!(Server::Plex.as_str(), "plex");
+    }
+
+    #[test]
+    fn server_emby_like_classification() {
+        assert!(Server::Emby.is_emby_like());
+        assert!(Server::Jellyfin.is_emby_like());
+        assert!(!Server::Plex.is_emby_like());
+    }
+
+    #[test]
+    fn server_serde_roundtrip_is_lowercase() {
+        let json = serde_json::to_string(&Server::Emby).unwrap_or_default();
+        assert_eq!(json, "\"emby\"");
     }
 }
