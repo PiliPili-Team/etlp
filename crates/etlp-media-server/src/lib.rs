@@ -7,10 +7,14 @@
 
 pub mod dto;
 pub mod emby;
+pub mod received;
 pub mod subtitle;
 pub mod version;
 
-pub use dto::{Item, ItemList, MediaSource, MediaStream, PlaybackInfo};
+pub use dto::{
+    Chapter, Item, ItemList, MediaSource, MediaStream, PlaybackInfo,
+};
 pub use emby::EmbyClient;
+pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};

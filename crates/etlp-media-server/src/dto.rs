@@ -3,7 +3,18 @@
 //! Only the fields etlp actually consumes are modeled; everything else is
 //! ignored by serde. Field names use the server's PascalCase via `rename`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+
+/// A chapter / marker entry (used for intro detection).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Chapter {
+    #[serde(rename = "MarkerType", default)]
+    pub marker_type: Option<String>,
+    #[serde(rename = "StartPositionTicks", default)]
+    pub start_position_ticks: i64,
+}
 
 /// One media stream (video / audio / subtitle) inside a media source.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -97,6 +108,10 @@ pub struct Item {
     pub run_time_ticks: Option<i64>,
     #[serde(rename = "MediaSources", default)]
     pub media_sources: Vec<MediaSource>,
+    #[serde(rename = "Chapters", default)]
+    pub chapters: Vec<Chapter>,
+    #[serde(rename = "ProviderIds", default)]
+    pub provider_ids: BTreeMap<String, String>,
 }
 
 /// Response of `Items/{id}/PlaybackInfo`.
