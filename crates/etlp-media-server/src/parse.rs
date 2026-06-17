@@ -77,6 +77,11 @@ pub struct EmbyParseConfig {
     pub pretty_title: bool,
     /// `dev.last_ep_disable_playlist` — last episode disables the playlist.
     pub last_ep_disable_playlist: bool,
+    /// `[playlist] version_filter` — regex selecting one version per episode.
+    pub version_filter: String,
+    /// `dev.version_prefer_for_playlist` — fill remaining episodes by
+    /// preference.
+    pub version_prefer_for_playlist: bool,
 }
 
 impl EmbyParseConfig {
@@ -112,6 +117,14 @@ impl EmbyParseConfig {
             last_ep_disable_playlist: config.get_bool(
                 "dev",
                 "last_ep_disable_playlist",
+                true,
+            ),
+            version_filter: config
+                .get_or("playlist", "version_filter", "")
+                .to_owned(),
+            version_prefer_for_playlist: config.get_bool(
+                "dev",
+                "version_prefer_for_playlist",
                 true,
             ),
         }

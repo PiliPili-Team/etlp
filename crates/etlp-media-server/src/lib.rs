@@ -8,6 +8,7 @@
 pub mod dto;
 pub mod emby;
 pub mod episodes;
+pub mod list_episodes;
 pub mod meta;
 pub mod parse;
 pub mod path_map;
@@ -32,6 +33,7 @@ pub use emby::EmbyClient;
 pub use episodes::{
     EpisodeContext, TitleIntroMaps, build_title_intro_maps, parse_episode_item,
 };
+pub use list_episodes::{ListContext, assemble_episodes};
 pub use parse::{EmbyParseConfig, ParseError, parse_received_data_emby};
 pub use playlist::{
     PlaylistWindow, build_window, locate_current, playlist_window,

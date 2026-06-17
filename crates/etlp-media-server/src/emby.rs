@@ -52,6 +52,27 @@ impl EmbyClient {
             .await
     }
 
+    /// `Shows/{show_id}/Episodes` — the episodes of a season.
+    ///
+    /// Mirrors `list_episodes`: `show_id` is the season id (falling back to the
+    /// series id when the season is unknown), and `season_id` is passed as a
+    /// query filter only when it is known.
+    pub async fn episodes(
+        &self,
+        show_id: &str,
+        season_id: Option<&str>,
+    ) -> Result<ItemList, NetError> {
+        let url = self.url(&format!("Shows/{show_id}/Episodes"));
+        let mut params = vec![
+            ("Fields", "MediaSources,Path,ProviderIds"),
+            ("X-Emby-Token", self.api_key.as_str()),
+        ];
+        if let Some(season_id) = season_id {
+            params.push(("SeasonId", season_id));
+        }
+        self.http.get_json(&url, &params).await
+    }
+
     /// `Users/{user_id}/Items/Resume` — the "continue watching" list.
     pub async fn resume_items(&self) -> Result<ItemList, NetError> {
         let url = self.url(&format!("Users/{}/Items/Resume", self.user_id));
