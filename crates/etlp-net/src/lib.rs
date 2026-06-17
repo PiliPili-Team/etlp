@@ -6,9 +6,11 @@
 //! write-back land on top of these in later steps (see `docs/TODO.md`).
 
 mod client;
+mod redirect;
 pub mod url_tools;
 
 pub use client::{HttpClient, HttpClientBuilder, NetError};
+pub use redirect::{RedirectCache, cache_key};
 
 use thiserror::Error;
 
