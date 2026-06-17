@@ -41,3 +41,76 @@ impl MediaStream {
         format!("{title},{}", self.display_title).to_lowercase()
     }
 }
+
+/// One playable version (media source) of an item.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MediaSource {
+    #[serde(rename = "Id", default)]
+    pub id: String,
+    #[serde(rename = "Name", default)]
+    pub name: String,
+    #[serde(rename = "Path", default)]
+    pub path: String,
+    #[serde(rename = "Container", default)]
+    pub container: Option<String>,
+    #[serde(rename = "VideoType", default)]
+    pub video_type: Option<String>,
+    #[serde(rename = "RunTimeTicks", default)]
+    pub run_time_ticks: Option<i64>,
+    #[serde(rename = "Size", default)]
+    pub size: Option<i64>,
+    /// Present when the source belongs to a different item (multi-version).
+    #[serde(rename = "ItemId", default)]
+    pub item_id: Option<String>,
+    #[serde(rename = "MediaStreams", default)]
+    pub media_streams: Vec<MediaStream>,
+}
+
+/// A library item (episode / movie / video).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Item {
+    #[serde(rename = "Id", default)]
+    pub id: String,
+    #[serde(rename = "Name", default)]
+    pub name: Option<String>,
+    #[serde(rename = "Path", default)]
+    pub path: Option<String>,
+    #[serde(rename = "Type", default)]
+    pub item_type: Option<String>,
+    #[serde(rename = "IndexNumber", default)]
+    pub index_number: Option<i64>,
+    #[serde(rename = "ParentIndexNumber", default)]
+    pub parent_index_number: Option<i64>,
+    #[serde(rename = "IndexNumberEnd", default)]
+    pub index_number_end: Option<i64>,
+    #[serde(rename = "SeriesId", default)]
+    pub series_id: Option<String>,
+    #[serde(rename = "SeasonId", default)]
+    pub season_id: Option<String>,
+    #[serde(rename = "SeriesName", default)]
+    pub series_name: Option<String>,
+    #[serde(rename = "ServerId", default)]
+    pub server_id: Option<String>,
+    #[serde(rename = "PremiereDate", default)]
+    pub premiere_date: Option<String>,
+    #[serde(rename = "RunTimeTicks", default)]
+    pub run_time_ticks: Option<i64>,
+    #[serde(rename = "MediaSources", default)]
+    pub media_sources: Vec<MediaSource>,
+}
+
+/// Response of `Items/{id}/PlaybackInfo`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct PlaybackInfo {
+    #[serde(rename = "PlaySessionId", default)]
+    pub play_session_id: Option<String>,
+    #[serde(rename = "MediaSources", default)]
+    pub media_sources: Vec<MediaSource>,
+}
+
+/// Response of an item list endpoint (e.g. Resume, Episodes).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ItemList {
+    #[serde(rename = "Items", default)]
+    pub items: Vec<Item>,
+}
