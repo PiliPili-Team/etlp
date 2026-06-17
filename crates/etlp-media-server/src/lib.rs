@@ -7,9 +7,12 @@
 
 pub mod dto;
 pub mod emby;
+pub mod meta;
 pub mod received;
 pub mod subtitle;
 pub mod version;
+
+pub use meta::{emby_title, intro_markers};
 
 pub use dto::{
     Chapter, Item, ItemList, MediaSource, MediaStream, PlaybackInfo,

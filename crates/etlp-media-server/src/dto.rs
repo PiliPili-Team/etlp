@@ -100,6 +100,8 @@ pub struct Item {
     pub season_id: Option<String>,
     #[serde(rename = "SeriesName", default)]
     pub series_name: Option<String>,
+    #[serde(rename = "ProductionYear", default)]
+    pub production_year: Option<i64>,
     #[serde(rename = "ServerId", default)]
     pub server_id: Option<String>,
     #[serde(rename = "PremiereDate", default)]
