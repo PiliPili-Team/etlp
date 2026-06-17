@@ -1,0 +1,5 @@
+# Production code forbids unwrap/expect/panic (see workspace lints), but test
+# code may use them for brevity and clear failure messages.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
