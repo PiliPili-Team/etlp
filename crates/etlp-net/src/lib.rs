@@ -1,9 +1,14 @@
 //! HTTP client, redirect cache and progress write-back for etlp.
 //!
-//! This module currently provides the pure, IO-free building blocks ported
-//! from `net_tools.py`: proxy string parsing and per-host User-Agent
-//! selection. The async `reqwest`-based client, redirect cache and progress
-//! write-back land on top of these in a later step (see `docs/TODO.md`).
+//! Provides the IO-free building blocks ported from `net_tools.py` (proxy
+//! parsing, User-Agent selection, [`url_tools`]) and the async
+//! [`HttpClient`] built on `reqwest` + rustls. Redirect caching and progress
+//! write-back land on top of these in later steps (see `docs/TODO.md`).
+
+mod client;
+pub mod url_tools;
+
+pub use client::{HttpClient, HttpClientBuilder, NetError};
 
 use thiserror::Error;
 

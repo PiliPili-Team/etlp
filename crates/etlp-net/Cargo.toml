@@ -12,3 +12,12 @@ workspace = true
 [dependencies]
 etlp-core = { path = "../etlp-core" }
 thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+url = "2"
+percent-encoding = "2"
+
+[dev-dependencies]
+tokio = { workspace = true }
+wiremock = "0.6"
