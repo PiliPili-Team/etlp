@@ -109,6 +109,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "etlp-net"
+version = "0.1.0"
+dependencies = [
+ "etlp-core",
+ "thiserror",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

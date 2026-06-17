@@ -1,0 +1,14 @@
+[package]
+name = "etlp-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "HTTP client, redirect cache and progress write-back for etlp"
+
+[lints]
+workspace = true
+
+[dependencies]
+etlp-core = { path = "../etlp-core" }
+thiserror.workspace = true
