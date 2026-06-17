@@ -10,11 +10,13 @@ pub mod emby;
 pub mod meta;
 pub mod path_map;
 pub mod received;
+pub mod resolve;
 pub mod subtitle;
 pub mod version;
 
 pub use meta::{emby_title, intro_markers};
 pub use path_map::translate_path;
+pub use resolve::{ResolveInput, StreamResolution, resolve_stream};
 
 pub use dto::{
     Chapter, Item, ItemList, MediaSource, MediaStream, PlaybackInfo,
