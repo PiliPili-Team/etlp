@@ -1082,7 +1082,7 @@ body.platform-macos .app {
     background: transparent;
 }
 body.platform-macos .titlebar {
-    background: rgba(248, 248, 252, 0.32);
+    background: rgba(248, 248, 252, 0.82);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
 }
@@ -1092,16 +1092,16 @@ body.platform-macos .sidebar {
     backdrop-filter: none;
 }
 body.platform-macos .content {
-    background: rgba(240, 240, 246, 0.76);
+    background: rgba(242, 242, 247, 0.97);
 }
 body.platform-macos .settings-group {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 body.platform-macos .overview-hero {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 body.platform-macos .log-container {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 body.platform-macos .log-body {
     background: transparent;
@@ -1151,22 +1151,22 @@ body.platform-macos .log-body {
 
 /* Explicit light theme (user override on dark system — highest specificity) */
 [data-theme="light"] body.platform-macos .titlebar {
-    background: rgba(248, 248, 252, 0.32);
+    background: rgba(248, 248, 252, 0.82);
 }
 [data-theme="light"] body.platform-macos .sidebar {
     background: rgba(248, 248, 252, 0.8);
 }
 [data-theme="light"] body.platform-macos .content {
-    background: rgba(240, 240, 246, 0.76);
+    background: rgba(242, 242, 247, 0.97);
 }
 [data-theme="light"] body.platform-macos .settings-group {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 [data-theme="light"] body.platform-macos .overview-hero {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 [data-theme="light"] body.platform-macos .log-container {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.97);
 }
 
 /* macOS light: each nav item is a white card floating on the frosted sidebar.
