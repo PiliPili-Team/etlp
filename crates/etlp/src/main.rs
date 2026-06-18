@@ -39,7 +39,7 @@ async fn main() {
     let data_dir = cli
         .data_dir
         .clone()
-        .or_else(|| platform::data_dir())
+        .or_else(platform::data_dir)
         .unwrap_or_else(|| PathBuf::from("."));
 
     if let Some(cmd) = cli.command {
@@ -47,7 +47,7 @@ async fn main() {
         let cmd_working_dir = cli
             .config_dir
             .clone()
-            .or_else(|| platform::config_dir())
+            .or_else(platform::config_dir)
             .unwrap_or_else(|| PathBuf::from("."));
         if let Err(e) = run_command(cmd, &cmd_working_dir).await {
             eprintln!("error: {e}");
@@ -168,10 +168,10 @@ fn resolve_config(cli: &Cli) -> PathBuf {
     if let Some(file) = &cli.config_file {
         return file.clone();
     }
-    if let Some(dir) = &cli.config_dir {
-        if let Ok(c) = Config::load_from_dir(dir) {
-            return c.path().to_path_buf();
-        }
+    if let Some(dir) = &cli.config_dir
+        && let Ok(c) = Config::load_from_dir(dir)
+    {
+        return c.path().to_path_buf();
     }
 
     // Search XDG / platform config dir.

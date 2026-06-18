@@ -310,9 +310,9 @@ mod tests {
         ];
         let res = assemble_episodes(&ctx, &fetched);
         assert_eq!(res.len(), 3);
-        assert_eq!(res[0].item_id, "101", "first episode must be E01");
-        assert_eq!(res[1].item_id, "102", "second episode must be E02");
-        assert_eq!(res[2].item_id, "103", "third episode must be E03");
+        assert_eq!(res.first().map(|e| e.item_id.as_str()), Some("101"), "first episode must be E01");
+        assert_eq!(res.get(1).map(|e| e.item_id.as_str()), Some("102"), "second episode must be E02");
+        assert_eq!(res.get(2).map(|e| e.item_id.as_str()), Some("103"), "third episode must be E03");
     }
 
     #[test]
