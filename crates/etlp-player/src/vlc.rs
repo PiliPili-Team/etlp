@@ -370,6 +370,7 @@ mod tests {
             static_ipc: None,
             event_handler: None,
             playlist_start: None,
+            mpv_log_file: None,
         }
     }
 
