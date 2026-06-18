@@ -216,7 +216,7 @@ pub async fn realtime_playing_feedback_loop(
         return;
     }
 
-    let interval = Duration::from_secs(5);
+    let interval = Duration::from_secs(10);
     let mut last_key: Option<String> = None;
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
@@ -301,7 +301,7 @@ pub async fn realtime_playing_feedback_loop(
             continue;
         }
 
-        // Playing: report every 5 seconds unconditionally.
+        // Playing: report every 10 seconds unconditionally.
         let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
             .await;
         req_sec = pos_sec;
