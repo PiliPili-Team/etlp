@@ -6,6 +6,8 @@
 //! the netloc/scheme come from the URL itself. The function returns the full
 //! list (the first entry is the played item, the rest form the playlist).
 
+use std::collections::BTreeMap;
+
 use etlp_config::matching::match_order;
 use etlp_core::{PlaybackData, Server, Subtitle};
 use serde::Deserialize;
@@ -52,6 +54,13 @@ pub struct PlexMediaContainer {
     pub metadata: Vec<PlexMeta>,
 }
 
+/// A Plex external provider GUID (e.g. `"imdb://tt1234567"`).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PlexGuid {
+    /// Full URI, e.g. `"imdb://tt1234567"`.
+    pub id: String,
+}
+
 /// One metadata item (movie / episode).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PlexMeta {
@@ -67,6 +76,9 @@ pub struct PlexMeta {
     pub index: Option<i64>,
     #[serde(rename = "type", default)]
     pub item_type: String,
+    /// External provider GUIDs (`[{"id": "imdb://tt…"}, …]`).
+    #[serde(rename = "Guid", default)]
+    pub guid: Vec<PlexGuid>,
 }
 
 /// A media version.
@@ -267,6 +279,25 @@ pub fn parse_received_data_plex(
             i64::try_from(index).ok()
         };
 
+        // Plex sends external IDs as `[{"id": "imdb://tt123"}, …]`.
+        // Convert to the same `{"Imdb": "tt123", "Tmdb": "456"}` map used by
+        // Emby/Jellyfin so Trakt sync can use a single code path.
+        let provider_ids: BTreeMap<String, String> = meta
+            .guid
+            .iter()
+            .filter_map(|g| {
+                let (provider, id) = g.id.split_once("://")?;
+                let key = {
+                    let mut c = provider.chars();
+                    match c.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                    }
+                };
+                Some((key, id.to_owned()))
+            })
+            .collect();
+
         result.push(PlaybackData {
             server: Server::Plex,
             scheme: scheme.clone(),
@@ -294,6 +325,8 @@ pub fn parse_received_data_plex(
                 external: sub_file,
                 inner_index: None,
             },
+            item_type: meta.item_type.clone(),
+            provider_ids,
             ..PlaybackData::default()
         });
     }

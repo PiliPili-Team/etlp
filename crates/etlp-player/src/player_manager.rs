@@ -170,6 +170,21 @@ impl PlayerManager {
             }
         }
     }
+    /// Return `(stop_sec, &PlaybackData)` pairs for every episode whose stop
+    /// time was collected.
+    ///
+    /// Used by the Trakt/Bangumi sync layer after `write_progress`.
+    #[must_use]
+    pub fn completed_entries(&self) -> Vec<(i64, &PlaybackData)> {
+        self.stop_times
+            .iter()
+            .map(|(key, &stop_sec)| {
+                // Fall back to primary data for single-episode playback.
+                let ep = self.playlist.get(key).unwrap_or(&self.data);
+                (stop_sec, ep)
+            })
+            .collect()
+    }
 }
 
 impl PlayerManager {
@@ -645,6 +660,9 @@ mod tests {
             is_start_file: true,
             redirect_url: None,
             stop_sec: None,
+            item_type: String::new(),
+            provider_ids: BTreeMap::new(),
+            series_id: String::new(),
         }
     }
 

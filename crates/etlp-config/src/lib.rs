@@ -106,6 +106,18 @@ pub struct DevSection {
     pub version_prefer_for_playlist: bool,
     /// Bearer token required by `GET /send_media_file`; absent disables auth.
     pub http_server_token: Option<String>,
+    /// Ordered keywords for cross-version subtitle fallback extraction.
+    ///
+    /// When the selected media version has no subtitle, etlp scans other
+    /// available versions and picks the first subtitle track whose
+    /// `"{title},{display_title}"` matches one of these keywords.
+    pub sub_extract_priority: Vec<String>,
+    /// Character-translation pairs for `media_title`, in full-width-comma
+    /// (`，`) separated format: `src1，dst1，src2，dst2，…`
+    ///
+    /// Example: `'，＇，"，＂` maps ASCII quotes to their full-width equivalents.
+    /// Empty string disables translation.
+    pub media_title_translate: String,
 }
 
 impl Default for DevSection {
@@ -131,6 +143,8 @@ impl Default for DevSection {
             last_ep_disable_playlist: true,
             version_prefer_for_playlist: true,
             http_server_token: None,
+            sub_extract_priority: Vec::new(),
+            media_title_translate: String::new(),
         }
     }
 }
@@ -416,7 +430,7 @@ speed_dummy = 1.5
     #[test]
     fn bom_is_tolerated() {
         let dir = tempdir().expect("tempdir");
-        let body = format!("\u{feff}[emby]\nplayer = \"mpv\"\n");
+        let body = "\u{feff}[emby]\nplayer = \"mpv\"\n".to_string();
         write_config(dir.path(), "embyToLocalPlayer.toml", &body);
         let cfg = Config::load_from_dir(dir.path()).expect("load bom");
         assert_eq!(cfg.emby.player, "mpv");

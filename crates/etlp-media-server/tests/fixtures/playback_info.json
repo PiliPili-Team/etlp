@@ -1,0 +1,22 @@
+{
+  "PlaySessionId": "smoke-session-1",
+  "MediaSources": [
+    {
+      "Id": "smoke-src-1",
+      "Name": "1080p",
+      "Path": "/media/testshow/Season 01/s01e01.mkv",
+      "RunTimeTicks": 27000000000,
+      "Size": 4294967296,
+      "MediaStreams": [
+        { "Type": "Video", "Index": 0 },
+        { "Type": "Audio", "Index": 1, "Language": "jpn" },
+        {
+          "Type": "Subtitle",
+          "Index": 2,
+          "IsExternal": false,
+          "DisplayTitle": "Chinese (Simplified)"
+        }
+      ]
+    }
+  ]
+}

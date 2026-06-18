@@ -13,17 +13,36 @@ pub use path::{
 
 /// Activate a running window by its process ID.
 ///
-/// On Windows this uses the `windows` crate to enumerate top-level windows
-/// and call `SetForegroundWindow`. On all other platforms this is a no-op
-/// (macOS apps surface themselves, and Linux desktops vary too much).
+/// On Windows this uses `EnumWindows` + `SetForegroundWindow` to bring the
+/// target process's top-level window to the foreground. On all other platforms
+/// this is a no-op (macOS apps surface themselves; Linux desktops vary).
 pub fn activate_window_by_pid(_pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        // Windows-only: enumerate HWNDs and bring the target to the foreground.
-        // Requires the `windows` crate with the `Win32_UI_WindowsAndMessaging`
-        // feature—left as a platform-specific TODO.
-        tracing::warn!(
-            "activate_window_by_pid: Windows implementation not yet wired"
-        );
+        use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowThreadProcessId, SW_RESTORE,
+            SetForegroundWindow, ShowWindow,
+        };
+
+        unsafe extern "system" fn find_and_activate(
+            hwnd: HWND,
+            lparam: LPARAM,
+        ) -> BOOL {
+            let target_pid = lparam.0 as u32;
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            if pid == target_pid {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+                let _ = SetForegroundWindow(hwnd);
+                BOOL(0) // stop enumeration
+            } else {
+                BOOL(1) // continue
+            }
+        }
+
+        let _ = unsafe {
+            EnumWindows(Some(find_and_activate), LPARAM(_pid as isize))
+        };
     }
 }

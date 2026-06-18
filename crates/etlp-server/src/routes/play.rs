@@ -267,6 +267,10 @@ async fn run_player_chain(
     mgr.collect_stop_times().await;
     mgr.write_progress(&http).await;
 
+    let entries = mgr.completed_entries();
+    sync_trakt(&state, &entries).await;
+    sync_bangumi(&state, &entries).await;
+
     state.player_running.store(false, Ordering::Release);
 }
 
@@ -431,6 +435,146 @@ async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
     );
 
     run_player_chain(state, data, episode_list).await;
+}
+
+// ── Trakt / Bangumi sync helpers ──────────────────────────────────────────────
+
+/// Sync all completed entries to Trakt.tv when configured.
+///
+/// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
+/// skips when either is absent or the netloc does not match `enable_host`.
+async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
+    use etlp_sync::{
+        TraktApi, TraktHistoryItem, TraktIds, TraktItemKind, sync_history,
+    };
+
+    if entries.is_empty() {
+        return;
+    }
+
+    let (client_id, client_secret, enable_host) = {
+        let Ok(cfg) = state.config.read() else {
+            return;
+        };
+        if cfg.trakt.client_id.is_empty() {
+            return;
+        }
+        (
+            cfg.trakt.client_id.clone(),
+            cfg.trakt.client_secret.clone(),
+            cfg.trakt.enable_host.clone(),
+        )
+    };
+
+    let token_path = state.working_dir.join("trakt_token.json");
+    let Ok(mut api) = TraktApi::new(
+        &client_id,
+        &client_secret,
+        "",
+        &token_path,
+        "https://api.trakt.tv",
+    ) else {
+        return;
+    };
+
+    if let Err(e) = api.ensure_auth().await {
+        warn!("trakt auth failed: {e}");
+        return;
+    }
+
+    let items: Vec<TraktHistoryItem> = entries
+        .iter()
+        .filter(|(_, data)| {
+            !enable_host.is_empty() && data.netloc.contains(&enable_host)
+        })
+        .filter_map(|(_, data)| {
+            let kind = if data.item_type.eq_ignore_ascii_case("movie") {
+                TraktItemKind::Movie
+            } else if data.item_type.eq_ignore_ascii_case("episode") {
+                TraktItemKind::Episode
+            } else {
+                return None;
+            };
+            let ids = TraktIds {
+                imdb: data.provider_ids.get("Imdb").cloned(),
+                tmdb: data
+                    .provider_ids
+                    .get("Tmdb")
+                    .and_then(|v| v.parse().ok()),
+                tvdb: data
+                    .provider_ids
+                    .get("Tvdb")
+                    .and_then(|v| v.parse().ok()),
+                ..TraktIds::default()
+            };
+            Some(TraktHistoryItem {
+                kind,
+                ids,
+                watched_at: None,
+            })
+        })
+        .collect();
+
+    if items.is_empty() {
+        return;
+    }
+
+    match sync_history(&api, items).await {
+        Ok(n) => info!("trakt: synced {n} item(s)"),
+        Err(e) => warn!("trakt sync error: {e}"),
+    }
+}
+
+/// Sync all completed entries to Bangumi (bgm.tv) when configured.
+///
+/// Reads `bangumi.access_token` from the config; silently skips when absent.
+/// Uses `provider_ids["Bangumi"]` as the subject ID and `index` as episode
+/// sort number.
+async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
+    use etlp_sync::{BangumiApi, sync_episode_by_bangumi_id};
+
+    if entries.is_empty() {
+        return;
+    }
+
+    let access_token = {
+        let Ok(cfg) = state.config.read() else {
+            return;
+        };
+        match cfg.bangumi.access_token.clone() {
+            Some(t) if !t.is_empty() => t,
+            _ => return,
+        }
+    };
+
+    let Ok(api) = BangumiApi::new("", &access_token, "https://api.bgm.tv")
+    else {
+        return;
+    };
+
+    for (_, data) in entries {
+        let Some(subject_id_str) = data.provider_ids.get("Bangumi") else {
+            continue;
+        };
+        let Ok(subject_id) = subject_id_str.parse::<u64>() else {
+            continue;
+        };
+        let Some(ep_index) = data.index else {
+            continue;
+        };
+        let Ok(sort) = u32::try_from(ep_index) else {
+            continue;
+        };
+        match sync_episode_by_bangumi_id(&api, subject_id, &[sort]).await {
+            Ok(ids) => {
+                info!(
+                    "bangumi: marked {} episode(s) for subject {subject_id}",
+                    ids.len()
+                )
+            }
+            Err(e) => warn!("bangumi sync error for subject {subject_id}: {e}"),
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

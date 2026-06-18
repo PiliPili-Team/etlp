@@ -82,6 +82,13 @@ pub struct EmbyParseConfig {
     /// `dev.version_prefer_for_playlist` — fill remaining episodes by
     /// preference.
     pub version_prefer_for_playlist: bool,
+    /// `dev.sub_extract_priority` — keywords for cross-version subtitle
+    /// fallback. When the selected source has no subtitle, etlp scans the
+    /// other versions in `mainEpInfo.MediaSources` for a matching track.
+    pub sub_extract_priority: Vec<String>,
+    /// Pre-parsed character translation table from
+    /// `dev.media_title_translate`. Empty → no translation.
+    pub title_translate: Vec<(char, char)>,
 }
 
 impl EmbyParseConfig {
@@ -101,8 +108,102 @@ impl EmbyParseConfig {
             last_ep_disable_playlist: config.dev.last_ep_disable_playlist,
             version_filter: config.playlist.version_filter.clone(),
             version_prefer_for_playlist: config.dev.version_prefer_for_playlist,
+            sub_extract_priority: config.dev.sub_extract_priority.clone(),
+            title_translate: parse_title_translate(
+                &config.dev.media_title_translate,
+            ),
         }
     }
+}
+
+/// Parse `dev.media_title_translate` into a char-to-char translation table.
+///
+/// Format: `src1，dst1，src2，dst2，…` (full-width comma U+FF0C as separator).
+/// Incomplete trailing pairs are silently ignored.
+pub fn parse_title_translate(s: &str) -> Vec<(char, char)> {
+    if s.is_empty() {
+        return Vec::new();
+    }
+    const SEP: char = '，';
+    let tokens: Vec<&str> = s.trim_matches(SEP).split(SEP).collect();
+    tokens
+        .chunks_exact(2)
+        .filter_map(|pair| {
+            let src = pair.first()?.chars().next()?;
+            let dst = pair.get(1)?.chars().next()?;
+            Some((src, dst))
+        })
+        .collect()
+}
+
+/// Apply a pre-parsed translation table to `title`, replacing each matching
+/// character with its target. Returns the original string unchanged when the
+/// table is empty.
+pub fn apply_title_translate(title: &str, table: &[(char, char)]) -> String {
+    if table.is_empty() {
+        return title.to_owned();
+    }
+    title
+        .chars()
+        .map(|c| {
+            table
+                .iter()
+                .find(|(src, _)| *src == c)
+                .map_or(c, |(_, dst)| *dst)
+        })
+        .collect()
+}
+
+/// Attempt to find a subtitle from a different media version when the selected
+/// version has no subtitle.
+///
+/// Scans `media_sources` for subtitle streams matching `priority`, picks the
+/// best-ranked one from the first source that is NOT `current_source_id`, and
+/// returns `(other_source_id, sub_index, codec)`. Returns `None` when there is
+/// only one source, when `priority` is empty, or when every source with a
+/// matching subtitle is the current source.
+fn sub_via_other_media_version(
+    media_sources: &[crate::dto::MediaSource],
+    current_source_id: &str,
+    priority: &[String],
+) -> Option<(String, i64, String)> {
+    use etlp_config::matching::match_order;
+
+    if media_sources.len() <= 1 || priority.is_empty() {
+        return None;
+    }
+
+    // Build an ordered list of (source_id, best_sub_index, codec) for every
+    // source that has at least one subtitle matching `priority`.
+    let candidates: Vec<(String, i64, String)> = media_sources
+        .iter()
+        .filter_map(|source| {
+            let (_, stream) = source
+                .media_streams
+                .iter()
+                .filter(|s| s.is_subtitle())
+                .filter_map(|s| {
+                    let order = match_order(&s.priority_key(), priority);
+                    if order == 0 { None } else { Some((order, s)) }
+                })
+                .min_by_key(|(order, _)| *order)?;
+            let idx = stream.index?;
+            let codec =
+                stream.codec.clone().unwrap_or_else(|| "srt".to_owned());
+            Some((source.id.clone(), idx, codec))
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Only use if the current source is NOT among the candidates.
+    if candidates.iter().any(|(id, _, _)| id == current_source_id) {
+        return None;
+    }
+
+    candidates.into_iter().next()
 }
 
 /// The query string of `playbackUrl`, as a key→value map.
@@ -404,7 +505,7 @@ pub async fn parse_received_data_emby(
         mount_disk_mode,
         &config.subtitle_priority,
     );
-    let sub_file = build_sub_file(
+    let mut sub_file = build_sub_file(
         &selection,
         scheme,
         netloc,
@@ -413,6 +514,33 @@ pub async fn parse_received_data_emby(
         &api_key,
         is_emby,
     );
+
+    // When no subtitle was found in the selected source and
+    // `sub_extract_priority` is configured, scan the other media versions
+    // carried in `mainEpInfo.MediaSources` (the full-item payload).
+    if sub_file.is_none() && !config.sub_extract_priority.is_empty() {
+        let all_sources = &received.extra_data.main_ep_info.media_sources;
+        if let Some((other_id, other_idx, other_codec)) =
+            sub_via_other_media_version(
+                all_sources,
+                &media_source_id,
+                &config.sub_extract_priority,
+            )
+        {
+            let extra = if is_emby { "/emby" } else { "" };
+            let jf = jellyfin_sub_prefix(&item_id, is_emby);
+            let emby_part = if is_emby {
+                format!("/{other_id}")
+            } else {
+                String::new()
+            };
+            let path = format!(
+                "{extra}/videos/{jf}{item_id}{emby_part}\
+                 /Subtitles/{other_idx}/0/Stream.{other_codec}?api_key={api_key}"
+            );
+            sub_file = Some(format!("{scheme}://{netloc}{path}"));
+        }
+    }
 
     if file_path.contains(".m3u8") {
         media_path = file_path.clone();
@@ -425,12 +553,14 @@ pub async fn parse_received_data_emby(
         None
     };
     let base = basename(&file_path).to_owned();
-    let media_title = match &title {
+    let raw_title = match &title {
         Some(t) if config.pretty_title && !t.is_empty() => {
             format!("{t}  |  {base}")
         }
         _ => base.clone(),
     };
+    let media_title =
+        apply_title_translate(&raw_title, &config.title_translate);
 
     let start_sec = query
         .get("StartTimeTicks")
@@ -498,6 +628,9 @@ pub async fn parse_received_data_emby(
                 .then_some(selection.sub_inner_idx),
         },
         intro,
+        item_type: main_ep.item_type.clone().unwrap_or_default(),
+        provider_ids: main_ep.provider_ids.clone(),
+        series_id: main_ep.series_id.clone().unwrap_or_default(),
         ..PlaybackData::default()
     })
 }
@@ -506,7 +639,7 @@ pub async fn parse_received_data_emby(
 ///
 /// Mirrors the `sub_delivery_url` logic: a non-`sup` `DeliveryUrl` is used
 /// verbatim, otherwise a `Subtitles/{idx}/0/Stream.{codec}` fallback is built.
-/// (The `sub_via_other_media_version` extraction fallback is not yet ported.)
+/// When no subtitle is found here, the caller tries `sub_via_other_media_version`.
 fn build_sub_file(
     selection: &crate::subtitle::SubtitleSelection,
     scheme: &str,
@@ -683,5 +816,41 @@ mod tests {
     fn fake_name_strips_drive_and_separators() {
         assert_eq!(fake_name("C:\\media\\a.mkv"), "__media__a.mkv");
         assert_eq!(fake_name("/m/a.mkv"), "__m__a.mkv");
+    }
+
+    // ── parse_title_translate / apply_title_translate ─────────────────────────
+
+    #[test]
+    fn empty_translate_string_produces_empty_table() {
+        assert!(parse_title_translate("").is_empty());
+    }
+
+    #[test]
+    fn translate_table_parses_pairs() {
+        let table = parse_title_translate("'，＇，\"，＂");
+        assert_eq!(table.len(), 2);
+        assert!(table.contains(&('\'', '＇')));
+        assert!(table.contains(&('"', '＂')));
+    }
+
+    #[test]
+    fn odd_trailing_token_is_ignored() {
+        // "a，b，c" has 3 tokens; the trailing "c" forms no pair.
+        let table = parse_title_translate("a，b，c");
+        assert_eq!(table.len(), 1);
+        assert_eq!(table.first(), Some(&('a', 'b')));
+    }
+
+    #[test]
+    fn apply_translate_replaces_matched_chars() {
+        let table = parse_title_translate("'，＇，\"，＂");
+        let result = apply_title_translate("say \"hi\" it's fine", &table);
+        assert_eq!(result, "say ＂hi＂ it＇s fine");
+    }
+
+    #[test]
+    fn apply_translate_empty_table_is_identity() {
+        let s = "unchanged";
+        assert_eq!(apply_title_translate(s, &[]), s);
     }
 }
