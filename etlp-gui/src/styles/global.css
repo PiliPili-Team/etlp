@@ -1087,7 +1087,7 @@ body.platform-macos .titlebar {
     backdrop-filter: none;
 }
 body.platform-macos .sidebar {
-    background: rgba(248, 248, 252, 0.65);
+    background: rgba(248, 248, 252, 0.8);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
 }
@@ -1154,7 +1154,7 @@ body.platform-macos .log-body {
     background: rgba(248, 248, 252, 0.32);
 }
 [data-theme="light"] body.platform-macos .sidebar {
-    background: rgba(248, 248, 252, 0.65);
+    background: rgba(248, 248, 252, 0.8);
 }
 [data-theme="light"] body.platform-macos .content {
     background: rgba(240, 240, 246, 0.76);
@@ -1169,23 +1169,52 @@ body.platform-macos .log-body {
     background: rgba(255, 255, 255, 0.92);
 }
 
-/* macOS: the frosted-glass sidebar and titlebar read as dark-tinted glass
-   against any desktop background. White text stays legible on the vibrancy
-   regardless of whether the user's wallpaper is light or dark.
-   :not(.active) keeps the accent-coloured label intact on the selected item. */
-body.platform-macos .titlebar-name {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-body.platform-macos .sidebar-section-label {
-    color: rgba(255, 255, 255, 0.5);
-}
-
+/* macOS light: each nav item is a white card floating on the frosted sidebar.
+   Dark text reads clearly against the near-opaque white card; the card's
+   higher opacity creates contrast against the more translucent sidebar pane.
+   :not(.active) leaves the accent-coloured active item unchanged. */
 body.platform-macos .nav-item:not(.active) {
-    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--text-2);
 }
 
 body.platform-macos .nav-item:not(.active):hover {
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text);
+}
+
+/* macOS dark system — reset card backgrounds to transparent so white text
+   reads on the dark vibrancy instead. */
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) body.platform-macos .nav-item:not(.active) {
+        background: transparent;
+        color: rgba(255, 255, 255, 0.78);
+    }
+
+    html:not([data-theme="light"]) body.platform-macos .nav-item:not(.active):hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+    }
+}
+
+/* Explicit dark override — same reset, beats the base macOS rule. */
+[data-theme="dark"] body.platform-macos .nav-item:not(.active) {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="dark"] body.platform-macos .nav-item:not(.active):hover {
     background: rgba(255, 255, 255, 0.12);
     color: #fff;
+}
+
+/* Explicit light — reinforce cards when user forces light on a dark system. */
+[data-theme="light"] body.platform-macos .nav-item:not(.active) {
+    background: rgba(255, 255, 255, 0.55);
+    color: var(--text-2);
+}
+
+[data-theme="light"] body.platform-macos .nav-item:not(.active):hover {
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text);
 }
