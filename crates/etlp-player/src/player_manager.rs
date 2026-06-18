@@ -197,7 +197,10 @@ impl PlayerManager {
 
 // ── Background loops (mpv-only) ───────────────────────────────────────────────
 
-/// Report realtime playback position to Emby / Jellyfin every 5 seconds.
+/// Interval between realtime progress heartbeats sent to the media server.
+const PROGRESS_INTERVAL_SECS: u64 = 10;
+
+/// Report realtime playback position to Emby / Jellyfin every 10 seconds.
 ///
 /// Sends `Start` when the playing episode changes, `Playing` for periodic
 /// heartbeats, and `End` when switching away from an episode. When the pause
@@ -216,7 +219,7 @@ pub async fn realtime_playing_feedback_loop(
         return;
     }
 
-    let interval = Duration::from_secs(10);
+    let interval = Duration::from_secs(PROGRESS_INTERVAL_SECS);
     let mut last_key: Option<String> = None;
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
@@ -301,7 +304,7 @@ pub async fn realtime_playing_feedback_loop(
             continue;
         }
 
-        // Playing: report every 10 seconds unconditionally.
+        // Playing: report every `PROGRESS_INTERVAL_SECS` seconds unconditionally.
         let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
             .await;
         req_sec = pos_sec;
