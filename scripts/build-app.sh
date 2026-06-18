@@ -46,7 +46,7 @@ _run_in() {
 _on_exit() {
     local code=$?
     if [ "${code}" -ne 0 ]; then
-        printf "\n${C_RED}%12s${C_RESET} exited with code %s\n" "error" "${code}" >&2
+        printf "${C_RED}%12s${C_RESET} exited with code %s\n" "error" "${code}" >&2
     fi
 }
 trap _on_exit EXIT
@@ -79,7 +79,14 @@ add_rust_target() {
 
 install_frontend_deps() {
     _log "Installing" "frontend dependencies"
-    _run_in "${GUI_DIR}" npm install
+    if "${DRY_RUN}"; then
+        _run_in "${GUI_DIR}" npm install
+    else
+        _run_in "${GUI_DIR}" npm install --silent 2>&1 \
+            | grep -v "^$" \
+            | grep -Ev "^(npm warn|added [0-9]+ package)" \
+            || true
+    fi
 }
 
 build_tauri_app() {

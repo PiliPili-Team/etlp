@@ -62,7 +62,7 @@ main() {
     done
     [[ "${ARCH}" == "native" ]] && ARCH="$(_native_arch)"
     if "${DRY_RUN}"; then
-        printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
+        printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n" "dry-run"
     fi
     check_rust_toolchain
     check_node
@@ -73,7 +73,7 @@ main() {
     else
         _build_one "${ARCH}"
     fi
-    printf "\n${C_GREEN}%12s${C_RESET} build complete\n" "Finished"
+    printf "${C_GREEN}%12s${C_RESET} build complete\n" "Finished"
 }
 
 main "$@"

@@ -18,6 +18,14 @@ pub fn run() {
     // SAFETY: single-threaded at this point; no concurrent env reads.
     unsafe { std::env::set_var(etlp_server::platform::ENV_RUNTIME, "app") };
 
+    // Emit the effective directories to stderr so crash logs are navigable.
+    if let Some(d) = etlp_server::platform::config_dir() {
+        eprintln!("[etlp] config dir: {}", d.display());
+    }
+    if let Some(d) = etlp_server::platform::data_dir() {
+        eprintln!("[etlp] data   dir: {}", d.display());
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
