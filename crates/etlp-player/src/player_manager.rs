@@ -226,6 +226,12 @@ const PROGRESS_INTERVAL_SECS: u64 = 10;
 /// cadence keeps the session alive without flooding the server.
 const PAUSED_INTERVAL_SECS: u64 = 30;
 
+/// Maximum continuous pause duration before heartbeats are suppressed.
+///
+/// After this many seconds without resuming, the user is considered AFK and
+/// the server is no longer notified until playback resumes.
+const PAUSE_TIMEOUT_SECS: u64 = 10 * 60;
+
 /// Report realtime playback position to Emby / Jellyfin.
 ///
 /// Sends `Start` when the playing episode changes, `Playing` for periodic
@@ -237,6 +243,10 @@ const PAUSED_INTERVAL_SECS: u64 = 30;
 ///   alive without flooding the server.
 /// - Pause / resume transition: one immediate report, then the cadence for
 ///   the new state.
+/// - Long pause: after `PAUSE_TIMEOUT_SECS` (10 min) of continuous pause,
+///   heartbeats are suppressed entirely. mpv is still polled at the paused
+///   cadence so resume is detected promptly; reporting resumes on the next
+///   play event.
 ///
 /// Exits when mpv's IPC disconnects. Plex and STRM media are skipped.
 pub async fn realtime_playing_feedback_loop(
@@ -258,6 +268,8 @@ pub async fn realtime_playing_feedback_loop(
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
     let mut was_paused: bool = false;
+    // Tracks when the current pause started; None while playing.
+    let mut pause_started_at: Option<std::time::Instant> = None;
 
     loop {
         // Poll mpv: exit when IPC disconnects.
@@ -325,6 +337,11 @@ pub async fn realtime_playing_feedback_loop(
         // Pause/resume transition: report exactly once, then switch to the
         // cadence appropriate for the new state (30 s paused, 10 s playing).
         if pause_changed {
+            if paused {
+                pause_started_at = Some(std::time::Instant::now());
+            } else {
+                pause_started_at = None;
+            }
             let _ =
                 realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
                     .await;
@@ -336,13 +353,19 @@ pub async fn realtime_playing_feedback_loop(
         }
         was_paused = paused;
 
-        // While paused: report every PAUSED_INTERVAL_SECS to keep the
-        // Emby / Jellyfin session alive.
+        // While paused: report every PAUSED_INTERVAL_SECS unless the pause
+        // has lasted longer than PAUSE_TIMEOUT_SECS, in which case heartbeats
+        // are suppressed until the user resumes playback.
         if paused {
-            let _ =
-                realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
-                    .await;
-            req_sec = pos_sec;
+            let timed_out = pause_started_at
+                .map(|t| t.elapsed().as_secs() >= PAUSE_TIMEOUT_SECS)
+                .unwrap_or(false);
+            if !timed_out {
+                let _ =
+                    realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
+                        .await;
+                req_sec = pos_sec;
+            }
             tokio::time::sleep(paused_interval).await;
             continue;
         }
