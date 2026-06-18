@@ -82,15 +82,18 @@ export const en: typeof zhCN = {
     vp_sub_priority_desc: "Match subtitle track keywords in order",
     vp_sub_priority_placeholder: "e.g. Simplified, CHS",
     vp_sub_extract: "Cross-version Subtitle Extract",
-    vp_sub_extract_desc: "Extract subtitles from other versions when none found in current",
+    vp_sub_extract_desc:
+        "Extract subtitles from other versions when none found in current",
     vp_sub_extract_placeholder: "e.g. CHS, Simplified",
     vp_limits: "Playlist Limits",
     vp_max_eps: "Max Episodes per Session",
-    vp_max_eps_desc: "Episodes are truncated once this limit is reached (recommended: 10–100)",
+    vp_max_eps_desc:
+        "Episodes are truncated once this limit is reached (recommended: 10–100)",
     vp_last_ep: "Disable at Last Episode",
     vp_last_ep_desc: "Do not add subsequent episodes when current is the last",
     vp_filter: "Version Filter Regex",
-    vp_filter_desc: "Only versions matching this regex are added to the playlist (empty = no filter)",
+    vp_filter_desc:
+        "Only versions matching this regex are added to the playlist (empty = no filter)",
     vp_filter_placeholder: "e.g. |VCB-Studio|ANi|Simplified",
 
     // Network
@@ -101,7 +104,8 @@ export const en: typeof zhCN = {
     net_skip_tls_desc: "For self-signed Emby servers — insecure",
     net_redirect: "Redirect Detection",
     net_redirect_hosts: "Hosts to Probe for Redirects",
-    net_redirect_hosts_desc: "Stream URLs for these hosts are probed for 30x redirects before handing off to the player (empty by default)",
+    net_redirect_hosts_desc:
+        "Stream URLs for these hosts are probed for 30x redirects before handing off to the player (empty by default)",
 
     // System
     page_system: "System",
@@ -135,7 +139,8 @@ export const en: typeof zhCN = {
     sys_speed_limit_desc: "0 = unlimited",
     sys_trakt: "Trakt.tv Scrobbling",
     sys_trakt_id: "Client ID",
-    sys_trakt_id_desc: "Obtained after creating an app on trakt.tv — leave empty to disable",
+    sys_trakt_id_desc:
+        "Obtained after creating an app on trakt.tv — leave empty to disable",
     sys_trakt_id_placeholder: "Leave empty to disable Trakt",
     sys_trakt_secret: "Client Secret",
     sys_trakt_host: "Enable Host",
@@ -143,7 +148,8 @@ export const en: typeof zhCN = {
     sys_trakt_host_placeholder: "e.g. emby.example.com",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_token: "Access Token",
-    sys_bangumi_token_desc: "Generated in bgm.tv → Settings → Access Token — leave empty to disable",
+    sys_bangumi_token_desc:
+        "Generated in bgm.tv → Settings → Access Token — leave empty to disable",
     sys_bangumi_token_placeholder: "Leave empty to disable Bangumi",
     sys_config_file: "Config File",
     sys_config_path: "Config File Path",

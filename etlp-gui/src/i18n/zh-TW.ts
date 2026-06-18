@@ -101,7 +101,8 @@ export const zhTW: typeof zhCN = {
     net_skip_tls_desc: "用於自簽憑證的 Emby 伺服器（存在安全風險）",
     net_redirect: "重新導向偵測",
     net_redirect_hosts: "需偵測重新導向的主機",
-    net_redirect_hosts_desc: "這些主機的串流 URL 會先探測 30x 跳轉再交給播放器（預設為空）",
+    net_redirect_hosts_desc:
+        "這些主機的串流 URL 會先探測 30x 跳轉再交給播放器（預設為空）",
 
     // System
     page_system: "系統",

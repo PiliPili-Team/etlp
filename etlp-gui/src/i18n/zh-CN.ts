@@ -97,7 +97,8 @@ export const zhCN = {
     net_skip_tls_desc: "用于自签名证书的 Emby 服务器（存在安全风险）",
     net_redirect: "重定向检测",
     net_redirect_hosts: "需检测重定向的主机",
-    net_redirect_hosts_desc: "这些主机的流媒体 URL 会先探测 30x 跳转再交给播放器（默认为空）",
+    net_redirect_hosts_desc:
+        "这些主机的流媒体 URL 会先探测 30x 跳转再交给播放器（默认为空）",
 
     // System
     page_system: "系统",

@@ -37,9 +37,9 @@ interface ConfigDto {
 type SectionTab = "player" | "version-prefer" | "network" | "system";
 
 interface Props {
-    section:         SectionTab;
-    addToast:        (msg: string, err?: boolean) => void;
-    display:         DisplaySettings;
+    section: SectionTab;
+    addToast: (msg: string, err?: boolean) => void;
+    display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
 }
 
@@ -52,8 +52,16 @@ async function patch(section: string, key: string, value: unknown): Promise<void
 // ── Row components ─────────────────────────────────────────────────────────────
 
 function ToggleRow({
-    label, desc, checked, onChange,
-}: { label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void }) {
+    label,
+    desc,
+    checked,
+    onChange,
+}: {
+    label: string;
+    desc?: string;
+    checked: boolean;
+    onChange: (v: boolean) => void;
+}) {
     return (
         <div className="row">
             <div className="row-label">
@@ -62,8 +70,14 @@ function ToggleRow({
             </div>
             <div className="row-control">
                 <label className="toggle">
-                    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
+                    <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => onChange(e.target.checked)}
+                    />
+                    <span className="toggle-track">
+                        <span className="toggle-thumb" />
+                    </span>
                 </label>
             </div>
         </div>
@@ -71,10 +85,19 @@ function ToggleRow({
 }
 
 function InputRow({
-    label, desc, value, placeholder, mono, onCommit,
+    label,
+    desc,
+    value,
+    placeholder,
+    mono,
+    onCommit,
 }: {
-    label: string; desc?: string; value: string; placeholder?: string;
-    mono?: boolean; onCommit: (v: string) => void;
+    label: string;
+    desc?: string;
+    value: string;
+    placeholder?: string;
+    mono?: boolean;
+    onCommit: (v: string) => void;
 }) {
     const [local, setLocal] = useState(value);
     useEffect(() => setLocal(value), [value]);
@@ -90,8 +113,12 @@ function InputRow({
                     value={local}
                     placeholder={placeholder ?? ""}
                     onChange={(e) => setLocal(e.target.value)}
-                    onBlur={() => { if (local !== value) onCommit(local); }}
-                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onBlur={() => {
+                        if (local !== value) onCommit(local);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
                 />
             </div>
         </div>
@@ -99,8 +126,20 @@ function InputRow({
 }
 
 function NumberRow({
-    label, desc, value, min, max, onCommit,
-}: { label: string; desc?: string; value: number; min?: number; max?: number; onCommit: (v: number) => void }) {
+    label,
+    desc,
+    value,
+    min,
+    max,
+    onCommit,
+}: {
+    label: string;
+    desc?: string;
+    value: number;
+    min?: number;
+    max?: number;
+    onCommit: (v: number) => void;
+}) {
     const [local, setLocal] = useState(String(value));
     useEffect(() => setLocal(String(value)), [value]);
     return (
@@ -112,13 +151,18 @@ function NumberRow({
             <div className="row-control">
                 <input
                     className="input narrow"
-                    type="number" value={local} min={min} max={max}
+                    type="number"
+                    value={local}
+                    min={min}
+                    max={max}
                     onChange={(e) => setLocal(e.target.value)}
                     onBlur={() => {
                         const n = parseInt(local, 10);
                         if (!isNaN(n) && n !== value) onCommit(n);
                     }}
-                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
                 />
             </div>
         </div>
@@ -126,10 +170,17 @@ function NumberRow({
 }
 
 function SelectRow({
-    label, desc, value, options, onChange,
+    label,
+    desc,
+    value,
+    options,
+    onChange,
 }: {
-    label: string; desc?: string; value: string;
-    options: { value: string; label: string }[]; onChange: (v: string) => void;
+    label: string;
+    desc?: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (v: string) => void;
 }) {
     return (
         <div className="row">
@@ -138,8 +189,16 @@ function SelectRow({
                 {desc && <div className="row-desc">{desc}</div>}
             </div>
             <div className="row-control">
-                <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
-                    {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <select
+                    className="select"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                >
+                    {options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                            {o.label}
+                        </option>
+                    ))}
                 </select>
             </div>
         </div>
@@ -147,19 +206,34 @@ function SelectRow({
 }
 
 function TagListRow({
-    label, desc, tags, placeholder, onAdd, onRemove,
+    label,
+    desc,
+    tags,
+    placeholder,
+    onAdd,
+    onRemove,
 }: {
-    label: string; desc?: string; tags: string[]; placeholder?: string;
-    onAdd: (tag: string) => void; onRemove: (index: number) => void;
+    label: string;
+    desc?: string;
+    tags: string[];
+    placeholder?: string;
+    onAdd: (tag: string) => void;
+    onRemove: (index: number) => void;
 }) {
     const t = useI18n();
     const [input, setInput] = useState("");
     const handleAdd = () => {
         const tag = input.trim();
-        if (tag && !tags.includes(tag)) { onAdd(tag); setInput(""); }
+        if (tag && !tags.includes(tag)) {
+            onAdd(tag);
+            setInput("");
+        }
     };
     return (
-        <div className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
+        <div
+            className="row"
+            style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}
+        >
             <div className="row-label">
                 <div>{label}</div>
                 {desc && <div className="row-desc">{desc}</div>}
@@ -170,19 +244,29 @@ function TagListRow({
                         {tags.map((tag, i) => (
                             <span key={i} className="tag">
                                 {tag}
-                                <button className="tag-remove" onClick={() => onRemove(i)}>×</button>
+                                <button
+                                    className="tag-remove"
+                                    onClick={() => onRemove(i)}
+                                >
+                                    ×
+                                </button>
                             </span>
                         ))}
                     </div>
                 )}
                 <div className="tag-add-row">
                     <input
-                        className="tag-input" value={input}
+                        className="tag-input"
+                        value={input}
                         placeholder={placeholder ?? t("add_placeholder")}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") handleAdd();
+                        }}
                     />
-                    <button className="btn" onClick={handleAdd}>{t("add")}</button>
+                    <button className="btn" onClick={handleAdd}>
+                        {t("add")}
+                    </button>
                 </div>
             </div>
         </div>
@@ -190,28 +274,50 @@ function TagListRow({
 }
 
 function TextareaRow({
-    label, desc, value, placeholder, onCommit,
-}: { label: string; desc?: string; value: string; placeholder?: string; onCommit: (v: string) => void }) {
+    label,
+    desc,
+    value,
+    placeholder,
+    onCommit,
+}: {
+    label: string;
+    desc?: string;
+    value: string;
+    placeholder?: string;
+    onCommit: (v: string) => void;
+}) {
     const [local, setLocal] = useState(value);
     useEffect(() => setLocal(value), [value]);
     return (
-        <div className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
+        <div
+            className="row"
+            style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}
+        >
             <div className="row-label">
                 <div>{label}</div>
                 {desc && <div className="row-desc">{desc}</div>}
             </div>
             <textarea
                 style={{
-                    width: "100%", minHeight: 80,
-                    background: "var(--surface-alt)", border: "1.5px solid var(--border)",
-                    borderRadius: 8, padding: "7px 10px",
+                    width: "100%",
+                    minHeight: 80,
+                    background: "var(--surface-alt)",
+                    border: "1.5px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "7px 10px",
                     fontFamily: '"SF Mono", "Cascadia Code", monospace',
-                    fontSize: 12, color: "var(--text)", resize: "vertical",
-                    outline: "none", lineHeight: 1.6,
+                    fontSize: 12,
+                    color: "var(--text)",
+                    resize: "vertical",
+                    outline: "none",
+                    lineHeight: 1.6,
                 }}
-                value={local} placeholder={placeholder}
+                value={local}
+                placeholder={placeholder}
                 onChange={(e) => setLocal(e.target.value)}
-                onBlur={() => { if (local !== value) onCommit(local); }}
+                onBlur={() => {
+                    if (local !== value) onCommit(local);
+                }}
             />
         </div>
     );
@@ -219,7 +325,13 @@ function TextareaRow({
 
 // ── Player path row ────────────────────────────────────────────────────────────
 
-function PlayerPathRow({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+function PlayerPathRow({
+    value,
+    onCommit,
+}: {
+    value: string;
+    onCommit: (v: string) => void;
+}) {
     const t = useI18n();
     const [local, setLocal] = useState(value);
     const [pathValid, setPathValid] = useState<boolean | null>(null);
@@ -228,7 +340,10 @@ function PlayerPathRow({ value, onCommit }: { value: string; onCommit: (v: strin
     useEffect(() => setLocal(value), [value]);
 
     const validatePath = useCallback(async (p: string) => {
-        if (!p.trim()) { setPathValid(null); return; }
+        if (!p.trim()) {
+            setPathValid(null);
+            return;
+        }
         const exists = await invoke<boolean>("path_exists", { path: p });
         setPathValid(exists);
     }, []);
@@ -241,33 +356,56 @@ function PlayerPathRow({ value, onCommit }: { value: string; onCommit: (v: strin
 
     const handlePick = async () => {
         const picked = await invoke<string | null>("pick_player_path");
-        if (picked) { setLocal(picked); setPathValid(true); onCommit(picked); }
+        if (picked) {
+            setLocal(picked);
+            setPathValid(true);
+            onCommit(picked);
+        }
     };
 
     return (
-        <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 54 }}>
+        <div
+            className="row"
+            style={{ flexDirection: "column", alignItems: "stretch", gap: 0 }}
+        >
+            <div
+                style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 54 }}
+            >
                 <div className="row-label">
                     <div>{t("pl_path")}</div>
                     <div className="row-desc">{t("pl_path_desc")}</div>
                 </div>
-                <div className="row-control" style={{ flexShrink: 1, minWidth: 0, gap: 6 }}>
+                <div
+                    className="row-control"
+                    style={{ flexShrink: 1, minWidth: 0, gap: 6 }}
+                >
                     <input
                         className={`input code${pathValid === false ? " error" : ""}`}
                         style={{ flex: 1, minWidth: 140 }}
-                        value={local} placeholder="/opt/homebrew/bin/mpv"
+                        value={local}
+                        placeholder="/opt/homebrew/bin/mpv"
                         onChange={(e) => handleChange(e.target.value)}
-                        onBlur={() => { if (local !== value) onCommit(local); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        onBlur={() => {
+                            if (local !== value) onCommit(local);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
                     />
-                    <button className="btn" style={{ whiteSpace: "nowrap", flexShrink: 0 }}
-                        onClick={() => void handlePick()}>
+                    <button
+                        className="btn"
+                        style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                        onClick={() => void handlePick()}
+                    >
                         {t("pl_browse")}
                     </button>
                 </div>
             </div>
             {pathValid === false && (
-                <div className="path-error-hint" style={{ paddingLeft: 16, paddingBottom: 8 }}>
+                <div
+                    className="path-error-hint"
+                    style={{ paddingLeft: 16, paddingBottom: 8 }}
+                >
                     {t("pl_path_error")}
                 </div>
             )}
@@ -278,13 +416,23 @@ function PlayerPathRow({ value, onCommit }: { value: string; onCommit: (v: strin
 // ── Accent color picker row ────────────────────────────────────────────────────
 
 const ACCENT_NAMES: Record<AccentColor, string> = {
-    blue: "蓝色", indigo: "靛蓝", purple: "紫色", pink: "粉色",
-    red: "红色", orange: "橙色", teal: "青色", green: "绿色",
+    blue: "蓝色",
+    indigo: "靛蓝",
+    purple: "紫色",
+    pink: "粉色",
+    red: "红色",
+    orange: "橙色",
+    teal: "青色",
+    green: "绿色",
 };
 
 function AccentColorRow({
-    value, onChange,
-}: { value: AccentColor; onChange: (v: AccentColor) => void }) {
+    value,
+    onChange,
+}: {
+    value: AccentColor;
+    onChange: (v: AccentColor) => void;
+}) {
     const t = useI18n();
     return (
         <div className="row">
@@ -303,7 +451,9 @@ function AccentColorRow({
                                 title={ACCENT_NAMES[key]}
                                 onClick={() => onChange(key)}
                                 style={{
-                                    width: 24, height: 24, borderRadius: "50%",
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: "50%",
                                     background: light,
                                     border: active
                                         ? `3px solid ${light}`
@@ -329,8 +479,12 @@ function AccentColorRow({
 // ── Font picker row (pure <select> dropdown) ────────────────────────────────────
 
 function FontPickerRow({
-    value, onChange,
-}: { value: string; onChange: (v: string) => void }) {
+    value,
+    onChange,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+}) {
     const t = useI18n();
     const [fonts, setFonts] = useState<string[]>([]);
 
@@ -360,7 +514,9 @@ function FontPickerRow({
                     style={{ minWidth: 180 }}
                 >
                     {options.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
+                        <option key={o.value} value={o.value}>
+                            {o.label}
+                        </option>
                     ))}
                 </select>
             </div>
@@ -385,39 +541,65 @@ export default function Settings({ section, addToast, display, onDisplayChange }
             setCfg(c);
             setAutostart(a);
             loaded.current = true;
-        } catch (e) { addToast(String(e), true); }
+        } catch (e) {
+            addToast(String(e), true);
+        }
     }, [addToast]);
 
-    useEffect(() => { void loadConfig(); }, [loadConfig]);
+    useEffect(() => {
+        void loadConfig();
+    }, [loadConfig]);
 
-    const update = useCallback(async (sec: string, key: string, value: unknown) => {
-        try {
-            await patch(sec, key, value);
-            setCfg((prev) => prev ? ({ ...prev, [key.replace(/\./g, "_")]: value } as ConfigDto) : prev);
-        } catch (e) { addToast(String(e), true); }
-    }, [addToast]);
+    const update = useCallback(
+        async (sec: string, key: string, value: unknown) => {
+            try {
+                await patch(sec, key, value);
+                setCfg((prev) =>
+                    prev
+                        ? ({ ...prev, [key.replace(/\./g, "_")]: value } as ConfigDto)
+                        : prev,
+                );
+            } catch (e) {
+                addToast(String(e), true);
+            }
+        },
+        [addToast],
+    );
 
-    const handleAutostart = useCallback(async (enabled: boolean) => {
-        try {
-            await invoke("set_autostart", { enabled });
-            setAutostart(enabled);
-            addToast(enabled ? t("autostart_on") : t("autostart_off"));
-        } catch (e) { addToast(String(e), true); }
-    }, [addToast, t]);
+    const handleAutostart = useCallback(
+        async (enabled: boolean) => {
+            try {
+                await invoke("set_autostart", { enabled });
+                setAutostart(enabled);
+                addToast(enabled ? t("autostart_on") : t("autostart_off"));
+            } catch (e) {
+                addToast(String(e), true);
+            }
+        },
+        [addToast, t],
+    );
 
     if (!cfg) {
-        return <div style={{ color: "var(--text-3)", padding: 40, textAlign: "center" }}>{t("loading")}</div>;
+        return (
+            <div style={{ color: "var(--text-3)", padding: 40, textAlign: "center" }}>
+                {t("loading")}
+            </div>
+        );
     }
 
-    if (section === "player")         return <PlayerSection cfg={cfg} update={update} />;
-    if (section === "version-prefer") return <VersionPreferSection cfg={cfg} update={update} />;
-    if (section === "network")        return <NetworkSection cfg={cfg} update={update} />;
+    if (section === "player") return <PlayerSection cfg={cfg} update={update} />;
+    if (section === "version-prefer")
+        return <VersionPreferSection cfg={cfg} update={update} />;
+    if (section === "network") return <NetworkSection cfg={cfg} update={update} />;
     if (section === "system")
         return (
             <SystemSection
-                cfg={cfg} update={update}
-                autostart={autostart} onAutostart={handleAutostart}
-                display={display} onDisplayChange={onDisplayChange}
+                cfg={cfg}
+                update={update}
+                autostart={autostart}
+                onAutostart={handleAutostart}
+                display={display}
+                onDisplayChange={onDisplayChange}
             />
         );
     return null;
@@ -425,15 +607,21 @@ export default function Settings({ section, addToast, display, onDisplayChange }
 
 // ── Player ─────────────────────────────────────────────────────────────────────
 
-function PlayerSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k: string, v: unknown) => void }) {
+function PlayerSection({
+    cfg,
+    update,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+}) {
     const t = useI18n();
 
     const PLAYERS = [
-        { value: "mpv",        label: "mpv" },
-        { value: "iina",       label: "IINA (macOS)" },
-        { value: "vlc",        label: "VLC" },
-        { value: "mpc-hc",     label: "MPC-HC (Windows)" },
-        { value: "potplayer",  label: "PotPlayer (Windows)" },
+        { value: "mpv", label: "mpv" },
+        { value: "iina", label: "IINA (macOS)" },
+        { value: "vlc", label: "VLC" },
+        { value: "mpc-hc", label: "MPC-HC (Windows)" },
+        { value: "potplayer", label: "PotPlayer (Windows)" },
         { value: "dandanplay", label: "弹弹Play" },
     ];
 
@@ -442,8 +630,10 @@ function PlayerSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k:
             <div className="page-title">{t("page_player")}</div>
             <div className="settings-group">
                 <SelectRow
-                    label={t("pl_type")} desc={t("pl_type_desc")}
-                    value={cfg.player} options={PLAYERS}
+                    label={t("pl_type")}
+                    desc={t("pl_type_desc")}
+                    value={cfg.player}
+                    options={PLAYERS}
                     onChange={(v) => update("emby", "player", v)}
                 />
                 <PlayerPathRow
@@ -453,14 +643,30 @@ function PlayerSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k:
             </div>
             <div className="settings-group-title">{t("pl_startup")}</div>
             <div className="settings-group">
-                <ToggleRow label={t("pl_fullscreen")} desc={t("pl_fullscreen_desc")}
-                    checked={cfg.fullscreen} onChange={(v) => update("emby", "fullscreen", v)} />
-                <ToggleRow label={t("pl_mute")} desc={t("pl_mute_desc")}
-                    checked={cfg.disable_audio} onChange={(v) => update("emby", "disable_audio", v)} />
-                <ToggleRow label={t("pl_pretty_title")} desc={t("pl_pretty_title_desc")}
-                    checked={cfg.pretty_title} onChange={(v) => update("dev", "pretty_title", v)} />
-                <ToggleRow label={t("pl_kill_start")} desc={t("pl_kill_start_desc")}
-                    checked={cfg.kill_process_at_start} onChange={(v) => update("dev", "kill_process_at_start", v)} />
+                <ToggleRow
+                    label={t("pl_fullscreen")}
+                    desc={t("pl_fullscreen_desc")}
+                    checked={cfg.fullscreen}
+                    onChange={(v) => update("emby", "fullscreen", v)}
+                />
+                <ToggleRow
+                    label={t("pl_mute")}
+                    desc={t("pl_mute_desc")}
+                    checked={cfg.disable_audio}
+                    onChange={(v) => update("emby", "disable_audio", v)}
+                />
+                <ToggleRow
+                    label={t("pl_pretty_title")}
+                    desc={t("pl_pretty_title_desc")}
+                    checked={cfg.pretty_title}
+                    onChange={(v) => update("dev", "pretty_title", v)}
+                />
+                <ToggleRow
+                    label={t("pl_kill_start")}
+                    desc={t("pl_kill_start_desc")}
+                    checked={cfg.kill_process_at_start}
+                    onChange={(v) => update("dev", "kill_process_at_start", v)}
+                />
             </div>
         </>
     );
@@ -468,7 +674,13 @@ function PlayerSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k:
 
 // ── Version prefer ─────────────────────────────────────────────────────────────
 
-function VersionPreferSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k: string, v: unknown) => void }) {
+function VersionPreferSection({
+    cfg,
+    update,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+}) {
     const t = useI18n();
     return (
         <>
@@ -480,8 +692,16 @@ function VersionPreferSection({ cfg, update }: { cfg: ConfigDto; update: (s: str
                     desc={t("vp_keywords_desc")}
                     tags={cfg.version_prefer}
                     placeholder={t("vp_keywords_placeholder")}
-                    onAdd={(tag) => update("dev", "version_prefer", [...cfg.version_prefer, tag])}
-                    onRemove={(i) => update("dev", "version_prefer", cfg.version_prefer.filter((_, j) => j !== i))}
+                    onAdd={(tag) =>
+                        update("dev", "version_prefer", [...cfg.version_prefer, tag])
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "dev",
+                            "version_prefer",
+                            cfg.version_prefer.filter((_, j) => j !== i),
+                        )
+                    }
                 />
                 <ToggleRow
                     label={t("vp_playlist")}
@@ -493,23 +713,52 @@ function VersionPreferSection({ cfg, update }: { cfg: ConfigDto; update: (s: str
             <div className="settings-group-title">{t("vp_subtitle")}</div>
             <div className="settings-group">
                 <TagListRow
-                    label={t("vp_sub_priority")} desc={t("vp_sub_priority_desc")}
-                    tags={cfg.subtitle_priority} placeholder={t("vp_sub_priority_placeholder")}
-                    onAdd={(tag) => update("dev", "subtitle_priority", [...cfg.subtitle_priority, tag])}
-                    onRemove={(i) => update("dev", "subtitle_priority", cfg.subtitle_priority.filter((_, j) => j !== i))}
+                    label={t("vp_sub_priority")}
+                    desc={t("vp_sub_priority_desc")}
+                    tags={cfg.subtitle_priority}
+                    placeholder={t("vp_sub_priority_placeholder")}
+                    onAdd={(tag) =>
+                        update("dev", "subtitle_priority", [
+                            ...cfg.subtitle_priority,
+                            tag,
+                        ])
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "dev",
+                            "subtitle_priority",
+                            cfg.subtitle_priority.filter((_, j) => j !== i),
+                        )
+                    }
                 />
                 <TagListRow
-                    label={t("vp_sub_extract")} desc={t("vp_sub_extract_desc")}
-                    tags={cfg.sub_extract_priority} placeholder={t("vp_sub_extract_placeholder")}
-                    onAdd={(tag) => update("dev", "sub_extract_priority", [...cfg.sub_extract_priority, tag])}
-                    onRemove={(i) => update("dev", "sub_extract_priority", cfg.sub_extract_priority.filter((_, j) => j !== i))}
+                    label={t("vp_sub_extract")}
+                    desc={t("vp_sub_extract_desc")}
+                    tags={cfg.sub_extract_priority}
+                    placeholder={t("vp_sub_extract_placeholder")}
+                    onAdd={(tag) =>
+                        update("dev", "sub_extract_priority", [
+                            ...cfg.sub_extract_priority,
+                            tag,
+                        ])
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "dev",
+                            "sub_extract_priority",
+                            cfg.sub_extract_priority.filter((_, j) => j !== i),
+                        )
+                    }
                 />
             </div>
             <div className="settings-group-title">{t("vp_limits")}</div>
             <div className="settings-group">
                 <NumberRow
-                    label={t("vp_max_eps")} desc={t("vp_max_eps_desc")}
-                    value={cfg.item_limit} min={1} max={100}
+                    label={t("vp_max_eps")}
+                    desc={t("vp_max_eps_desc")}
+                    value={cfg.item_limit}
+                    min={1}
+                    max={100}
                     onCommit={(v) => update("playlist", "item_limit", v)}
                 />
                 <ToggleRow
@@ -532,19 +781,29 @@ function VersionPreferSection({ cfg, update }: { cfg: ConfigDto; update: (s: str
 
 // ── Network ────────────────────────────────────────────────────────────────────
 
-function NetworkSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k: string, v: unknown) => void }) {
+function NetworkSection({
+    cfg,
+    update,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+}) {
     const t = useI18n();
     return (
         <>
             <div className="page-title">{t("page_network")}</div>
             <div className="settings-group">
                 <InputRow
-                    label={t("net_proxy")} desc={t("net_proxy_desc")}
-                    value={cfg.http_proxy} placeholder="127.0.0.1:7890" mono
+                    label={t("net_proxy")}
+                    desc={t("net_proxy_desc")}
+                    value={cfg.http_proxy}
+                    placeholder="127.0.0.1:7890"
+                    mono
                     onCommit={(v) => update("dev", "http_proxy", v || null)}
                 />
                 <ToggleRow
-                    label={t("net_skip_tls")} desc={t("net_skip_tls_desc")}
+                    label={t("net_skip_tls")}
+                    desc={t("net_skip_tls_desc")}
                     checked={cfg.skip_certificate_verify}
                     onChange={(v) => update("dev", "skip_certificate_verify", v)}
                 />
@@ -554,9 +813,21 @@ function NetworkSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k
                 <TagListRow
                     label={t("net_redirect_hosts")}
                     desc={t("net_redirect_hosts_desc")}
-                    tags={cfg.redirect_check_host} placeholder="cdn.example.com"
-                    onAdd={(h) => update("dev", "redirect_check_host", [...cfg.redirect_check_host, h])}
-                    onRemove={(i) => update("dev", "redirect_check_host", cfg.redirect_check_host.filter((_, j) => j !== i))}
+                    tags={cfg.redirect_check_host}
+                    placeholder="cdn.example.com"
+                    onAdd={(h) =>
+                        update("dev", "redirect_check_host", [
+                            ...cfg.redirect_check_host,
+                            h,
+                        ])
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "dev",
+                            "redirect_check_host",
+                            cfg.redirect_check_host.filter((_, j) => j !== i),
+                        )
+                    }
                 />
             </div>
         </>
@@ -566,31 +837,44 @@ function NetworkSection({ cfg, update }: { cfg: ConfigDto; update: (s: string, k
 // ── System ─────────────────────────────────────────────────────────────────────
 
 function SystemSection({
-    cfg, update, autostart, onAutostart, display, onDisplayChange,
+    cfg,
+    update,
+    autostart,
+    onAutostart,
+    display,
+    onDisplayChange,
 }: {
-    cfg: ConfigDto; update: (s: string, k: string, v: unknown) => void;
-    autostart: boolean; onAutostart: (v: boolean) => void;
-    display: DisplaySettings; onDisplayChange: (patch: Partial<DisplaySettings>) => void;
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+    autostart: boolean;
+    onAutostart: (v: boolean) => void;
+    display: DisplaySettings;
+    onDisplayChange: (patch: Partial<DisplaySettings>) => void;
 }) {
     const t = useI18n();
 
     const handleOpenConfig = useCallback(async () => {
-        try { await invoke("open_config_folder"); } catch { /* ignore */ }
+        try {
+            await invoke("open_config_folder");
+        } catch {
+            /* ignore */
+        }
     }, []);
 
-    const dpr = typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
+    const dpr =
+        typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
 
     const THEME_OPTIONS = [
         { value: "system", label: t("sys_theme_system") },
-        { value: "light",  label: t("sys_theme_light") },
-        { value: "dark",   label: t("sys_theme_dark") },
+        { value: "light", label: t("sys_theme_light") },
+        { value: "dark", label: t("sys_theme_dark") },
     ];
 
     const LANG_OPTIONS = [
         { value: "system", label: t("sys_lang_system") },
-        { value: "zh-CN",  label: "简体中文" },
-        { value: "zh-TW",  label: "繁體中文" },
-        { value: "en",     label: "English" },
+        { value: "zh-CN", label: "简体中文" },
+        { value: "zh-TW", label: "繁體中文" },
+        { value: "en", label: "English" },
     ];
 
     const FONT_SIZE_OPTIONS = [
@@ -602,20 +886,20 @@ function SystemSection({
     ];
 
     const ZOOM_OPTIONS = [
-        { value: "0.8",  label: "80%" },
-        { value: "0.9",  label: "90%" },
-        { value: "1",    label: "100%" },
-        { value: "1.1",  label: "110%" },
+        { value: "0.8", label: "80%" },
+        { value: "0.9", label: "90%" },
+        { value: "1", label: "100%" },
+        { value: "1.1", label: "110%" },
         { value: "1.25", label: "125%" },
-        { value: "1.5",  label: "150%" },
+        { value: "1.5", label: "150%" },
         { value: "1.75", label: "175%" },
-        { value: "2",    label: "200%" },
+        { value: "2", label: "200%" },
     ];
 
     const LOG_LEVELS = [
         { value: "error", label: t("log_error") },
-        { value: "warn",  label: t("log_warn") },
-        { value: "info",  label: t("log_info") },
+        { value: "warn", label: t("log_warn") },
+        { value: "info", label: t("log_info") },
         { value: "debug", label: t("log_debug") },
         { value: "trace", label: t("log_trace") },
     ];
@@ -627,12 +911,18 @@ function SystemSection({
             {/* Appearance */}
             <div className="settings-group-title">{t("sys_appearance")}</div>
             <div className="settings-group">
-                <SelectRow label={t("sys_theme")} desc={t("sys_theme_desc")}
-                    value={display.theme} options={THEME_OPTIONS}
+                <SelectRow
+                    label={t("sys_theme")}
+                    desc={t("sys_theme_desc")}
+                    value={display.theme}
+                    options={THEME_OPTIONS}
                     onChange={(v) => onDisplayChange({ theme: v as ThemeMode })}
                 />
-                <SelectRow label={t("sys_lang")} desc={t("sys_lang_desc")}
-                    value={display.lang} options={LANG_OPTIONS}
+                <SelectRow
+                    label={t("sys_lang")}
+                    desc={t("sys_lang_desc")}
+                    value={display.lang}
+                    options={LANG_OPTIONS}
                     onChange={(v) => onDisplayChange({ lang: v as LangMode })}
                 />
                 <AccentColorRow
@@ -644,14 +934,18 @@ function SystemSection({
             {/* Display */}
             <div className="settings-group-title">{t("sys_display")}</div>
             <div className="settings-group">
-                <SelectRow label={t("sys_font_size")} desc={t("sys_font_size_desc")}
-                    value={String(display.fontSize)} options={FONT_SIZE_OPTIONS}
+                <SelectRow
+                    label={t("sys_font_size")}
+                    desc={t("sys_font_size_desc")}
+                    value={String(display.fontSize)}
+                    options={FONT_SIZE_OPTIONS}
                     onChange={(v) => onDisplayChange({ fontSize: parseInt(v, 10) })}
                 />
                 <SelectRow
                     label={t("sys_zoom")}
                     desc={t("sys_zoom_desc", { dpr })}
-                    value={String(display.zoom)} options={ZOOM_OPTIONS}
+                    value={String(display.zoom)}
+                    options={ZOOM_OPTIONS}
                     onChange={(v) => onDisplayChange({ zoom: parseFloat(v) })}
                 />
                 <FontPickerRow
@@ -663,8 +957,11 @@ function SystemSection({
             {/* Startup */}
             <div className="settings-group-title">{t("sys_startup")}</div>
             <div className="settings-group">
-                <ToggleRow label={t("sys_autostart")} desc={t("sys_autostart_desc")}
-                    checked={autostart} onChange={onAutostart}
+                <ToggleRow
+                    label={t("sys_autostart")}
+                    desc={t("sys_autostart_desc")}
+                    checked={autostart}
+                    onChange={onAutostart}
                 />
             </div>
 
@@ -674,11 +971,16 @@ function SystemSection({
                 <SelectRow
                     label={t("sys_log_level")}
                     desc={t("sys_log_level_desc")}
-                    value={cfg.log_level} options={LOG_LEVELS}
+                    value={cfg.log_level}
+                    options={LOG_LEVELS}
                     onChange={(v) => update("dev", "log_level", v)}
                 />
-                <ToggleRow label={t("sys_log_mask")} desc={t("sys_log_mask_desc")}
-                    checked={cfg.mix_log} onChange={(v) => update("dev", "mix_log", v)} />
+                <ToggleRow
+                    label={t("sys_log_mask")}
+                    desc={t("sys_log_mask_desc")}
+                    checked={cfg.mix_log}
+                    onChange={(v) => update("dev", "mix_log", v)}
+                />
             </div>
 
             {/* Privacy */}
@@ -695,8 +997,11 @@ function SystemSection({
             {/* Download */}
             <div className="settings-group-title">{t("sys_download")}</div>
             <div className="settings-group">
-                <NumberRow label={t("sys_speed_limit")} desc={t("sys_speed_limit_desc")}
-                    value={cfg.speed_limit_mb} min={0}
+                <NumberRow
+                    label={t("sys_speed_limit")}
+                    desc={t("sys_speed_limit_desc")}
+                    value={cfg.speed_limit_mb}
+                    min={0}
                     onCommit={(v) => update("gui", "speed_limit_mb", v)}
                 />
             </div>
@@ -704,18 +1009,27 @@ function SystemSection({
             {/* Trakt */}
             <div className="settings-group-title">{t("sys_trakt")}</div>
             <div className="settings-group">
-                <InputRow label={t("sys_trakt_id")}
+                <InputRow
+                    label={t("sys_trakt_id")}
                     desc={t("sys_trakt_id_desc")}
-                    value={cfg.trakt_client_id} placeholder={t("sys_trakt_id_placeholder")}
-                    mono onCommit={(v) => update("trakt", "client_id", v)}
+                    value={cfg.trakt_client_id}
+                    placeholder={t("sys_trakt_id_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "client_id", v)}
                 />
-                <InputRow label={t("sys_trakt_secret")}
-                    value={cfg.trakt_client_secret} placeholder="" mono
+                <InputRow
+                    label={t("sys_trakt_secret")}
+                    value={cfg.trakt_client_secret}
+                    placeholder=""
+                    mono
                     onCommit={(v) => update("trakt", "client_secret", v)}
                 />
-                <InputRow label={t("sys_trakt_host")}
+                <InputRow
+                    label={t("sys_trakt_host")}
                     desc={t("sys_trakt_host_desc")}
-                    value={cfg.trakt_enable_host} placeholder={t("sys_trakt_host_placeholder")} mono
+                    value={cfg.trakt_enable_host}
+                    placeholder={t("sys_trakt_host_placeholder")}
+                    mono
                     onCommit={(v) => update("trakt", "enable_host", v)}
                 />
             </div>
@@ -723,10 +1037,13 @@ function SystemSection({
             {/* Bangumi */}
             <div className="settings-group-title">{t("sys_bangumi")}</div>
             <div className="settings-group">
-                <InputRow label={t("sys_bangumi_token")}
+                <InputRow
+                    label={t("sys_bangumi_token")}
                     desc={t("sys_bangumi_token_desc")}
-                    value={cfg.bangumi_access_token} placeholder={t("sys_bangumi_token_placeholder")}
-                    mono onCommit={(v) => update("bangumi", "access_token", v || null)}
+                    value={cfg.bangumi_access_token}
+                    placeholder={t("sys_bangumi_token_placeholder")}
+                    mono
+                    onCommit={(v) => update("bangumi", "access_token", v || null)}
                 />
             </div>
 
@@ -736,9 +1053,16 @@ function SystemSection({
                 <div className="row">
                     <div className="row-label">
                         <div>{t("sys_config_path")}</div>
-                        <div className="row-desc"
-                            style={{ fontFamily: "monospace", fontSize: 11, marginTop: 4,
-                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        <div
+                            className="row-desc"
+                            style={{
+                                fontFamily: "monospace",
+                                fontSize: 11,
+                                marginTop: 4,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            }}
                             title={cfg.config_path}
                         >
                             {cfg.config_path || "—"}

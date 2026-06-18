@@ -74,6 +74,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
+      # 30-day retention for per-platform artifacts (PR / branch builds)
       - uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.target_name }}
@@ -91,8 +92,17 @@ jobs:
         with:
           path: artifacts
 
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name "*.dmg" -o -name "*.AppImage" -o -name "*.exe" \) \
+            -exec sha512sum {} + > ../etlp-gui.sha512sum
+          echo "Checksums:"
+          cat ../etlp-gui.sha512sum
+
+      # Release packages + checksum kept 60 days
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe"
+          artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe,etlp-gui.sha512sum"
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
