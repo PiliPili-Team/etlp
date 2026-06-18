@@ -162,6 +162,7 @@ pub fn assemble_episodes(
         subtitle_priority: &ctx.config.subtitle_priority,
         path_pairs: &ctx.config.path_pairs,
         maps: &maps,
+        title_translate: &ctx.config.title_translate,
     };
 
     let mut result: Vec<PlaybackData> = episodes

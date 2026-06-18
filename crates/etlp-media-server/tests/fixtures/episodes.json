@@ -1,0 +1,24 @@
+{
+  "Items": [
+    {
+      "Id": "ep-001",
+      "Name": "Pilot",
+      "Path": "/media/testshow/Season 01/s01e01.mkv",
+      "IndexNumber": 1,
+      "ParentIndexNumber": 1,
+      "SeriesId": "series-001",
+      "SeasonId": "season-001",
+      "MediaSources": []
+    },
+    {
+      "Id": "ep-002",
+      "Name": "Second Episode",
+      "Path": "/media/testshow/Season 01/s01e02.mkv",
+      "IndexNumber": 2,
+      "ParentIndexNumber": 1,
+      "SeriesId": "series-001",
+      "SeasonId": "season-001",
+      "MediaSources": []
+    }
+  ]
+}

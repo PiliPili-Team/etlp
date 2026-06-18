@@ -94,6 +94,19 @@ pub struct PlaybackData {
     #[serde(default)]
     pub intro: IntroMarkers,
 
+    // ---- sync metadata (Trakt / Bangumi) ----
+    /// Emby/Jellyfin item type ("Episode", "Movie", …). Used for sync routing.
+    #[serde(default)]
+    pub item_type: String,
+    /// External provider IDs keyed by provider name ("Imdb", "Tmdb", "Tvdb",
+    /// "Bangumi", …). Populated from the server response; empty for Plex items
+    /// that do not supply Guid metadata.
+    #[serde(default)]
+    pub provider_ids: BTreeMap<String, String>,
+    /// Emby/Jellyfin series ID — needed by Bangumi sync to correlate subjects.
+    #[serde(default)]
+    pub series_id: String,
+
     // ---- playlist-only (populated for playlist entries) ----
     /// Playlist position used for ordering (the Python `order` key).
     #[serde(default)]

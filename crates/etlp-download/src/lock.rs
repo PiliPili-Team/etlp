@@ -73,7 +73,7 @@ impl TaskFileLock {
                 Ok(true)
             }
             Err(TryLockError::WouldBlock) => Ok(false),
-            Err(TryLockError::Error(e)) => Err(LockError::Io(e.into())),
+            Err(TryLockError::Error(e)) => Err(LockError::Io(e)),
         }
     }
 

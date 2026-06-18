@@ -61,7 +61,7 @@ impl AppState {
 }
 
 #[cfg(test)]
-pub(crate) mod test_helpers {
+pub mod test_helpers {
     use etlp_config::Config;
     use etlp_download::{
         DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_PER_DOMAIN, DownloadManager,

@@ -12,6 +12,7 @@ use etlp_core::{PlaybackData, Subtitle};
 
 use crate::dto::Item;
 use crate::meta::{emby_title, intro_markers};
+use crate::parse::apply_title_translate;
 use crate::path_map::translate_path;
 use crate::subtitle::subtitle_checker;
 
@@ -104,6 +105,8 @@ pub struct EpisodeContext<'a> {
     pub subtitle_priority: &'a [String],
     pub path_pairs: &'a [(String, String)],
     pub maps: &'a TitleIntroMaps,
+    /// Pre-parsed character translation table from `dev.media_title_translate`.
+    pub title_translate: &'a [(char, char)],
 }
 
 /// The file extension (with dot) of a path, or empty when none.
@@ -184,13 +187,14 @@ pub fn parse_episode_item(
     let index = item.index_number.unwrap_or(0);
     let unique_key = episode_key(item);
     let title = ctx.maps.title.get(&unique_key);
-    let media_title = match title {
+    let raw_title = match title {
         Some(t) if ctx.pretty_title && !t.is_empty() => {
             format!("{t}  |  {base_name}")
         }
         _ => base_name.clone(),
     }
     .replace('"', "\u{201d}");
+    let media_title = apply_title_translate(&raw_title, ctx.title_translate);
     let media_basename = basename(&media_path).to_owned();
     let total_sec = match source.run_time_ticks {
         Some(ticks) if ticks > 0 => ticks / TICKS_PER_SEC,
@@ -248,6 +252,9 @@ pub fn parse_episode_item(
             inner_index: (selection.sub_inner_idx > 0)
                 .then_some(selection.sub_inner_idx),
         },
+        item_type: item.item_type.clone().unwrap_or_default(),
+        provider_ids: item.provider_ids.clone(),
+        series_id: item.series_id.clone().unwrap_or_default(),
         ..base.clone()
     })
 }
@@ -327,6 +334,7 @@ mod tests {
             subtitle_priority: &[],
             path_pairs: &[],
             maps,
+            title_translate: &[],
         }
     }
 
