@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use etlp_core::PlaybackData;
 use etlp_net::{HttpClient, PlaybackEvent, realtime_progress, update_progress};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{info, warn};
 
 use crate::dandan::DanDanHandle;
@@ -174,9 +175,17 @@ impl PlayerManager {
 impl PlayerManager {
     /// Spawn the background feedback and redirect loops for mpv.
     ///
+    /// `cancel_tx`: when provided, the feedback loop sends each outgoing
+    /// episode's download task-id (= `media_source_id || item_id`) through
+    /// this channel so the caller can cancel in-progress downloads.
+    ///
     /// Safe to call for non-mpv players: the functions detect the wrong variant
     /// and return immediately, so the spawned tasks finish instantly.
-    pub fn start_loops(&self, http: HttpClient) {
+    pub fn start_loops(
+        &self,
+        http: HttpClient,
+        cancel_tx: Option<UnboundedSender<String>>,
+    ) {
         let PlayerHandle::Mpv(ref handle) = self.handle else {
             return;
         };
@@ -190,6 +199,7 @@ impl PlayerManager {
             client.clone(),
             http2,
             playlist.clone(),
+            cancel_tx,
         ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
@@ -197,21 +207,44 @@ impl PlayerManager {
 
 // ── Background loops (mpv-only) ───────────────────────────────────────────────
 
-/// Interval between realtime progress heartbeats sent to the media server.
+/// Returns the download task-id for `ep`: `media_source_id` when non-empty,
+/// otherwise `item_id`. Mirrors the scheme used by the `/gui` route handler.
+fn dl_task_id(ep: &PlaybackData) -> &str {
+    if !ep.media_source_id.is_empty() {
+        &ep.media_source_id
+    } else {
+        &ep.item_id
+    }
+}
+
+/// Interval between realtime progress heartbeats during normal playback.
 const PROGRESS_INTERVAL_SECS: u64 = 10;
 
-/// Report realtime playback position to Emby / Jellyfin every 10 seconds.
+/// Interval between realtime progress heartbeats while the player is paused.
+///
+/// Emby / Jellyfin sessions time out if they receive no heartbeat; this slower
+/// cadence keeps the session alive without flooding the server.
+const PAUSED_INTERVAL_SECS: u64 = 30;
+
+/// Report realtime playback position to Emby / Jellyfin.
 ///
 /// Sends `Start` when the playing episode changes, `Playing` for periodic
-/// heartbeats, and `End` when switching away from an episode. When the pause
-/// state changes (pause or resume), progress is reported immediately and the
-/// throttle timer is reset. Exits when mpv's IPC disconnects. Plex and STRM
-/// media are skipped.
+/// heartbeats, and `End` when switching away from an episode.
+///
+/// Heartbeat cadence:
+/// - Playing: every `PROGRESS_INTERVAL_SECS` (10 s).
+/// - Paused:  every `PAUSED_INTERVAL_SECS` (30 s) — keeps the Emby session
+///   alive without flooding the server.
+/// - Pause / resume transition: one immediate report, then the cadence for
+///   the new state.
+///
+/// Exits when mpv's IPC disconnects. Plex and STRM media are skipped.
 pub async fn realtime_playing_feedback_loop(
     data: PlaybackData,
     client: MpvClient,
     http: HttpClient,
     playlist: HashMap<String, PlaybackData>,
+    cancel_tx: Option<UnboundedSender<String>>,
 ) {
     // STRM sentinel (total_sec == 86400) and Plex are not supported.
     if data.runtime_missing() || data.server == etlp_core::Server::Plex {
@@ -220,6 +253,7 @@ pub async fn realtime_playing_feedback_loop(
     }
 
     let interval = Duration::from_secs(PROGRESS_INTERVAL_SECS);
+    let paused_interval = Duration::from_secs(PAUSED_INTERVAL_SECS);
     let mut last_key: Option<String> = None;
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
@@ -264,8 +298,12 @@ pub async fn realtime_playing_feedback_loop(
         };
 
         if last_key.as_deref() != Some(&title) {
-            // Episode changed: send End for previous, Start for new.
+            // Episode changed: cancel stale download, send End + Start.
             if let Some(prev_ep) = last_ep.take() {
+                if let Some(tx) = &cancel_tx {
+                    let id = dl_task_id(&prev_ep).to_owned();
+                    let _ = tx.send(id);
+                }
                 let _ = realtime_progress(
                     &http,
                     &prev_ep,
@@ -284,23 +322,28 @@ pub async fn realtime_playing_feedback_loop(
             continue;
         }
 
-        // Pause/resume transition: report exactly once, then either stop
-        // (pause) or resume (playing) the periodic heartbeat.
+        // Pause/resume transition: report exactly once, then switch to the
+        // cadence appropriate for the new state (30 s paused, 10 s playing).
         if pause_changed {
             let _ =
                 realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
                     .await;
             req_sec = pos_sec;
             was_paused = paused;
-            tokio::time::sleep(interval).await;
+            let next = if paused { paused_interval } else { interval };
+            tokio::time::sleep(next).await;
             continue;
         }
         was_paused = paused;
 
-        // While paused: do not report — wait silently until the next
-        // poll cycle detects a resume transition.
+        // While paused: report every PAUSED_INTERVAL_SECS to keep the
+        // Emby / Jellyfin session alive.
         if paused {
-            tokio::time::sleep(interval).await;
+            let _ =
+                realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
+                    .await;
+            req_sec = pos_sec;
+            tokio::time::sleep(paused_interval).await;
             continue;
         }
 

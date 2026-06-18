@@ -257,6 +257,21 @@ impl DownloadManager {
         dl.cancel_download().await
     }
 
+    /// Set the cancel flag for a running download without waiting for it to stop.
+    ///
+    /// The background task checks the flag at each chunk boundary and exits
+    /// on the next iteration. Returns `true` when the task was found.
+    pub async fn cancel_only(&self, id: &str) -> bool {
+        let tasks = self.tasks.lock().await;
+        if let Some(entry) = tasks.get(id) {
+            entry.cancel.store(true, Ordering::Relaxed);
+            info!("dl: cancel signalled for {id}");
+            true
+        } else {
+            false
+        }
+    }
+
     /// Toggle the pause flag for an active download.
     pub async fn resume_or_pause(&self, id: &str) {
         let pause = {

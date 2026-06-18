@@ -130,6 +130,17 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
 
     // TODO(6.4): build player command, construct PlayerHandle, start
     //  PlayerManager, register playlist, collect stop times, write progress.
+    //
+    //  Cancel-on-switch wiring (when implementing the above):
+    //    let (cancel_tx, mut cancel_rx) =
+    //        tokio::sync::mpsc::unbounded_channel::<String>();
+    //    let state_dl = state.clone();
+    //    tokio::spawn(async move {
+    //        while let Some(id) = cancel_rx.recv().await {
+    //            state_dl.dl_manager.lock().await.cancel_only(&id).await;
+    //        }
+    //    });
+    //    mgr.start_loops(http, Some(cancel_tx));
 
     state.player_running.store(false, Ordering::Release);
 }
