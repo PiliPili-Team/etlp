@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "MIT"
 authors = ["PiliPili Team"]
 repository = "https://github.com/PiliPili-Team"
@@ -31,6 +31,10 @@ url = "2"
 fs4 = "0.13"
 sysinfo = "0.33"
 tempfile = "3"
+clap = { version = "4", features = ["derive"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower = { version = "0.4", features = ["util"] }
+http = "1"
 
 # Deny crash-prone and sloppy patterns workspace-wide. Member crates opt in via
 # `[lints] workspace = true`. Test code re-allows these locally where needed.
