@@ -83,9 +83,82 @@ jobs:
           path: ${{ matrix.asset_name }}
           retention-days: 30
 
+  # ── GUI (Tauri v2) ──────────────────────────────────────────────────────────
+  build-gui:
+    name: GUI – ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: etlp-gui
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            os: macos-latest
+            tauri_target: aarch64-apple-darwin
+            asset_glob: "etlp-gui/src-tauri/target/release/bundle/dmg/*.dmg"
+          - platform: macOS-Intel
+            os: macos-13
+            tauri_target: x86_64-apple-darwin
+            asset_glob: "etlp-gui/src-tauri/target/release/bundle/dmg/*.dmg"
+          - platform: Windows
+            os: windows-latest
+            tauri_target: x86_64-pc-windows-msvc
+            asset_glob: "etlp-gui/src-tauri/target/release/bundle/nsis/*.exe"
+          - platform: Linux
+            os: ubuntu-22.04
+            tauri_target: x86_64-unknown-linux-gnu
+            asset_glob: "etlp-gui/src-tauri/target/release/bundle/appimage/*.AppImage"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system deps
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            patchelf
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: etlp-gui/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.tauri_target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "etlp-gui/src-tauri -> target"
+
+      - name: Install frontend deps
+        run: npm install
+
+      - name: Build Tauri app
+        run: npx tauri build --target ${{ matrix.tauri_target }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - name: Upload GUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.platform }}
+          path: ${{ matrix.asset_glob }}
+          retention-days: 30
+
   create-github-release:
     name: Create GitHub Release
-    needs: build-and-package
+    needs: [build-and-package, build-gui]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,6 +178,6 @@ jobs:
       - name: Create Release and Upload Assets
         uses: ncipollo/release-action@v1
         with:
-          artifact: "artifacts/**/*.tar.gz,artifacts/**/*.zip,etlp.sha512sum"
+          artifact: "artifacts/**/*.tar.gz,artifacts/**/*.zip,artifacts/**/*.dmg,artifacts/**/*.exe,artifacts/**/*.AppImage,etlp.sha512sum"
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true

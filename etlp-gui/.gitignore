@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Lockfile — committed so deps are reproducible across machines
+# package-lock.json is kept
+
+# macOS
+.DS_Store

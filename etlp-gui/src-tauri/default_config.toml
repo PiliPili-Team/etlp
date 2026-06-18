@@ -1,0 +1,32 @@
+[emby]
+# Name or full path of your media player executable.
+# One of: mpv, iina, vlc, mpc-hc, potplayer, dandanplay
+player = "mpv"
+
+# Start the player in fullscreen mode.
+# fullscreen = true
+
+# Force a subtitle track by display-title keyword (case-insensitive).
+# subtitle_priority = "chs,简体,中文"
+
+# Maximum playlist episodes per session.
+# item_limit = 10
+
+[dev]
+# Skip TLS certificate verification for self-signed Emby servers.
+# skip_certificate_verify = false
+
+# Override the player executable path (e.g. "/usr/local/bin/mpv").
+# player_path = ""
+
+# HTTP proxy for media stream requests (e.g. "http://127.0.0.1:7890").
+# http_proxy = ""
+
+# Hosts whose redirects should be followed and cached.
+# redirect_check_host = ""
+
+[trakt]
+# Trakt.tv integration — leave blank to disable.
+# client_id = ""
+# client_secret = ""
+# enable_host = ""
