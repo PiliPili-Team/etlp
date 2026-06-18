@@ -288,8 +288,9 @@ pub fn platform_name() -> &'static str {
     }
 }
 
-fn candidate_names() -> [String; 3] {
+fn candidate_names() -> [String; 4] {
     [
+        "config.toml".to_owned(),
         format!("embyToLocalPlayer-{}.toml", platform_name()),
         "embyToLocalPlayer.toml".to_owned(),
         "embyToLocalPlayer_config.toml".to_owned(),
@@ -298,6 +299,9 @@ fn candidate_names() -> [String; 3] {
 
 impl Config {
     /// Load the first existing candidate config from `dir`.
+    ///
+    /// Search order: `config.toml`, `embyToLocalPlayer-<Platform>.toml`,
+    /// `embyToLocalPlayer.toml`, `embyToLocalPlayer_config.toml`.
     pub fn load_from_dir(dir: &Path) -> Result<Self> {
         for name in candidate_names() {
             let path = dir.join(&name);

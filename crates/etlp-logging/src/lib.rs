@@ -145,9 +145,32 @@ pub fn init(
     };
 
     let make_writer = MaskingMakeWriter { masker, file };
-    let filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(level))
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if matches!(level, "debug" | "trace") {
+            // Scope fine-grained levels to etlp crates; keep info for
+            // noisy dependencies (tokio, hyper, reqwest, etc.).
+            let etlp_crates = [
+                "etlp",
+                "etlp_server",
+                "etlp_config",
+                "etlp_net",
+                "etlp_download",
+                "etlp_media_server",
+                "etlp_player",
+                "etlp_core",
+                "etlp_sync",
+                "etlp_logging",
+            ];
+            let directives = etlp_crates
+                .iter()
+                .map(|t| format!("{t}={level}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            EnvFilter::new(format!("info,{directives}"))
+        } else {
+            EnvFilter::new(level)
+        }
+    });
 
     use std::io::IsTerminal as _;
     let use_ansi = std::io::stdout().is_terminal();

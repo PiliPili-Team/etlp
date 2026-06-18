@@ -45,7 +45,11 @@ async fn main() {
     }
 
     // Load config first so logging can be configured from it.
-    let config = match Config::load_from_dir(&working_dir) {
+    let config = match cli.config_file.as_deref() {
+        Some(file) => Config::load_file(file),
+        None => Config::load_from_dir(&working_dir),
+    };
+    let config = match config {
         Ok(c) => c,
         Err(e) => {
             // Init logging with safe defaults before printing the error.

@@ -3,6 +3,7 @@
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
+use tower_http::normalize_path::NormalizePathLayer;
 
 use crate::routes::download::{action_route, dl_route, gui_route, pl_route};
 use crate::routes::media::send_media_file;
@@ -34,6 +35,9 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/openFolder", post(open_folder_route))
         .route("/playMediaFile", post(play_media_file))
         .with_state(state)
+        // Userscript sends trailing slashes (e.g. /embyToLocalPlayer/);
+        // strip them before routing so exact-match routes are found.
+        .layer(NormalizePathLayer::trim_trailing_slash())
 }
 
 /// `GET /` – simple liveness probe.
