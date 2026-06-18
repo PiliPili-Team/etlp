@@ -29,7 +29,8 @@ pub struct AppState {
     pub http_client: HttpClient,
     /// Live configuration; reloaded on each incoming request.
     pub config: RwLock<Config>,
-    /// Working directory (config and token files are resolved relative to it).
+    /// Platform data directory — runtime files (logs, device_id, cache) live here.
+    /// Follows XDG_DATA_HOME on Linux, ~/Library/… on macOS, %LOCALAPPDATA% on Windows.
     pub working_dir: PathBuf,
     /// Persistent device identifier; used as fallback when the request
     /// does not carry a DeviceId query parameter.

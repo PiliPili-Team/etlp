@@ -2,9 +2,11 @@
 //! path translation.
 
 pub mod device_id;
+pub mod dirs;
 pub mod kill;
 pub mod path;
 
+pub use dirs::{ENV_RUNTIME, RuntimeMode, config_dir, data_dir};
 pub use kill::kill_matching_processes;
 pub use path::{
     open_folder, open_media_file, translate_path, warn_if_not_exists,
