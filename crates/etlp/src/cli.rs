@@ -6,13 +6,18 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(name = "etlp", version, about)]
 pub struct Cli {
-    /// Path to the configuration directory (default: current directory).
+    /// Path to the configuration directory (overrides XDG / platform default).
     #[arg(long, short = 'C', value_name = "DIR")]
     pub config_dir: Option<std::path::PathBuf>,
 
     /// Path to the configuration file (overrides --config-dir search).
     #[arg(long, short = 'c', value_name = "FILE")]
     pub config_file: Option<std::path::PathBuf>,
+
+    /// Path to the data directory (overrides XDG / platform default).
+    /// Stores device_id, logs, download cache, and Trakt token.
+    #[arg(long, short = 'D', value_name = "DIR")]
+    pub data_dir: Option<std::path::PathBuf>,
 
     /// HTTP listen address.
     #[arg(long, default_value = "127.0.0.1")]

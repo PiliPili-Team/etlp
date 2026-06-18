@@ -182,6 +182,9 @@ pub fn init(
         .with_level(true)
         .with_thread_ids(false)
         .with_thread_names(false)
+        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
+            "%Y-%m-%d %H:%M:%S%.3f%:z".to_owned(),
+        ))
         .with_writer(make_writer)
         .try_init()
         .map_err(|e| e.to_string())
