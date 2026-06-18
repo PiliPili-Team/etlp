@@ -17,6 +17,39 @@ use url::Url;
 use crate::url_tools::{build_referer, safe_url};
 use crate::user_agent_for;
 
+/// Emit a DEBUG-level curl equivalent for the outgoing request.
+fn log_curl(
+    method: &str,
+    url: &str,
+    params: &[(&str, &str)],
+    extra_headers: &[(&str, &str)],
+    body: Option<&str>,
+) {
+    if !tracing::enabled!(tracing::Level::DEBUG) {
+        return;
+    }
+    let full_url = if params.is_empty() {
+        url.to_owned()
+    } else {
+        let qs: String = params
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join("&");
+        format!("{url}?{qs}")
+    };
+    let ua = user_agent_for(url);
+    let mut parts = vec![format!("curl -X {method} '{full_url}'")];
+    parts.push(format!("-H 'User-Agent: {ua}'"));
+    for (k, v) in extra_headers {
+        parts.push(format!("-H '{k}: {v}'"));
+    }
+    if let Some(b) = body {
+        parts.push(format!("-d '{b}'"));
+    }
+    tracing::debug!("{}", parts.join(" "));
+}
+
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_RETRY: u32 = 3;
 
@@ -228,6 +261,7 @@ impl HttpClient {
         url: &str,
         params: &[(&str, &str)],
     ) -> Result<T> {
+        log_curl("GET", url, params, &[("Accept", "application/json")], None);
         let rb = self
             .prepare(&self.follow, Method::GET, url, params)
             .header(ACCEPT, "application/json");
@@ -245,6 +279,7 @@ impl HttpClient {
         url: &str,
         params: &[(&str, &str)],
     ) -> Result<String> {
+        log_curl("GET", url, params, &[], None);
         let rb = self.prepare(&self.follow, Method::GET, url, params);
         let resp = self.send_with_retry(url, rb).await?;
         let resp = error_for_status(resp, url)?;
@@ -262,6 +297,17 @@ impl HttpClient {
         params: &[(&str, &str)],
         body: &B,
     ) -> Result<()> {
+        let body_str = serde_json::to_string(body).unwrap_or_default();
+        log_curl(
+            "POST",
+            url,
+            params,
+            &[
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Accept", "application/json"),
+            ],
+            Some(&body_str),
+        );
         let rb = self
             .prepare(&self.follow, Method::POST, url, params)
             .header(CONTENT_TYPE, "application/json; charset=utf-8")
@@ -276,6 +322,7 @@ impl HttpClient {
     /// `Location` target, or the original URL when there is no redirect
     /// (mirrors `net_tools.get_redirect_url`).
     pub async fn resolve_redirect(&self, url: &str) -> Result<String> {
+        log_curl("GET", url, &[], &[], None);
         let rb = self.prepare(&self.no_follow, Method::GET, url, &[]);
         let resp = self.send_with_retry(url, rb).await?;
         if resp.status().is_redirection()
