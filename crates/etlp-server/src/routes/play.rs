@@ -249,23 +249,65 @@ async fn run_player_chain(
             .collect();
         debug!(after_count = after.len(), "episodes to append after current");
 
+        // Append subsequent episodes via a temporary M3U8 playlist.
+        // set_property playlist/N/title is silently discarded by mpv 0.41
+        // (returns "success" but the value never persists on readback).
+        // Using loadlist with an M3U8 file makes mpv populate playlist/N/title
+        // directly from the #EXTINF line at parse time — a reliable path.
+        // The EXTINF title also becomes the media-title when each entry plays,
+        // so force-media-title is no longer needed for appended entries.
+        let m3u8_path = std::env::temp_dir().join("etlp_playlist.m3u8");
+        let mut m3u8 = String::from("#EXTM3U\n");
         for ep in &after {
-            let title_escaped =
-                ep.media_title.replace('"', "").replace(',', "\\,");
-            let opts = LoadOptions {
-                media_title: Some(title_escaped),
-                ..LoadOptions::default()
-            };
-            if let Err(e) = h
-                .loadfile(&ep.stream_url, LoadMode::Append, &opts, new_fmt)
-                .await
-            {
-                warn!("playlist append {:?}: {e}", ep.media_title);
+            let title = ep.media_title.replace(['\n', '\r'], " ");
+            m3u8.push_str(&format!("#EXTINF:-1,{title}\n{}\n", ep.stream_url));
+        }
+
+        let loaded_via_m3u8 = match std::fs::write(&m3u8_path, &m3u8) {
+            Err(e) => {
+                warn!("failed to write M3U8 playlist ({e}); falling back to loadfile");
+                false
+            }
+            Ok(()) => {
+                let path_str = m3u8_path.display().to_string();
+                debug!("loading M3U8 playlist: {path_str}");
+                match h
+                    .client
+                    .command("loadlist", &[json!(path_str), json!("append")])
+                    .await
+                {
+                    Ok(_) => {
+                        debug!("M3U8 loaded ({} entries)", after.len());
+                        true
+                    }
+                    Err(e) => {
+                        warn!("loadlist {e}; falling back to loadfile");
+                        false
+                    }
+                }
+            }
+        };
+
+        // Fallback: individual loadfile when M3U8 approach fails.
+        // Titles will not appear in the playlist panel in this path.
+        if !loaded_via_m3u8 {
+            for ep in &after {
+                let title_escaped =
+                    ep.media_title.replace('"', "").replace(',', "\\,");
+                let opts = LoadOptions {
+                    media_title: Some(title_escaped),
+                    ..LoadOptions::default()
+                };
+                if let Err(e) = h
+                    .loadfile(&ep.stream_url, LoadMode::Append, &opts, new_fmt)
+                    .await
+                {
+                    warn!("playlist append {:?}: {e}", ep.media_title);
+                }
             }
         }
 
-        // Verify mpv has processed all loadfile commands by checking that
-        // playlist-count matches expectation before setting titles.
+        // Verify playlist-count to confirm mpv processed the entries.
         let expected_count = (after.len() + 1) as i64;
         if let Ok(Some(cnt)) = h
             .client
@@ -273,36 +315,8 @@ async fn run_player_chain(
             .await
         {
             debug!(
-                "playlist-count after loadfile batch: {cnt} (expected {expected_count})"
+                "playlist-count after append: {cnt} (expected {expected_count})"
             );
-        }
-
-        // Write playlist titles so the UI shows episode names immediately.
-        for (slot, ep) in after.iter().enumerate() {
-            let prop = format!("playlist/{}/title", slot + 1);
-            debug!("setting {prop} = {:?}", ep.media_title);
-            if let Err(e) = h
-                .client
-                .command("set_property", &[json!(prop), json!(ep.media_title)])
-                .await
-            {
-                warn!("set_property {prop}: {e}  (title={:?})", ep.media_title);
-            }
-        }
-
-        // Read back each title to verify mpv actually persisted the values.
-        // This catches silent failures (e.g. read-only on older mpv builds).
-        for (slot, _ep) in after.iter().enumerate() {
-            let prop = format!("playlist/{}/title", slot + 1);
-            match h
-                .client
-                .command("get_property", &[json!(prop)])
-                .await
-            {
-                Ok(Some(v)) => debug!("readback {prop} = {v}"),
-                Ok(None) => warn!("readback {prop} = None (title was not stored)"),
-                Err(e) => warn!("readback {prop} failed: {e}"),
-            }
         }
 
         if let Err(e) = h.set_pause(false).await {
