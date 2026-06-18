@@ -138,7 +138,7 @@ async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
     const WM_APP: u32 = 0x8000;
     const POT_GET_CUR_TIME: u32 = WM_APP + 0x5004;
 
-    extern "system" {
+    unsafe extern "system" {
         fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
         fn SendMessageW(
             hwnd: isize,
@@ -167,10 +167,7 @@ async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
             let ctx =
                 Box::into_raw(Box::new((target_pid, found_clone, sec_clone)));
 
-            unsafe extern "system" fn enum_proc(
-                hwnd: isize,
-                lparam: isize,
-            ) -> i32 {
+            extern "system" fn enum_proc(hwnd: isize, lparam: isize) -> i32 {
                 let ctx = lparam
                     as *mut (u32, Arc<Mutex<bool>>, Arc<Mutex<Option<i64>>>);
                 if ctx.is_null() {
@@ -186,7 +183,7 @@ async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
                             *g = true;
                         }
                         if let Ok(mut g) = last_sec.lock() {
-                            *g = Some(ms / 1000);
+                            *g = Some(ms as i64 / 1000);
                         }
                     }
                 }
