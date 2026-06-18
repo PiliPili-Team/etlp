@@ -1,9 +1,8 @@
-//! Playback progress write-back, ported from `net_tools.py`.
+//! Playback progress write-back.
 //!
-//! Reports the stop position back to Emby / Jellyfin / Plex. Mirrors
-//! `update_server_playback_progress` and the per-server `change_*_play_position`
-//! helpers, including the `> 10h` sanity guard, the small-offset trim, and the
-//! skip for `.iso` / `.m3u8` media.
+//! Reports the stop position back to Emby / Jellyfin / Plex, including the
+//! `> 10h` sanity guard, the small-offset trim, and the skip for
+//! `.iso` / `.m3u8` media.
 
 use etlp_core::{PlaybackData, Server};
 use serde_json::json;

@@ -1,6 +1,5 @@
-//! Stream/disk-mode resolution, ported from the heart of
-//! `parse_received_data_emby` (the strm / direct-play / read-disk decision and
-//! the resulting `media_path`).
+//! Stream/disk-mode resolution: strm / direct-play / read-disk decision and
+//! the resulting `media_path`.
 //!
 //! This is the trickiest part of payload parsing, so it is isolated as a pure
 //! function with exhaustive tests. The redirect/stream-url rewriting that the

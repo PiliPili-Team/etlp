@@ -1,4 +1,4 @@
-//! Server-to-local path translation, ported from `tools.translate_path_by_ini`.
+//! Server-to-local path translation.
 //!
 //! Maps an Emby server-side file path to a local (mounted) path using the
 //! ordered `[src]` / `[dst]` prefix pairs from the config. The first matching

@@ -1,4 +1,4 @@
-//! Subtitle track selection, ported from `data_parser.subtitle_checker`.
+//! Subtitle track selection.
 //!
 //! Given all media streams and the subtitle index requested by the player
 //! (`>0` selected, `-1` unspecified, `-3` playlist external-only probe),

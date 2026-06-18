@@ -45,7 +45,7 @@ impl MediaStream {
     }
 
     /// The lowercased `"{title},{display_title}"` key used for priority
-    /// matching, mirroring the Python `_get_sub_order_by_ini`.
+    /// matching.
     #[must_use]
     pub fn priority_key(&self) -> String {
         let title = self.title.as_deref().unwrap_or("");

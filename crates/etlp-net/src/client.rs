@@ -1,9 +1,8 @@
-//! Async HTTP client wrapping `reqwest`, ported from `net_tools.requests_urllib`.
+//! Async HTTP client wrapping `reqwest`.
 //!
-//! Applies the same per-request conventions as the Python original: a per-host
-//! User-Agent, a `Referer` header, JSON headers, a proxy that skips
-//! localhost/`plex.direct`, and a bounded retry loop. TLS uses rustls so the
-//! binary needs no system OpenSSL.
+//! Per-request conventions: User-Agent, `Referer` header, JSON headers, a
+//! proxy that skips localhost/`plex.direct`, and a bounded retry loop. TLS
+//! uses rustls so the binary needs no system OpenSSL.
 
 use std::time::Duration;
 
@@ -141,7 +140,7 @@ fn build_inner(
     }
     if let Some(proxy) = proxy {
         let proxy_url = format!("http://{proxy}");
-        // Skip the proxy for localhost and plex.direct, matching Python.
+        // Skip the proxy for localhost and plex.direct.
         let custom = Proxy::custom(move |url| {
             let host = url.host_str().unwrap_or("");
             let skip = host.starts_with("127.0.0.1")

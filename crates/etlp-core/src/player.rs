@@ -34,9 +34,8 @@ impl PlayerKind {
         matches!(self, PlayerKind::Mpv | PlayerKind::Iina)
     }
 
-    /// Detect the player from an executable path, mirroring the Python logic
-    /// of substring-matching the lowercased player path. `ddplay` is treated
-    /// as an alias for `dandanplay`.
+    /// Detect the player from an executable path by substring-matching the
+    /// lowercased path. `ddplay` is treated as an alias for `dandanplay`.
     ///
     /// Returns the first match in a fixed priority order so that, e.g.,
     /// a path containing both is resolved deterministically.

@@ -1,9 +1,8 @@
-//! Pure string-matching helpers ported from the Python `Configs` methods.
+//! Pure string-matching helpers for ini option values.
 //!
 //! These operate on already-fetched ini option strings so they can be unit
-//! tested without touching the filesystem. The Python original overloaded a
-//! single `check_str_match` with many boolean flags; here it is split into
-//! well-typed functions with the same underlying semantics:
+//! tested without touching the filesystem. The logic is split into well-typed
+//! functions:
 //!
 //! * a token "matches" when it is a **substring** of the input;
 //! * the first token (in ini order) that matches wins;

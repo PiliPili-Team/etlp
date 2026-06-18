@@ -1,9 +1,9 @@
-//! Orchestration of `data_parser.parse_received_data_emby`.
+//! Emby playback-data orchestration.
 //!
-//! This wires together the pure helpers (version selection, stream URL,
-//! resolve, subtitle, title/intro) plus the network-dependent redirect lookup
-//! into a single [`PlaybackData`]. The pure parts are tested in their own
-//! modules; this module owns the "glue" and is exercised with fixture payloads.
+//! Wires together the pure helpers (version selection, stream URL, resolve,
+//! subtitle, title/intro) plus the network-dependent redirect lookup into a
+//! single [`PlaybackData`]. Pure parts are tested in their own modules; this
+//! module owns the glue and is exercised with fixture payloads.
 //!
 //! Config access is injected through [`EmbyParseConfig`] (extracted from the
 //! ini once) so the orchestrator stays testable without touching the disk, and
@@ -29,7 +29,7 @@ use crate::version::select_version_index;
 
 /// Ticks are 100ns; `10^7` per second.
 const TICKS_PER_SEC: i64 = 10_000_000;
-/// Runtime sentinel when the server reports none (24h), matching Python.
+/// Runtime sentinel when the server reports none (24h).
 const RUNTIME_FALLBACK_SEC: i64 = 86_400;
 
 /// Errors raised while parsing an Emby/Jellyfin playback payload.

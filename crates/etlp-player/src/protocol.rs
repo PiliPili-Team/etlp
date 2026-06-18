@@ -1,4 +1,4 @@
-//! The mpv JSON IPC wire protocol, ported from `python_mpv_jsonipc.py`.
+//! The mpv JSON IPC wire protocol.
 //!
 //! mpv exposes a line-delimited JSON IPC channel: each message is a UTF-8 JSON
 //! object terminated by `\n`. Requests carry a `command` array and a
@@ -15,7 +15,7 @@ use thiserror::Error;
 
 /// mpv's success sentinel in the `error` field.
 const SUCCESS: &str = "success";
-/// mpv's "property unavailable" error, mapped to `Ok(None)` like the Python.
+/// mpv's "property unavailable" error, mapped to `Ok(None)`.
 const PROPERTY_UNAVAILABLE: &str = "property unavailable";
 
 /// An error returned by mpv (a non-`success` `error` string).
@@ -77,8 +77,7 @@ impl Response {
     }
 
     /// Interpret the reply: `Ok(Some(data))` on success, `Ok(None)` when the
-    /// property is merely unavailable, and `Err` for any other mpv error
-    /// (mirroring `MPVInter.command`).
+    /// property is merely unavailable, and `Err` for any other mpv error.
     pub fn result(&self) -> Result<Option<Value>, MpvError> {
         if self.is_success() {
             Ok(Some(self.data.clone()))
@@ -113,8 +112,8 @@ pub enum Message {
 
 /// Parse a single JSON line into a [`Message`].
 ///
-/// A reply (`request_id` present) takes priority over an event, matching the
-/// Python `event_callback` dispatch order. Blank lines yield `None`.
+/// A reply (`request_id` present) takes priority over an event. Blank lines
+/// yield `None`.
 pub fn parse_line(line: &[u8]) -> Result<Option<Message>, serde_json::Error> {
     let trimmed = line.strip_suffix(b"\r").unwrap_or(line);
     if trimmed.iter().all(u8::is_ascii_whitespace) {
@@ -148,8 +147,8 @@ impl LineFramer {
 
     /// Feed a chunk and drain every complete line as a parsed [`Message`].
     ///
-    /// Lines that fail to parse are skipped (mirroring the Python `try/except`
-    /// around `json.loads`), so one malformed line cannot stall the stream.
+    /// Lines that fail to parse are skipped, so one malformed line cannot
+    /// stall the stream.
     pub fn push(&mut self, chunk: &[u8]) -> Vec<Message> {
         self.buffer.extend_from_slice(chunk);
         let mut messages = Vec::new();

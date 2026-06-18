@@ -1,5 +1,4 @@
-//! Episode-list assembly, ported from the body of `data_parser.list_episodes`
-//! (everything after the network fetch).
+//! Episode-list assembly (everything after the network fetch).
 //!
 //! [`assemble_episodes`] takes the raw season episodes (already fetched by the
 //! caller via [`crate::emby::EmbyClient::episodes`]) plus the played context and

@@ -1,11 +1,10 @@
-//! URL helpers ported from `net_tools.py` (`safe_url`, Referer building).
+//! URL helpers (`safe_url`, Referer building).
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use url::Url;
 
 /// Characters left unescaped when encoding a URL path: the RFC 3986 unreserved
-/// set plus `/` (path separator) and `%` (so already-encoded input is kept),
-/// matching Python's `quote(path, safe="/%")`.
+/// set plus `/` (path separator) and `%` (so already-encoded input is kept).
 const PATH_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'_')
     .remove(b'.')

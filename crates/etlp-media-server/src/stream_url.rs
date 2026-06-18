@@ -1,5 +1,4 @@
-//! Emby stream URL construction, ported from `parse_received_data_emby`
-//! (lines building `stream_url` / `stream_name` / `container`).
+//! Emby stream URL construction (`stream_url` / `stream_name` / `container`).
 
 use crate::version::match_version_range;
 

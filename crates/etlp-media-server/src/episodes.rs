@@ -1,5 +1,4 @@
-//! Per-episode parsing for the playlist, ported from the `title_intro_index_map`
-//! and `parse_item` nested functions of `data_parser.list_episodes`.
+//! Per-episode parsing for the playlist.
 //!
 //! [`build_title_intro_maps`] precomputes the pretty title and intro markers per
 //! episode key, and [`parse_episode_item`] turns one season episode into a

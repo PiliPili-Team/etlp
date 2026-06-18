@@ -1,4 +1,4 @@
-//! Log masking, ported from the Python `MyLogger` mixing behavior.
+//! Log masking for sensitive values in log lines.
 //!
 //! Sensitive values that appear in log lines—the API key, the server host, and
 //! the OS user name—are replaced with placeholders so logs can be shared
