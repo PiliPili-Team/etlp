@@ -19,12 +19,14 @@ etlp-logging    = { path = "../etlp-logging" }
 etlp-net        = { path = "../etlp-net" }
 etlp-download   = { path = "../etlp-download" }
 etlp-sync       = { path = "../etlp-sync" }
-axum.workspace      = true
-tokio.workspace     = true
-serde.workspace     = true
+axum.workspace       = true
+tower.workspace      = true
+tower-http.workspace = true
+tokio.workspace      = true
+serde.workspace      = true
 serde_json.workspace = true
-tracing.workspace   = true
-clap.workspace      = true
+tracing.workspace    = true
+clap.workspace       = true
 reqwest = { workspace = true }
 
 [lints]

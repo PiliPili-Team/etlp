@@ -17,6 +17,8 @@ use std::sync::Arc;
 
 use clap::Parser as _;
 use tokio::net::TcpListener;
+use tower::Layer as _;
+use tower_http::normalize_path::NormalizePathLayer;
 use tracing::info;
 
 use etlp_config::Config;
@@ -137,8 +139,13 @@ async fn main() {
 
     info!("serving at http://{addr}");
 
-    let app = build_router(state);
-    if let Err(e) = axum::serve(listener, app).await {
+    let router = build_router(state);
+    // NormalizePathLayer must wrap the entire Router as the outermost service
+    // so it strips trailing slashes BEFORE axum's routing logic runs.
+    // Router::layer() only wraps matched route handlers, so it cannot affect
+    // routing decisions; this external wrapping is the correct placement.
+    let app = NormalizePathLayer::trim_trailing_slash().layer(router);
+    if let Err(e) = axum::serve(listener, tower::make::Shared::new(app)).await {
         eprintln!("server error: {e}");
         std::process::exit(1);
     }

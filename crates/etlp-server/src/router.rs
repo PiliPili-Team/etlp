@@ -3,7 +3,6 @@
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use tower_http::normalize_path::NormalizePathLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
@@ -39,15 +38,14 @@ pub fn build_router(state: SharedState) -> Router {
         .with_state(state)
         // Log every request/response at INFO so 422 rejections and routing
         // mismatches are visible even when the handler itself is never called.
+        // Note: NormalizePathLayer is applied in main.rs, wrapping this Router
+        // as the outermost service so it runs before routing decisions are made.
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
                 .on_response(DefaultOnResponse::new().level(Level::INFO))
                 .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
         )
-        // Userscript sends trailing slashes (e.g. /embyToLocalPlayer/);
-        // strip them before routing so exact-match routes are found.
-        .layer(NormalizePathLayer::trim_trailing_slash())
 }
 
 /// `GET /` – simple liveness probe.
