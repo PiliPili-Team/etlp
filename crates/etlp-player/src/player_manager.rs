@@ -238,13 +238,6 @@ pub async fn realtime_playing_feedback_loop(
             Ok(Some(v)) => v.as_f64().unwrap_or(0.0) as i64,
             _ => break,
         };
-        let speed: f64 = match client
-            .command("get_property", &[serde_json::json!("speed")])
-            .await
-        {
-            Ok(Some(v)) => v.as_f64().unwrap_or(1.0),
-            _ => break,
-        };
         let paused: bool = match client
             .command("get_property", &[serde_json::json!("pause")])
             .await
@@ -288,7 +281,8 @@ pub async fn realtime_playing_feedback_loop(
             continue;
         }
 
-        // On pause/resume transition, report immediately.
+        // Pause/resume transition: report exactly once, then either stop
+        // (pause) or resume (playing) the periodic heartbeat.
         if pause_changed {
             let _ =
                 realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
@@ -300,27 +294,16 @@ pub async fn realtime_playing_feedback_loop(
         }
         was_paused = paused;
 
-        // While paused (no state change): keep reporting every 5 seconds
-        // so the server knows the session is still alive.
+        // While paused: do not report — wait silently until the next
+        // poll cycle detects a resume transition.
         if paused {
-            let _ =
-                realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
-                    .await;
-            req_sec = pos_sec;
             tokio::time::sleep(interval).await;
             continue;
         }
 
-        // Playing: throttle until position advances enough.
-        let after_sec = pos_sec - req_sec;
-        let min_advance = (30.0 * speed) as i64;
-        if after_sec >= 0 && after_sec < min_advance {
-            tokio::time::sleep(interval).await;
-            continue;
-        }
-
-        let _ =
-            realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing).await;
+        // Playing: report every 5 seconds unconditionally.
+        let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
+            .await;
         req_sec = pos_sec;
         tokio::time::sleep(interval).await;
     }
