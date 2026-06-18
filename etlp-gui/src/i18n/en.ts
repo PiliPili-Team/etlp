@@ -4,7 +4,7 @@ export const en: typeof zhCN = {
     ...zhCN,
 
     // App
-    app_name: "GENSHIN",
+    app_name: "Genshin",
 
     // Nav
     nav_overview: "Overview",

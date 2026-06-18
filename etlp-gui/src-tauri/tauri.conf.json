@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "etlp",
+  "productName": "Genshin",
   "version": "0.0.1",
   "identifier": "com.pilipili.etlp",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "etlp",
+        "title": "Genshin",
         "width": 1200,
         "height": 825,
         "minWidth": 900,
@@ -33,6 +33,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "locales/zh-Hans.lproj/InfoPlist.strings": "zh-Hans.lproj/InfoPlist.strings",
+      "locales/zh-Hant.lproj/InfoPlist.strings": "zh-Hant.lproj/InfoPlist.strings"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

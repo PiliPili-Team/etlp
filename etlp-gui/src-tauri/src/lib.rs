@@ -36,6 +36,7 @@ fn sys_is_chinese() -> bool {
 }
 
 struct TrayLabels {
+    tooltip: &'static str,
     show: &'static str,
     start: &'static str,
     stop: &'static str,
@@ -48,6 +49,7 @@ impl TrayLabels {
     fn detect() -> Self {
         if sys_is_chinese() {
             Self {
+                tooltip: "原神",
                 show: "显示主界面",
                 start: "启动服务",
                 stop: "停止服务",
@@ -57,6 +59,7 @@ impl TrayLabels {
             }
         } else {
             Self {
+                tooltip: "Genshin",
                 show: "Show Window",
                 start: "Start Service",
                 stop: "Stop Service",
@@ -187,7 +190,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(tray_img)
                 .icon_as_template(true)
-                .tooltip("etlp")
+                .tooltip(labels.tooltip)
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     let state = app.state::<GuiState>();
