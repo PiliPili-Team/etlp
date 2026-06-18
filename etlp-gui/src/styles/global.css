@@ -1095,13 +1095,13 @@ body.platform-macos .content {
     background: rgba(240, 240, 246, 0.76);
 }
 body.platform-macos .settings-group {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
 }
 body.platform-macos .overview-hero {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
 }
 body.platform-macos .log-container {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
 }
 body.platform-macos .log-body {
     background: transparent;
@@ -1160,11 +1160,32 @@ body.platform-macos .log-body {
     background: rgba(240, 240, 246, 0.76);
 }
 [data-theme="light"] body.platform-macos .settings-group {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
 }
 [data-theme="light"] body.platform-macos .overview-hero {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
 }
 [data-theme="light"] body.platform-macos .log-container {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.92);
+}
+
+/* macOS: the frosted-glass sidebar and titlebar read as dark-tinted glass
+   against any desktop background. White text stays legible on the vibrancy
+   regardless of whether the user's wallpaper is light or dark.
+   :not(.active) keeps the accent-coloured label intact on the selected item. */
+body.platform-macos .titlebar-name {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+body.platform-macos .sidebar-section-label {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+body.platform-macos .nav-item:not(.active) {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+body.platform-macos .nav-item:not(.active):hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
 }
