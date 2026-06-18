@@ -25,6 +25,11 @@ use etlp_player::{
 
 use crate::state::SharedState;
 
+/// Temporary M3U8 file used to pass episode titles to mpv via `loadlist`.
+/// `set_property playlist/N/title` is silently discarded by mpv (IPC bug);
+/// M3U8 `#EXTINF` is the only reliable path for pre-play playlist titles.
+const PLAYLIST_M3U8: &str = "etlp_playlist.m3u8";
+
 // ── Public route handlers ─────────────────────────────────────────────────────
 
 /// `POST /embyToLocalPlayer` – Emby and Jellyfin userscript entry point.
@@ -217,7 +222,6 @@ async fn run_player_chain(
     {
         let new_fmt = h.detect_new_loadfile_format().await;
 
-        // Log mpv version to diagnose version-specific playlist/N/title behaviour.
         if let Ok(Some(ver)) = h
             .client
             .command("get_property", &[json!("mpv-version")])
@@ -249,14 +253,7 @@ async fn run_player_chain(
             .collect();
         debug!(after_count = after.len(), "episodes to append after current");
 
-        // Append subsequent episodes via a temporary M3U8 playlist.
-        // set_property playlist/N/title is silently discarded by mpv 0.41
-        // (returns "success" but the value never persists on readback).
-        // Using loadlist with an M3U8 file makes mpv populate playlist/N/title
-        // directly from the #EXTINF line at parse time — a reliable path.
-        // The EXTINF title also becomes the media-title when each entry plays,
-        // so force-media-title is no longer needed for appended entries.
-        let m3u8_path = std::env::temp_dir().join("etlp_playlist.m3u8");
+        let m3u8_path = std::env::temp_dir().join(PLAYLIST_M3U8);
         let mut m3u8 = String::from("#EXTM3U\n");
         for ep in &after {
             let title = ep.media_title.replace(['\n', '\r'], " ");
@@ -288,8 +285,6 @@ async fn run_player_chain(
             }
         };
 
-        // Fallback: individual loadfile when M3U8 approach fails.
-        // Titles will not appear in the playlist panel in this path.
         if !loaded_via_m3u8 {
             for ep in &after {
                 let title_escaped =
@@ -307,7 +302,6 @@ async fn run_player_chain(
             }
         }
 
-        // Verify playlist-count to confirm mpv processed the entries.
         let expected_count = (after.len() + 1) as i64;
         if let Ok(Some(cnt)) = h
             .client
