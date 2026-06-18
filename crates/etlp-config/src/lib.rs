@@ -124,6 +124,9 @@ pub struct DevSection {
     /// Download and prefetch clients always use their own fixed User-Agents
     /// regardless of this setting.
     pub user_agent: Option<String>,
+    /// When true, etlp will not report playback progress back to the
+    /// Emby / Jellyfin server (no `/Sessions/Playing/Progress` calls).
+    pub disable_progress_report: bool,
 }
 
 impl Default for DevSection {
@@ -152,6 +155,7 @@ impl Default for DevSection {
             sub_extract_priority: Vec::new(),
             media_title_translate: String::new(),
             user_agent: None,
+            disable_progress_report: false,
         }
     }
 }

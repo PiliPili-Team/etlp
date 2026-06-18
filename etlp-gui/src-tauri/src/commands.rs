@@ -7,6 +7,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
 use tauri::State;
+use tower::Layer;
+use tower_http::normalize_path::NormalizePathLayer;
 use tracing::warn;
 
 use etlp_config::Config;
@@ -71,6 +73,7 @@ pub struct ConfigDto {
     pub log_level: String,
     pub user_agent: String,
     pub mix_log: bool,
+    pub disable_progress_report: bool,
     // [playlist]
     pub item_limit: u32,
     pub version_filter: String,
@@ -106,6 +109,7 @@ impl From<&Config> for ConfigDto {
             log_level: c.dev.log_level.clone(),
             user_agent: c.dev.user_agent.clone().unwrap_or_default(),
             mix_log: c.dev.mix_log,
+            disable_progress_report: c.dev.disable_progress_report,
             item_limit: c.playlist.item_limit,
             version_filter: c.playlist.version_filter.clone(),
             speed_limit_mb: c.gui.speed_limit_mb,
@@ -199,9 +203,14 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     state.port.store(port, Ordering::Release);
     state.running.store(true, Ordering::Release);
 
+    // NormalizePathLayer strips trailing slashes before routing, so
+    // /embyToLocalPlayer/ and /embyToLocalPlayer both resolve correctly.
+    let app =
+        NormalizePathLayer::trim_trailing_slash().layer(router);
+
     tauri::async_runtime::spawn(async move {
-        let serve =
-            axum::serve(listener, router).with_graceful_shutdown(async move {
+        let serve = axum::serve(listener, tower::make::Shared::new(app))
+            .with_graceful_shutdown(async move {
                 let _ = shutdown_rx.await;
             });
         if let Err(e) = serve.await {
@@ -314,6 +323,16 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Stop, wait briefly, then restart the server to pick up config changes.
+#[tauri::command]
+pub async fn restart_server(state: State<'_, GuiState>) -> Result<u16, String> {
+    if state.running.load(Ordering::Acquire) {
+        stop_server(state.clone()).await?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    }
+    start_server(state).await
+}
+
 /// Open the configuration directory in the system file manager.
 #[tauri::command]
 pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
@@ -394,6 +413,133 @@ pub async fn clear_log_position(state: State<'_, GuiState>) -> Result<(), String
         .map_err(|e| format!("lock log_read_pos: {e}"))?;
     *pos = 0;
     Ok(())
+}
+
+// ── File picker ────────────────────────────────────────────────────────────────
+
+/// Open a native file-picker and return the selected path as a string.
+///
+/// Returns `None` when the user cancels.
+#[tauri::command]
+pub async fn pick_player_path(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt as _;
+
+    let path = app
+        .dialog()
+        .file()
+        .set_title("选择播放器可执行文件")
+        .blocking_pick_file();
+
+    Ok(path.map(|p| p.to_string()))
+}
+
+/// Return the log file paths the GUI knows about.
+///
+/// Returns `{ app_log: String|null, mpv_log: String|null }`.
+#[tauri::command]
+pub async fn get_log_paths(state: State<'_, GuiState>) -> Result<serde_json::Value, String> {
+    let app_log = state
+        .log_file
+        .lock()
+        .map_err(|e| format!("lock log_file: {e}"))?
+        .to_string_lossy()
+        .into_owned();
+
+    // mpv log path comes from the config dev.mpv_log_file if set.
+    let cfg_dir = platform::config_dir();
+    let mpv_log = cfg_dir
+        .as_ref()
+        .and_then(|d| Config::load_from_dir(d).ok())
+        .and_then(|c| {
+            c.dev
+                .mpv_input_ipc_server
+                .as_ref()
+                .map(|_| platform::data_dir().unwrap_or_default().join("mpv.log"))
+        });
+
+    Ok(serde_json::json!({
+        "app_log": app_log,
+        "mpv_log": mpv_log.map(|p| p.to_string_lossy().into_owned()),
+    }))
+}
+
+/// Check whether a file path exists on disk.
+#[tauri::command]
+pub fn path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+// ── App info ───────────────────────────────────────────────────────────────────
+
+/// Return the application version string from the Cargo manifest.
+#[tauri::command]
+pub fn get_app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+/// List the available font families on the current system.
+///
+/// Returns a deduplicated, sorted list of font names derived from the system
+/// font directories.  Common cross-platform fonts are prepended so they appear
+/// at the top of any picker.
+#[tauri::command]
+pub fn list_system_fonts() -> Vec<String> {
+    let mut fonts: Vec<String> = Vec::new();
+
+    // System-specific font directories
+    #[cfg(target_os = "macos")]
+    let dirs: &[&str] = &[
+        "/System/Library/Fonts",
+        "/System/Library/Fonts/Supplemental",
+        "/Library/Fonts",
+    ];
+    #[cfg(target_os = "windows")]
+    let dirs: &[&str] = &[r"C:\Windows\Fonts"];
+    #[cfg(target_os = "linux")]
+    let dirs: &[&str] = &["/usr/share/fonts", "/usr/local/share/fonts"];
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    let dirs: &[&str] = &[];
+
+    for dir in dirs {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let s = name.to_string_lossy();
+                for ext in &[".ttf", ".otf", ".ttc", ".dfont"] {
+                    if s.to_lowercase().ends_with(ext) {
+                        let stem = s[..s.len() - ext.len()].to_string();
+                        fonts.push(stem);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Always include safe cross-platform presets at the top
+    let presets = [
+        "system-ui",
+        "-apple-system",
+        "SF Pro Text",
+        "Helvetica Neue",
+        "Arial",
+        "Segoe UI",
+        "Roboto",
+        "Noto Sans CJK SC",
+        "PingFang SC",
+        "Microsoft YaHei",
+        "Source Han Sans SC",
+    ];
+    for p in presets.iter().rev() {
+        let s = p.to_string();
+        if !fonts.contains(&s) {
+            fonts.insert(0, s);
+        }
+    }
+
+    fonts.sort();
+    fonts.dedup();
+    fonts
 }
 
 // ── System ─────────────────────────────────────────────────────────────────────
