@@ -12,7 +12,34 @@ use tauri_plugin_autostart::MacosLauncher;
 
 use commands::GuiState;
 
+/// On macOS GUI apps, the inherited PATH is `/usr/bin:/bin:/usr/sbin:/sbin` —
+/// Homebrew and user-installed binaries are invisible. Prepend the standard
+/// locations so `mpv`, `iina-cli`, etc. can be found by name.
+#[cfg(target_os = "macos")]
+fn augment_path() {
+    const EXTRA: &[&str] = &[
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+    ];
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut parts: Vec<&str> = current.split(':').collect();
+    for &p in EXTRA.iter().rev() {
+        if !parts.contains(&p) {
+            parts.insert(0, p);
+        }
+    }
+    // SAFETY: called before any threads spawn; no concurrent env reads.
+    unsafe { std::env::set_var("PATH", parts.join(":")) };
+}
+
+#[cfg(not(target_os = "macos"))]
+fn augment_path() {}
+
 pub fn run() {
+    augment_path();
+
     // Mark this process as the packaged GUI app so platform code can query
     // RuntimeMode::detect(). Called here, before Builder spawns any threads.
     // SAFETY: single-threaded at this point; no concurrent env reads.
@@ -25,6 +52,10 @@ pub fn run() {
     if let Some(d) = etlp_server::platform::data_dir() {
         eprintln!("[etlp] data   dir: {}", d.display());
     }
+
+    // Embed the monochrome tray icon at compile time so the packaged .app
+    // bundle does not need to resolve a runtime resource path.
+    let tray_icon_bytes = include_bytes!("../icons/tray-icon.png");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -39,7 +70,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_opener::init())
         .manage(GuiState::default())
-        .setup(|app| {
+        .setup(move |app| {
             let show =
                 MenuItemBuilder::with_id("show", "Show Window").build(app)?;
             let hide =
@@ -50,12 +81,15 @@ pub fn run() {
                 .items(&[&show, &hide, &quit])
                 .build()?;
 
+            // Load the monochrome icon from the compile-time-embedded bytes.
+            // icon_as_template(true) tells macOS to render it as a system
+            // template image (auto-colours to white/black for dark/light bar).
+            let tray_img =
+                tauri::image::Image::from_bytes(tray_icon_bytes)
+                    .map_err(|e| format!("tray icon: {e}"))?;
+
             let _tray = TrayIconBuilder::new()
-                .icon(
-                    app.default_window_icon()
-                        .cloned()
-                        .ok_or("no default icon")?,
-                )
+                .icon(tray_img)
                 .icon_as_template(true)
                 .tooltip("etlp")
                 .menu(&menu)
