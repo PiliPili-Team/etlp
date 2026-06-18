@@ -1,0 +1,41 @@
+name: Build Windows amd64 App
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: windows-amd64 app
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: etlp-gui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "etlp-gui/src-tauri -> target"
+
+      - name: Build app
+        shell: bash
+        run: bash scripts/build-windows-app.sh --arch amd64
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-amd64
+          path: >-
+            etlp-gui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          retention-days: 7

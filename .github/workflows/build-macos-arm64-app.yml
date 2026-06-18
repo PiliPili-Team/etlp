@@ -1,0 +1,40 @@
+name: Build macOS arm64 App
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: macos-arm64 app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: etlp-gui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "etlp-gui/src-tauri -> target"
+
+      - name: Build app
+        shell: bash
+        run: bash scripts/build-macos-app.sh --arch arm64
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-macos-arm64
+          path: etlp-gui/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 7

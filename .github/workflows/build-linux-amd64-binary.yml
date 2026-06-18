@@ -1,0 +1,28 @@
+name: Build Linux amd64 Binary
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: linux-amd64 binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build binary
+        shell: bash
+        run: bash scripts/build-linux-binary.sh --arch amd64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-amd64
+          path: dist/binaries/etlp-linux-amd64.tar.gz
+          retention-days: 7
