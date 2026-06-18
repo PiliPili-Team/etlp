@@ -3,7 +3,9 @@
 use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse, TraceLayer};
+use tower_http::trace::{
+    DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse, TraceLayer,
+};
 use tracing::Level;
 
 use crate::routes::download::{action_route, dl_route, gui_route, pl_route};

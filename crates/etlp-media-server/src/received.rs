@@ -34,7 +34,11 @@ pub struct ReceivedData {
     #[serde(rename = "playbackData", default)]
     pub playback_data: PlaybackPayload,
     /// `"true"` / `"false"` string, mirroring the JS payload.
-    #[serde(rename = "mountDiskEnable", default, deserialize_with = "null_as_default")]
+    #[serde(
+        rename = "mountDiskEnable",
+        default,
+        deserialize_with = "null_as_default"
+    )]
     pub mount_disk_enable: String,
     #[serde(rename = "showTaskManager", default)]
     pub show_task_manager: bool,
@@ -56,7 +60,11 @@ pub struct ExtraData {
     pub main_ep_info: Item,
     #[serde(rename = "episodesInfo", default)]
     pub episodes_info: Vec<Item>,
-    #[serde(rename = "playlistInfo", default, deserialize_with = "null_as_default")]
+    #[serde(
+        rename = "playlistInfo",
+        default,
+        deserialize_with = "null_as_default"
+    )]
     pub playlist_info: Vec<serde_json::Value>,
     #[serde(rename = "userAgent", default)]
     pub user_agent: Option<String>,
