@@ -170,7 +170,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::LaunchAgent,
+            MacosLauncher::AppleScript,
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
