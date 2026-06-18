@@ -220,7 +220,6 @@ pub async fn realtime_playing_feedback_loop(
     let mut last_key: Option<String> = None;
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
-    let mut pause_sec: i64 = 0;
     let mut was_paused: bool = false;
 
     loop {
@@ -255,11 +254,6 @@ pub async fn realtime_playing_feedback_loop(
         };
 
         let pause_changed = paused != was_paused;
-        if paused {
-            pause_sec += interval.as_secs() as i64;
-        } else {
-            pause_sec = 0;
-        }
 
         let ep = playlist.get(&title).or_else(|| {
             if data.media_title == title {
@@ -294,7 +288,7 @@ pub async fn realtime_playing_feedback_loop(
             continue;
         }
 
-        // On pause/resume transition, report immediately and reset throttle.
+        // On pause/resume transition, report immediately.
         if pause_changed {
             let _ =
                 realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
@@ -306,10 +300,21 @@ pub async fn realtime_playing_feedback_loop(
         }
         was_paused = paused;
 
+        // While paused (no state change): keep reporting every 5 seconds
+        // so the server knows the session is still alive.
+        if paused {
+            let _ =
+                realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
+                    .await;
+            req_sec = pos_sec;
+            tokio::time::sleep(interval).await;
+            continue;
+        }
+
+        // Playing: throttle until position advances enough.
         let after_sec = pos_sec - req_sec;
-        // Throttle: skip if heavily paused or position barely advanced.
         let min_advance = (30.0 * speed) as i64;
-        if pause_sec > 180 || (after_sec >= 0 && after_sec < min_advance) {
+        if after_sec >= 0 && after_sec < min_advance {
             tokio::time::sleep(interval).await;
             continue;
         }
@@ -468,13 +473,17 @@ pub async fn redirect_next_ep_loop(
                     }
                 };
 
-            // Append the resolved URL with the episode title so mpv shows it
-            // in the playlist instead of the bare URL.
-            let escaped_title =
-                next_ep.media_title.replace('"', "\\\"");
+            // Append the resolved URL. Commas must be escaped in the
+            // option string since they are the option separator; double
+            // quotes are dropped because mpv's option parser does not
+            // strip them and they would appear in the title literally.
+            let escaped_title = next_ep
+                .media_title
+                .replace('"', "")
+                .replace(',', "\\,");
             let title_opts = format!(
-                "force-media-title=\"{escaped_title}\",\
-                 osd-playing-msg=\"{escaped_title}\""
+                "force-media-title={escaped_title},\
+                 osd-playing-msg={escaped_title}"
             );
             let total = entries.len() as i64;
             let ni = next_mpv_idx as i64;
@@ -492,11 +501,24 @@ pub async fn redirect_next_ep_loop(
             {
                 break 'outer;
             }
-            // Move the newly appended entry to position ni+1, removing old ni.
+            // Set the playlist entry title for the just-appended item so
+            // mpv's playlist UI shows the episode name instead of the URL
+            // even before that entry starts playing.
+            let _ = client
+                .command(
+                    "set_property",
+                    &[
+                        serde_json::json!(format!("playlist/{total}/title")),
+                        serde_json::json!(next_ep.media_title),
+                    ],
+                )
+                .await;
+            // Move the newly appended entry to position ni, pushing the
+            // original (unresolved) next entry to ni+1, then remove it.
             if client
                 .command(
                     "playlist-move",
-                    &[serde_json::json!(total), serde_json::json!(ni + 1)],
+                    &[serde_json::json!(total), serde_json::json!(ni)],
                 )
                 .await
                 .is_err()
@@ -504,7 +526,7 @@ pub async fn redirect_next_ep_loop(
                 break 'outer;
             }
             if client
-                .command("playlist-remove", &[serde_json::json!(ni + 2)])
+                .command("playlist-remove", &[serde_json::json!(ni + 1)])
                 .await
                 .is_err()
             {
