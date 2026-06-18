@@ -35,13 +35,17 @@ pub fn activate_window_by_pid(_pid: u32) {
         ) -> BOOL {
             let target_pid = lparam.0 as u32;
             let mut pid = 0u32;
-            GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            if pid == target_pid {
-                let _ = ShowWindow(hwnd, SW_RESTORE);
-                let _ = SetForegroundWindow(hwnd);
-                BOOL(0) // stop enumeration
-            } else {
-                BOOL(1) // continue
+            // edition 2024: unsafe fn body is safe by default; each unsafe
+            // call requires its own unsafe {} block.
+            unsafe {
+                GetWindowThreadProcessId(hwnd, Some(&mut pid));
+                if pid == target_pid {
+                    let _ = ShowWindow(hwnd, SW_RESTORE);
+                    let _ = SetForegroundWindow(hwnd);
+                    BOOL(0) // stop enumeration
+                } else {
+                    BOOL(1) // continue
+                }
             }
         }
 
