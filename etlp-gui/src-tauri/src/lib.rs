@@ -12,12 +12,27 @@ use commands::GuiState;
 
 // ── Language helpers ──────────────────────────────────────────────────────────
 
+/// Detects whether the system UI language is Chinese using platform-native
+/// APIs (via sys-locale). Falls back to LANG/LC_ALL/LANGUAGE env vars for
+/// environments where the native API is unavailable.
 fn sys_is_chinese() -> bool {
-    let lang = std::env::var("LANG")
-        .or_else(|_| std::env::var("LC_ALL"))
+    // sys-locale uses NSLocale on macOS, GetUserDefaultLocaleName on Windows,
+    // and setlocale() on Linux — all more reliable than env vars for GUI apps.
+    let native = sys_locale::get_locale()
+        .or_else(|| sys_locale::get_locales().into_iter().next())
         .unwrap_or_default()
         .to_lowercase();
-    lang.starts_with("zh")
+    if !native.is_empty() {
+        return native.starts_with("zh");
+    }
+    // Fallback: check common locale env vars.
+    for key in ["LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES"] {
+        let val = std::env::var(key).unwrap_or_default().to_lowercase();
+        if val.starts_with("zh") {
+            return true;
+        }
+    }
+    false
 }
 
 struct TrayLabels {
