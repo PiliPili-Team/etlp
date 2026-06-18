@@ -55,22 +55,15 @@ export function loadDisplay(): DisplaySettings {
 
 export function applyDisplay(s: DisplaySettings) {
     const root = document.documentElement;
-    if (!s.theme || s.theme === "system") {
-        root.removeAttribute("data-theme");
-    } else {
-        root.setAttribute("data-theme", s.theme);
-    }
+    // Light mode is not yet ready; force dark unconditionally.
+    root.setAttribute("data-theme", "dark");
     root.style.setProperty("--base-font-size", `${s.fontSize}px`);
     root.style.setProperty("--app-zoom", String(s.zoom));
     root.style.setProperty(
         "--app-font",
         s.fontFamily ? `"${s.fontFamily}"` : "-apple-system",
     );
-    const isDark =
-        s.theme === "dark" ||
-        (s.theme === "system" &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
-    const [light, dark, soft] = ACCENT_PALETTES[s.accentColor ?? "blue"];
-    root.style.setProperty("--accent", isDark ? dark : light);
+    const [, dark, soft] = ACCENT_PALETTES[s.accentColor ?? "blue"];
+    root.style.setProperty("--accent", dark);
     root.style.setProperty("--accent-soft", soft);
 }

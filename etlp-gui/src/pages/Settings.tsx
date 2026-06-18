@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ThemeMode, LangMode, DisplaySettings, AccentColor } from "../display";
+import type { LangMode, DisplaySettings, AccentColor } from "../display";
 import { ACCENT_PALETTES } from "../display";
 import { useI18n } from "../i18n";
 
@@ -880,12 +880,6 @@ function SystemSection({
     const dpr =
         typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
 
-    const THEME_OPTIONS = [
-        { value: "system", label: t("sys_theme_system") },
-        { value: "light", label: t("sys_theme_light") },
-        { value: "dark", label: t("sys_theme_dark") },
-    ];
-
     const LANG_OPTIONS = [
         { value: "system", label: t("sys_lang_system") },
         { value: "zh-CN", label: "简体中文" },
@@ -927,13 +921,6 @@ function SystemSection({
             {/* Appearance */}
             <div className="settings-group-title">{t("sys_appearance")}</div>
             <div className="settings-group">
-                <SelectRow
-                    label={t("sys_theme")}
-                    desc={t("sys_theme_desc")}
-                    value={display.theme}
-                    options={THEME_OPTIONS}
-                    onChange={(v) => onDisplayChange({ theme: v as ThemeMode })}
-                />
                 <SelectRow
                     label={t("sys_lang")}
                     desc={t("sys_lang_desc")}
