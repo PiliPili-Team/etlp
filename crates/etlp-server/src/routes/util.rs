@@ -104,15 +104,9 @@ pub async fn trakt_auth(
                 );
             }
         };
-        let id = cfg.get_or("trakt", "client_id", "").to_owned();
-        let secret = cfg.get_or("trakt", "client_secret", "").to_owned();
-        let uri = cfg
-            .get_or(
-                "trakt",
-                "redirect_uri",
-                "http://localhost:58000/trakt_auth",
-            )
-            .to_owned();
+        let id = cfg.trakt.client_id.clone();
+        let secret = cfg.trakt.client_secret.clone();
+        let uri = cfg.trakt.redirect_uri.clone();
         let path = state.working_dir.join("trakt_token.json");
         (id, secret, uri, path)
     };

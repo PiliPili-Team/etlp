@@ -43,7 +43,7 @@ pub async fn send_media_file(
         .config
         .read()
         .ok()
-        .and_then(|cfg| cfg.get("dev", "http_server_token").map(str::to_owned))
+        .and_then(|cfg| cfg.dev.http_server_token.clone())
         .unwrap_or_default();
 
     if params.token != server_token {

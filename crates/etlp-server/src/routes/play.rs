@@ -95,17 +95,21 @@ struct LaunchCfg {
 
 fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
     let cfg = state.config.read().ok()?;
-    let player = cfg.get_or("emby", "player", "mpv").to_owned();
-    let player_exe = cfg.get_or("dev", "player_path", &player).to_owned();
-    let fullscreen = cfg.get_bool("emby", "fullscreen", false);
-    let disable_audio = cfg.get_bool("emby", "disable_audio", false);
-    let http_proxy = cfg.get("dev", "http_proxy").map(str::to_owned);
-    let static_ipc = cfg.get("dev", "mpv_input_ipc_server").map(str::to_owned);
+    let player = cfg.emby.player.clone();
+    let player_exe = cfg
+        .dev
+        .player_path
+        .clone()
+        .unwrap_or_else(|| player.clone());
+    let fullscreen = cfg.emby.fullscreen;
+    let disable_audio = cfg.emby.disable_audio;
+    let http_proxy = cfg.dev.http_proxy.clone();
+    let static_ipc = cfg.dev.mpv_input_ipc_server.clone();
     let dandan = DanDanConfig {
-        port: cfg.get_int("dandan", "port", 8080) as u16,
-        api_key: cfg.get("dandan", "api_key").map(str::to_owned),
+        port: cfg.dandan.port,
+        api_key: cfg.dandan.api_key.clone(),
     };
-    let playlist_limit = cfg.get_int("playlist", "item_limit", 10) as usize;
+    let playlist_limit = cfg.playlist.item_limit as usize;
     Some(LaunchCfg {
         player_exe,
         fullscreen,
@@ -387,12 +391,8 @@ async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
             }
         };
         PlexParseConfig {
-            force_disk_prefixes: cfg.split_list(
-                "dev",
-                "force_disk_mode_path",
-                ',',
-            ),
-            subtitle_priority: cfg.split_list("dev", "subtitle_priority", ','),
+            force_disk_prefixes: cfg.dev.force_disk_mode_path.clone(),
+            subtitle_priority: cfg.dev.subtitle_priority.clone(),
             path_pairs: cfg.path_translation_pairs(),
         }
     };

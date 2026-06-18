@@ -73,11 +73,11 @@ pub(crate) mod test_helpers {
     use super::{AppState, SharedState};
     use std::sync::Arc;
 
-    /// Minimal ini content sufficient for most route tests.
-    pub const MINIMAL_INI: &str = "\
-[emby]\nplayer = mpv\n\
-[dev]\nskip_certificate_verify = no\n\
-[trakt]\nenable_host =\n\
+    /// Minimal TOML content sufficient for most route tests.
+    pub const MINIMAL_TOML: &str = "\
+[emby]\nplayer = \"mpv\"\n\
+[dev]\nskip_certificate_verify = false\n\
+[trakt]\nenable_host = \"\"\n\
 ";
 
     /// Build a test [`SharedState`] backed by a temp directory.
@@ -85,12 +85,12 @@ pub(crate) mod test_helpers {
     /// Returns the state and the `TempDir` guard (dropped when test ends).
     pub fn test_state() -> (SharedState, TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
-        let ini_path = dir.path().join("embyToLocalPlayer.ini");
+        let toml_path = dir.path().join("embyToLocalPlayer.toml");
         {
-            let mut f = std::fs::File::create(&ini_path).expect("create ini");
-            f.write_all(MINIMAL_INI.as_bytes()).expect("write ini");
+            let mut f = std::fs::File::create(&toml_path).expect("create toml");
+            f.write_all(MINIMAL_TOML.as_bytes()).expect("write toml");
         }
-        let config = Config::load_file(&ini_path).expect("load config");
+        let config = Config::load_file(&toml_path).expect("load config");
         let client =
             reqwest::Client::builder().build().expect("reqwest client");
         let dl_manager = DownloadManager::new(

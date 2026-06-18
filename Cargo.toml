@@ -27,7 +27,7 @@ reqwest = { version = "0.13", default-features = false, features = [
     "query",
 ] }
 axum = "0.8"
-rust-ini = "0.21"
+toml = "0.8"
 url = "2"
 sysinfo = "0.38"
 tempfile = "3"
