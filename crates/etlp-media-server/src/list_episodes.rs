@@ -125,6 +125,8 @@ pub fn assemble_episodes(
         episodes = version_filter(&vf_input, &episodes);
     }
 
+    episodes.sort_by_key(|item| (item.parent_index_number, item.index_number));
+
     let (maps, title_fail) =
         build_title_intro_maps(ctx.episodes_info, ctx.season_id, ctx.playlist);
     let extra = if base.server == Server::Emby {
@@ -287,6 +289,30 @@ mod tests {
                 .map(|e| e.media_path.contains("/emby/videos/100/"))
                 .unwrap_or(false)
         );
+    }
+
+    #[test]
+    fn episodes_sorted_by_index_number() {
+        let b = base();
+        let cfg = config();
+        let ctx = ListContext {
+            base: &b,
+            episodes_info: &[],
+            season_id: "s1",
+            playlist: false,
+            config: &cfg,
+        };
+        // Deliver episodes out of order from the API.
+        let fetched = vec![
+            episode("103", 3, "/m/s01e03.mkv"),
+            episode("101", 1, "/m/s01e01.mkv"),
+            episode("102", 2, "/m/s01e02.mkv"),
+        ];
+        let res = assemble_episodes(&ctx, &fetched);
+        assert_eq!(res.len(), 3);
+        assert_eq!(res[0].item_id, "101", "first episode must be E01");
+        assert_eq!(res[1].item_id, "102", "second episode must be E02");
+        assert_eq!(res[2].item_id, "103", "third episode must be E03");
     }
 
     #[test]
