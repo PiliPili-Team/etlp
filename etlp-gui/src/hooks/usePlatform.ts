@@ -6,16 +6,16 @@ export type Platform = "macos" | "windows" | "linux" | "unknown";
 let _cached: Platform | null = null;
 
 export function usePlatform(): Platform {
-  if (_cached !== null) return _cached;
-  try {
-    const p = getPlatform();
-    if (p === "macos" || p === "windows" || p === "linux") {
-      _cached = p;
-    } else {
-      _cached = "unknown";
+    if (_cached !== null) return _cached;
+    try {
+        const p = getPlatform();
+        if (p === "macos" || p === "windows" || p === "linux") {
+            _cached = p;
+        } else {
+            _cached = "unknown";
+        }
+    } catch {
+        _cached = "unknown";
     }
-  } catch {
-    _cached = "unknown";
-  }
-  return _cached;
+    return _cached;
 }
