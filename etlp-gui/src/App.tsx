@@ -350,7 +350,11 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     return (
         <div className="app">
             {isMac && (
-                <div className="titlebar">
+                // data-tauri-drag-region activates Tauri's JS drag API
+                // (core:window:allow-start-dragging) on mousedown, bypassing
+                // any NSVisualEffectView hit-test interference with the CSS
+                // -webkit-app-region approach.
+                <div className="titlebar" data-tauri-drag-region>
                     <img className="titlebar-logo" src="/app-icon.png" alt="" />
                     <span className="titlebar-name">{t("app_name")}</span>
                 </div>
