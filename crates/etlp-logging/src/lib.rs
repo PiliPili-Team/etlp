@@ -63,10 +63,31 @@ impl Drop for MaskingWriter {
         if let Some(file) = &self.file
             && let Ok(mut f) = file.lock()
         {
-            let _ = f.write_all(masked.as_bytes());
+            // Strip ANSI colour codes before writing to file.
+            let plain = strip_ansi(&masked);
+            let _ = f.write_all(plain.as_bytes());
             let _ = f.flush();
         }
     }
+}
+
+/// Strip ANSI SGR escape sequences (`ESC [ … m`) from `s`.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next(); // consume '['
+            for cc in chars.by_ref() {
+                if cc == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl<'a> MakeWriter<'a> for MaskingMakeWriter {
@@ -128,10 +149,16 @@ pub fn init(
         .or_else(|_| EnvFilter::try_new(level))
         .unwrap_or_else(|_| EnvFilter::new("info"));
 
+    use std::io::IsTerminal as _;
+    let use_ansi = std::io::stdout().is_terminal();
+
     tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_ansi(false)
+        .with_ansi(use_ansi)
         .with_target(false)
+        .with_level(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
         .with_writer(make_writer)
         .try_init()
         .map_err(|e| e.to_string())
