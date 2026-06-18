@@ -1,9 +1,7 @@
 //! HTTP client, redirect cache and progress write-back for etlp.
 //!
-//! Provides the IO-free building blocks ported from `net_tools.py` (proxy
-//! parsing, User-Agent selection, [`url_tools`]) and the async
-//! [`HttpClient`] built on `reqwest` + rustls. Redirect caching and progress
-//! write-back land on top of these in later steps (see `docs/TODO.md`).
+//! Provides proxy parsing, User-Agent constants, [`url_tools`], and the async
+//! [`HttpClient`] built on `reqwest` + rustls.
 
 mod client;
 pub mod progress;
@@ -16,35 +14,30 @@ pub use redirect::{RedirectCache, cache_key};
 
 use thiserror::Error;
 
-/// User-Agent used for the upstream media servers (pili/bili hosts), matching
-/// the Python `embyToLocalPlayer/1.1` branch.
-pub const UA_ETLP: &str = "embyToLocalPlayer/1.1";
+/// Default User-Agent for all etlp HTTP requests.
+pub const UA_ETLP: &str = "etlp";
 
-/// User-Agent used for everything else (a generic desktop Chrome string),
-/// matching the Python fallback branch.
-pub const UA_BROWSER: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-     (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+/// User-Agent for prefetch background downloads.
+pub const UA_PREFETCH: &str = "etlp-prefetch";
+
+/// User-Agent for active media downloads.
+pub const UA_DOWNLOAD: &str = "etlp-download";
 
 /// Errors from proxy configuration parsing.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ProxyError {
-    /// SOCKS proxies are not supported (only HTTP), matching the Python
-    /// `raise ValueError('only support http proxy')`.
+    /// SOCKS proxies are not supported (only HTTP).
     #[error("only http proxy is supported, got: {0}")]
     SocksUnsupported(String),
 }
 
-/// Select the User-Agent for a request URL.
+/// Returns the default etlp User-Agent regardless of URL.
 ///
-/// Hosts containing `pili` or `bili` use the etlp UA so the upstream can
-/// recognize the client; all others masquerade as a browser.
+/// All requests use `UA_ETLP` ("etlp") by default. Use [`UA_PREFETCH`] or
+/// [`UA_DOWNLOAD`] when constructing specialised clients for those purposes.
 #[must_use]
-pub fn user_agent_for(url: &str) -> &'static str {
-    if url.contains("pili") || url.contains("bili") {
-        UA_ETLP
-    } else {
-        UA_BROWSER
-    }
+pub fn user_agent_for(_url: &str) -> &'static str {
+    UA_ETLP
 }
 
 /// Normalize an HTTP proxy string the way `Configs._get_proxy` does:
@@ -72,10 +65,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ua_selects_etlp_for_pili_and_bili() {
+    fn ua_always_returns_etlp() {
         assert_eq!(user_agent_for("https://v.pili.app/x"), UA_ETLP);
         assert_eq!(user_agent_for("https://push.bili.io/y"), UA_ETLP);
-        assert_eq!(user_agent_for("https://media.example.com/z"), UA_BROWSER);
+        assert_eq!(user_agent_for("https://media.example.com/z"), UA_ETLP);
+    }
+
+    #[test]
+    fn ua_constants_are_correct() {
+        assert_eq!(UA_ETLP, "etlp");
+        assert_eq!(UA_PREFETCH, "etlp-prefetch");
+        assert_eq!(UA_DOWNLOAD, "etlp-download");
     }
 
     #[test]
