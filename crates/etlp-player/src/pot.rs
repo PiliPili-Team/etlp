@@ -173,17 +173,22 @@ async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
                 if ctx.is_null() {
                     return 1;
                 }
-                let (target_pid, found, last_sec) = &*ctx;
-                let mut win_pid: u32 = 0;
-                GetWindowThreadProcessId(hwnd, &mut win_pid);
-                if win_pid == *target_pid {
-                    let ms = SendMessageW(hwnd, POT_GET_CUR_TIME, 0x5004, 1);
-                    if ms > 0 {
-                        if let Ok(mut g) = found.lock() {
-                            *g = true;
-                        }
-                        if let Ok(mut g) = last_sec.lock() {
-                            *g = Some(ms as i64 / 1000);
+                // edition 2024: items inside an `unsafe {}` block do not
+                // inherit the enclosing unsafe context — each item needs its
+                // own `unsafe {}` for raw-pointer and FFI operations.
+                unsafe {
+                    let (target_pid, found, last_sec) = &*ctx;
+                    let mut win_pid: u32 = 0;
+                    GetWindowThreadProcessId(hwnd, &mut win_pid);
+                    if win_pid == *target_pid {
+                        let ms = SendMessageW(hwnd, POT_GET_CUR_TIME, 0x5004, 1);
+                        if ms > 0 {
+                            if let Ok(mut g) = found.lock() {
+                                *g = true;
+                            }
+                            if let Ok(mut g) = last_sec.lock() {
+                                *g = Some(ms as i64 / 1000);
+                            }
                         }
                     }
                 }
