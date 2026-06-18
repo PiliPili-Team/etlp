@@ -256,6 +256,10 @@ pub struct LaunchArgs {
     pub static_ipc: Option<String>,
     /// Event handler forwarded to [`MpvClient`].
     pub event_handler: Option<EventHandler>,
+    /// When set, `media_path` is a playlist file and playback starts at this
+    /// index. `--force-media-title` / `--osd-playing-msg` are suppressed
+    /// because titles come from the playlist's `#EXTINF` fields instead.
+    pub playlist_start: Option<usize>,
 }
 
 // ── Command-line builder ──────────────────────────────────────────────────────
@@ -282,9 +286,14 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         // iina + !mount_disk needs save_sub_file; deferred to server layer.
     }
 
-    if !args.mount_disk_mode || !is_iina {
+    // In playlist mode titles come from #EXTINF; suppress the static overrides.
+    if args.playlist_start.is_none() && (!args.mount_disk_mode || !is_iina) {
         cmd.push(format!("--force-media-title={}", args.media_title));
         cmd.push(format!("--osd-playing-msg={}", args.media_title));
+    }
+
+    if let Some(n) = args.playlist_start {
+        cmd.push(format!("--playlist-start={n}"));
     }
 
     if !args.mount_disk_mode {
@@ -849,6 +858,7 @@ mod tests {
             http_proxy: None,
             static_ipc: None,
             event_handler: None,
+            playlist_start: None,
         }
     }
 
@@ -896,6 +906,20 @@ mod tests {
         let flat = cmd.join(" ");
         assert!(flat.contains("--http-proxy=http://127.0.0.1:8080"));
         assert!(flat.contains("--cache=no"));
+    }
+
+    #[test]
+    fn build_args_playlist_start_adds_flag_and_drops_title_override() {
+        let mut args = default_launch();
+        args.is_multiple_episodes = true;
+        args.playlist_start = Some(5);
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(flat.contains("--playlist-start=5"));
+        assert!(!flat.contains("--force-media-title="));
+        assert!(!flat.contains("--osd-playing-msg="));
+        assert!(flat.contains("--pause"));
     }
 
     // ── MpvHandle commands ────────────────────────────────────────────────────

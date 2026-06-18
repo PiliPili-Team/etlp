@@ -161,10 +161,67 @@ async fn run_player_chain(
         "launching player",
     );
 
+    // For mpv: write the full episode list as a playlist file before spawn so
+    // that all entries (including those before the current episode) appear in
+    // the playlist panel immediately, and titles come from #EXTINF rather than
+    // a post-launch IPC write (which is silently discarded in mpv ≥0.38).
+    let (launch_media_path, launch_playlist_start, launch_cur_idx) =
+        if play_multiple && kind.is_mpv_family() {
+            let cur_idx = episode_list
+                .iter()
+                .position(|e| {
+                    e.item_id == data.item_id
+                        || e.media_source_id == data.media_source_id
+                })
+                .unwrap_or_else(|| {
+                    warn!(
+                        item_id = %data.item_id,
+                        media_source_id = %data.media_source_id,
+                        "current episode not found; defaulting cur_idx=0"
+                    );
+                    0
+                });
+            debug!(cur_idx, "current episode index in assembled playlist");
+
+            let m3u8_path = std::env::temp_dir().join(PLAYLIST_M3U8);
+            let mut m3u8 = String::from("#EXTM3U\n");
+            for ep in &episode_list {
+                let title = ep.media_title.replace(['\n', '\r'], " ");
+                m3u8.push_str(&format!(
+                    "#EXTINF:-1,{title}\n{}\n",
+                    ep.stream_url
+                ));
+            }
+            match std::fs::write(&m3u8_path, &m3u8) {
+                Ok(()) => {
+                    debug!(
+                        path = %m3u8_path.display(),
+                        entries = episode_list.len(),
+                        cur_idx,
+                        "M3U8 playlist written for launch"
+                    );
+                    (
+                        m3u8_path.display().to_string(),
+                        Some(cur_idx),
+                        cur_idx,
+                    )
+                }
+                Err(e) => {
+                    warn!(
+                        "M3U8 write failed ({e}); \
+                         falling back to direct stream URL"
+                    );
+                    (data.stream_url.clone(), None, cur_idx)
+                }
+            }
+        } else {
+            (data.stream_url.clone(), None, 0)
+        };
+
     // `stream_url` is the resolved play URL (HTTP stream or translated local path).
     let args = LaunchArgs {
         exe: cfg.player_exe.clone(),
-        media_path: data.stream_url.clone(),
+        media_path: launch_media_path,
         media_title: data.media_title.clone(),
         start_sec: (data.start_sec > 0).then_some(data.start_sec as f64),
         sub: data.sub.clone(),
@@ -176,6 +233,7 @@ async fn run_player_chain(
         http_proxy: cfg.http_proxy.clone(),
         static_ipc: cfg.static_ipc.clone(),
         event_handler: None,
+        playlist_start: launch_playlist_start,
     };
 
     let handle_result: Result<PlayerHandle, String> = match kind {
@@ -215,13 +273,11 @@ async fn run_player_chain(
 
     let mut mgr = PlayerManager::new(handle, data.clone());
 
-    // For mpv / iina: append subsequent playlist entries then unpause.
+    // For mpv / iina: verify the playlist loaded correctly then unpause.
     if play_multiple
         && kind.is_mpv_family()
         && let PlayerHandle::Mpv(ref h) = mgr.handle
     {
-        let new_fmt = h.detect_new_loadfile_format().await;
-
         if let Ok(Some(ver)) = h
             .client
             .command("get_property", &[json!("mpv-version")])
@@ -230,87 +286,79 @@ async fn run_player_chain(
             debug!("mpv version: {ver}");
         }
 
-        let cur_idx = episode_list
-            .iter()
-            .position(|e| {
-                e.item_id == data.item_id
-                    || e.media_source_id == data.media_source_id
-            })
-            .unwrap_or_else(|| {
-                warn!(
-                    item_id = %data.item_id,
-                    media_source_id = %data.media_source_id,
-                    "current episode not found in assembled playlist; defaulting cur_idx=0"
-                );
-                0
-            });
-        debug!(cur_idx, "current episode index in assembled playlist");
+        // M3U8 write failed before spawn — fall back to appending after-episodes
+        // via a post-launch loadlist. Titles will not show for earlier episodes.
+        if launch_playlist_start.is_none() {
+            let new_fmt = h.detect_new_loadfile_format().await;
+            let after: Vec<&PlaybackData> = episode_list
+                .iter()
+                .skip(launch_cur_idx + 1)
+                .take(cfg.playlist_limit)
+                .collect();
+            debug!(after_count = after.len(), "fallback: appending episodes via loadlist");
 
-        let after: Vec<&PlaybackData> = episode_list
-            .iter()
-            .skip(cur_idx + 1)
-            .take(cfg.playlist_limit)
-            .collect();
-        debug!(after_count = after.len(), "episodes to append after current");
-
-        let m3u8_path = std::env::temp_dir().join(PLAYLIST_M3U8);
-        let mut m3u8 = String::from("#EXTM3U\n");
-        for ep in &after {
-            let title = ep.media_title.replace(['\n', '\r'], " ");
-            m3u8.push_str(&format!("#EXTINF:-1,{title}\n{}\n", ep.stream_url));
-        }
-
-        let loaded_via_m3u8 = match std::fs::write(&m3u8_path, &m3u8) {
-            Err(e) => {
-                warn!("failed to write M3U8 playlist ({e}); falling back to loadfile");
-                false
-            }
-            Ok(()) => {
-                let path_str = m3u8_path.display().to_string();
-                debug!("loading M3U8 playlist: {path_str}");
-                match h
-                    .client
-                    .command("loadlist", &[json!(path_str), json!("append")])
-                    .await
-                {
-                    Ok(_) => {
-                        debug!("M3U8 loaded ({} entries)", after.len());
-                        true
-                    }
-                    Err(e) => {
-                        warn!("loadlist {e}; falling back to loadfile");
-                        false
-                    }
-                }
-            }
-        };
-
-        if !loaded_via_m3u8 {
+            let m3u8_path = std::env::temp_dir().join(PLAYLIST_M3U8);
+            let mut m3u8 = String::from("#EXTM3U\n");
             for ep in &after {
-                let title_escaped =
-                    ep.media_title.replace('"', "").replace(',', "\\,");
-                let opts = LoadOptions {
-                    media_title: Some(title_escaped),
-                    ..LoadOptions::default()
-                };
-                if let Err(e) = h
-                    .loadfile(&ep.stream_url, LoadMode::Append, &opts, new_fmt)
-                    .await
-                {
-                    warn!("playlist append {:?}: {e}", ep.media_title);
+                let title = ep.media_title.replace(['\n', '\r'], " ");
+                m3u8.push_str(&format!(
+                    "#EXTINF:-1,{title}\n{}\n",
+                    ep.stream_url
+                ));
+            }
+            let loaded_via_m3u8 = match std::fs::write(&m3u8_path, &m3u8) {
+                Err(e) => {
+                    warn!("M3U8 fallback write failed ({e})");
+                    false
+                }
+                Ok(()) => {
+                    let path_str = m3u8_path.display().to_string();
+                    match h
+                        .client
+                        .command("loadlist", &[json!(path_str), json!("append")])
+                        .await
+                    {
+                        Ok(_) => {
+                            debug!("M3U8 fallback loaded ({} entries)", after.len());
+                            true
+                        }
+                        Err(e) => {
+                            warn!("loadlist fallback: {e}");
+                            false
+                        }
+                    }
+                }
+            };
+            if !loaded_via_m3u8 {
+                for ep in &after {
+                    let title_escaped =
+                        ep.media_title.replace('"', "").replace(',', "\\,");
+                    let opts = LoadOptions {
+                        media_title: Some(title_escaped),
+                        ..LoadOptions::default()
+                    };
+                    if let Err(e) = h
+                        .loadfile(
+                            &ep.stream_url,
+                            LoadMode::Append,
+                            &opts,
+                            new_fmt,
+                        )
+                        .await
+                    {
+                        warn!("playlist append {:?}: {e}", ep.media_title);
+                    }
                 }
             }
         }
 
-        let expected_count = (after.len() + 1) as i64;
+        let expected_count = episode_list.len() as i64;
         if let Ok(Some(cnt)) = h
             .client
             .command("get_property", &[json!("playlist-count")])
             .await
         {
-            debug!(
-                "playlist-count after append: {cnt} (expected {expected_count})"
-            );
+            debug!("playlist-count: {cnt} (expected {expected_count})");
         }
 
         if let Err(e) = h.set_pause(false).await {
