@@ -1,0 +1,98 @@
+name: Build App Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            target_name: macos-arm64
+            platform: macos
+            arch: arm64
+            asset_glob: "etlp-gui/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            target_name: macos-amd64
+            platform: macos
+            arch: amd64
+            asset_glob: "etlp-gui/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            target_name: linux-amd64
+            platform: linux
+            arch: amd64
+            asset_glob: "etlp-gui/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            target_name: windows-amd64
+            platform: windows
+            arch: amd64
+            asset_glob: "etlp-gui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: etlp-gui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "etlp-gui/src-tauri -> target"
+
+      - name: Build app
+        shell: bash
+        run: bash scripts/build-${{ matrix.platform }}-app.sh --arch ${{ matrix.arch }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.target_name }}
+          path: ${{ matrix.asset_glob }}
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true

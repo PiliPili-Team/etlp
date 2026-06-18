@@ -1,0 +1,33 @@
+name: CI App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'etlp-gui/**'
+  pull_request:
+    paths:
+      - 'etlp-gui/**'
+
+concurrency:
+  group: ci-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: TypeScript & ESLint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etlp-gui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: etlp-gui/package-lock.json
+      - run: npm install
+      - run: npm run format:check
+      - run: npx tsc --noEmit
+      - run: npm run lint

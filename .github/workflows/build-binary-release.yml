@@ -1,0 +1,84 @@
+name: Build Binary Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_EXTRA_FLAGS: --locked
+
+jobs:
+  build:
+    name: ${{ matrix.target_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_name: linux-amd64
+            platform: linux
+            arch: amd64
+            asset: etlp-linux-amd64.tar.gz
+          - os: ubuntu-24.04-arm
+            target_name: linux-arm64
+            platform: linux
+            arch: arm64
+            asset: etlp-linux-arm64.tar.gz
+          - os: macos-13
+            target_name: macos-amd64
+            platform: macos
+            arch: amd64
+            asset: etlp-macos-amd64.tar.gz
+          - os: macos-latest
+            target_name: macos-arm64
+            platform: macos
+            arch: arm64
+            asset: etlp-macos-arm64.tar.gz
+          - os: windows-latest
+            target_name: windows-amd64
+            platform: windows
+            arch: amd64
+            asset: etlp-windows-amd64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build binary
+        shell: bash
+        run: bash scripts/build-${{ matrix.platform }}-binary.sh --arch ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/binaries/${{ matrix.asset }}
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Checksum
+        run: |
+          cd artifacts
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) \
+            -exec sha512sum {} + > ../etlp.sha512sum
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts/**/*.tar.gz,artifacts/**/*.zip,etlp.sha512sum"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
