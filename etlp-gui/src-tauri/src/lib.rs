@@ -256,12 +256,18 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // ── macOS vibrancy ─────────────────────────────────────────────────
-            #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-                apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
-                    .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
+                // ── macOS vibrancy ─────────────────────────────────────────────
+                #[cfg(target_os = "macos")]
+                {
+                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                    apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
+                        .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
+                }
+                // Show the main window on launch; tauri.conf.json sets
+                // visible:false so the OS doesn't flash an unstyled frame.
+                let _ = window.show();
+                let _ = window.set_focus();
             }
 
             Ok(())
