@@ -1,4 +1,4 @@
-//! Thin Emby/Jellyfin API client, ported from `emby_api_thin.py`.
+//! Thin Emby/Jellyfin API client.
 //!
 //! Covers the endpoints used during playback: `PlaybackInfo` (used to backfill
 //! strm runtime) and the "continue watching" Resume list. Authentication is via
@@ -71,6 +71,28 @@ impl EmbyClient {
             params.push(("SeasonId", season_id));
         }
         self.http.get_json(&url, &params).await
+    }
+
+    /// Build the direct-stream URL for an item.
+    ///
+    /// `container` defaults to `"mkv"` when absent. If `media_source_id` is
+    /// provided, it is appended as `MediaSourceId=`.
+    #[must_use]
+    pub fn stream_url_for_item(
+        &self,
+        item_id: &str,
+        container: Option<&str>,
+        media_source_id: Option<&str>,
+    ) -> String {
+        let ext = container.unwrap_or("mkv");
+        let base = format!(
+            "{}/emby/Videos/{item_id}/stream.{ext}?api_key={}&Static=true",
+            self.host, self.api_key
+        );
+        match media_source_id {
+            Some(id) if !id.is_empty() => format!("{base}&MediaSourceId={id}"),
+            _ => base,
+        }
     }
 
     /// `Users/{user_id}/Items/Resume` — the "continue watching" list.
