@@ -581,6 +581,9 @@ pub async fn parse_received_data_emby(
         && episodes.last().is_some_and(|last| {
             last.index_number.is_some()
                 && last.index_number == main_ep.index_number
+                && (last.parent_index_number.is_none()
+                    || last.parent_index_number
+                        == main_ep.parent_index_number)
         }));
 
     let intro = intro_markers(main_ep);
