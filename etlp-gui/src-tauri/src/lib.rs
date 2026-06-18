@@ -36,33 +36,33 @@ fn sys_is_chinese() -> bool {
 }
 
 struct TrayLabels {
-    show:         &'static str,
-    start:        &'static str,
-    stop:         &'static str,
-    reload:       &'static str,
-    about:        &'static str,
-    quit:         &'static str,
+    show: &'static str,
+    start: &'static str,
+    stop: &'static str,
+    reload: &'static str,
+    about: &'static str,
+    quit: &'static str,
 }
 
 impl TrayLabels {
     fn detect() -> Self {
         if sys_is_chinese() {
             Self {
-                show:   "显示主界面",
-                start:  "启动服务",
-                stop:   "停止服务",
+                show: "显示主界面",
+                start: "启动服务",
+                stop: "停止服务",
                 reload: "重载配置",
-                about:  "关于",
-                quit:   "退出",
+                about: "关于",
+                quit: "退出",
             }
         } else {
             Self {
-                show:   "Show Window",
-                start:  "Start Service",
-                stop:   "Stop Service",
+                show: "Show Window",
+                start: "Start Service",
+                stop: "Stop Service",
                 reload: "Reload Config",
-                about:  "About",
-                quit:   "Quit",
+                about: "About",
+                quit: "Quit",
             }
         }
     }
@@ -99,15 +99,16 @@ fn build_tray_menu(
     labels: &TrayLabels,
     running: bool,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    let show   = MenuItemBuilder::with_id("show",   labels.show).build(app)?;
+    let show = MenuItemBuilder::with_id("show", labels.show).build(app)?;
     let toggle = MenuItemBuilder::with_id(
         "toggle",
         if running { labels.stop } else { labels.start },
     )
     .build(app)?;
-    let reload = MenuItemBuilder::with_id("reload", labels.reload).build(app)?;
-    let about  = MenuItemBuilder::with_id("about",  labels.about).build(app)?;
-    let quit   = MenuItemBuilder::with_id("quit",   labels.quit).build(app)?;
+    let reload =
+        MenuItemBuilder::with_id("reload", labels.reload).build(app)?;
+    let about = MenuItemBuilder::with_id("about", labels.about).build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", labels.quit).build(app)?;
 
     MenuBuilder::new(app)
         .items(&[&show, &toggle, &reload, &about, &quit])
@@ -179,7 +180,8 @@ pub fn run() {
             let (tray_buf, tray_w, tray_h) = tray_rgba;
 
             // ── Tray icon ──────────────────────────────────────────────────────
-            let tray_img = tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
+            let tray_img =
+                tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
             let menu = build_tray_menu(app.handle(), &labels, false)?;
 
             let _tray = TrayIconBuilder::new()
@@ -188,55 +190,74 @@ pub fn run() {
                 .tooltip("etlp")
                 .menu(&menu)
                 .on_menu_event(|app, event| {
-                        let state = app.state::<GuiState>();
-                        match event.id().as_ref() {
-                            "show" => {
-                                if let Some(w) = app.get_webview_window("main") {
-                                    let _ = w.show();
-                                    let _ = w.set_focus();
-                                }
+                    let state = app.state::<GuiState>();
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
                             }
-                            "toggle" => {
-                                let running = state.running.load(std::sync::atomic::Ordering::Acquire);
-                                let app_c = app.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    let state2 = app_c.state::<GuiState>();
-                                    if running {
-                                        let _ = commands::stop_server(state2).await;
-                                    } else {
-                                        let _ = commands::start_server(state2).await;
-                                    }
-                                    // Rebuild menu to reflect new state
-                                    let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
-                                    if let Some(tray) = app_c.tray_by_id("")
-                                        && let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
-                                            let _ = tray.set_menu(Some(m));
-                                        }
-                                });
-                            }
-                            "reload" => {
-                                let app_c = app.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    let state2 = app_c.state::<GuiState>();
-                                    let _ = commands::restart_server(state2).await;
-                                    let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
-                                    if let Some(tray) = app_c.tray_by_id("")
-                                        && let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
-                                            let _ = tray.set_menu(Some(m));
-                                        }
-                                });
-                            }
-                            "about" => {
-                                // Bring window to front and signal frontend to open about modal
-                                if let Some(w) = app.get_webview_window("main") {
-                                    let _ = w.show();
-                                    let _ = w.set_focus();
-                                }
-                                app.emit("show-about", ()).ok();
-                            }
-                            "quit" => app.exit(0),
-                            _ => {}
                         }
+                        "toggle" => {
+                            let running = state
+                                .running
+                                .load(std::sync::atomic::Ordering::Acquire);
+                            let app_c = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let state2 = app_c.state::<GuiState>();
+                                if running {
+                                    let _ = commands::stop_server(state2).await;
+                                } else {
+                                    let _ =
+                                        commands::start_server(state2).await;
+                                }
+                                // Rebuild menu to reflect new state
+                                let new_running = app_c
+                                    .state::<GuiState>()
+                                    .running
+                                    .load(std::sync::atomic::Ordering::Acquire);
+                                if let Some(tray) = app_c.tray_by_id("")
+                                    && let Ok(m) = build_tray_menu(
+                                        &app_c,
+                                        &TrayLabels::detect(),
+                                        new_running,
+                                    )
+                                {
+                                    let _ = tray.set_menu(Some(m));
+                                }
+                            });
+                        }
+                        "reload" => {
+                            let app_c = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let state2 = app_c.state::<GuiState>();
+                                let _ = commands::restart_server(state2).await;
+                                let new_running = app_c
+                                    .state::<GuiState>()
+                                    .running
+                                    .load(std::sync::atomic::Ordering::Acquire);
+                                if let Some(tray) = app_c.tray_by_id("")
+                                    && let Ok(m) = build_tray_menu(
+                                        &app_c,
+                                        &TrayLabels::detect(),
+                                        new_running,
+                                    )
+                                {
+                                    let _ = tray.set_menu(Some(m));
+                                }
+                            });
+                        }
+                        "about" => {
+                            // Bring window to front and signal frontend to open about modal
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                            app.emit("show-about", ()).ok();
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    }
                 })
                 .on_tray_icon_event(|tray, event| {
                     use tauri::tray::TrayIconEvent;
@@ -244,7 +265,8 @@ pub fn run() {
                     // Do NOT rebuild the menu here — rebuilding while the menu
                     // animation is in progress causes visible flicker on macOS.
                     if let TrayIconEvent::Click {
-                        button: tauri::tray::MouseButton::Left, ..
+                        button: tauri::tray::MouseButton::Left,
+                        ..
                     } = event
                     {
                         let app = tray.app_handle();
@@ -258,11 +280,18 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 // ── macOS vibrancy ─────────────────────────────────────────────
+                // Use Tauri's built-in set_effects() instead of the external
+                // window-vibrancy crate to avoid duplicate symbol conflicts with
+                // the window-vibrancy version already bundled inside Tauri itself.
                 #[cfg(target_os = "macos")]
                 {
-                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-                    apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
-                        .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
+                    use tauri::window::{Effect, EffectState, EffectsBuilder};
+                    let cfg = EffectsBuilder::new()
+                        .effect(Effect::Sidebar)
+                        .state(EffectState::Active)
+                        .radius(12.0)
+                        .build();
+                    let _ = window.set_effects(Some(cfg));
                 }
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.

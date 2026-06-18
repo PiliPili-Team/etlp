@@ -205,8 +205,7 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
 
     // NormalizePathLayer strips trailing slashes before routing, so
     // /embyToLocalPlayer/ and /embyToLocalPlayer both resolve correctly.
-    let app =
-        NormalizePathLayer::trim_trailing_slash().layer(router);
+    let app = NormalizePathLayer::trim_trailing_slash().layer(router);
 
     tauri::async_runtime::spawn(async move {
         let serve = axum::serve(listener, tower::make::Shared::new(app))
@@ -384,8 +383,8 @@ pub async fn get_log_lines(
         return Ok(serde_json::json!({ "lines": [], "next_bytes": 0u64 }));
     }
 
-    let content = std::fs::read(&log_path)
-        .map_err(|e| format!("read log file: {e}"))?;
+    let content =
+        std::fs::read(&log_path).map_err(|e| format!("read log file: {e}"))?;
 
     let start = since_bytes as usize;
     let slice = if start < content.len() {
@@ -406,7 +405,9 @@ pub async fn get_log_lines(
 
 /// Clear the log position counter so the next `get_log_lines(0)` re-reads all.
 #[tauri::command]
-pub async fn clear_log_position(state: State<'_, GuiState>) -> Result<(), String> {
+pub async fn clear_log_position(
+    state: State<'_, GuiState>,
+) -> Result<(), String> {
     let mut pos = state
         .log_read_pos
         .lock()
@@ -421,7 +422,9 @@ pub async fn clear_log_position(state: State<'_, GuiState>) -> Result<(), String
 ///
 /// Returns `None` when the user cancels.
 #[tauri::command]
-pub async fn pick_player_path(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub async fn pick_player_path(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt as _;
 
     let path = app
@@ -437,7 +440,9 @@ pub async fn pick_player_path(app: tauri::AppHandle) -> Result<Option<String>, S
 ///
 /// Returns `{ app_log: String|null, mpv_log: String|null }`.
 #[tauri::command]
-pub async fn get_log_paths(state: State<'_, GuiState>) -> Result<serde_json::Value, String> {
+pub async fn get_log_paths(
+    state: State<'_, GuiState>,
+) -> Result<serde_json::Value, String> {
     let app_log = state
         .log_file
         .lock()
@@ -451,10 +456,9 @@ pub async fn get_log_paths(state: State<'_, GuiState>) -> Result<serde_json::Val
         .as_ref()
         .and_then(|d| Config::load_from_dir(d).ok())
         .and_then(|c| {
-            c.dev
-                .mpv_input_ipc_server
-                .as_ref()
-                .map(|_| platform::data_dir().unwrap_or_default().join("mpv.log"))
+            c.dev.mpv_input_ipc_server.as_ref().map(|_| {
+                platform::data_dir().unwrap_or_default().join("mpv.log")
+            })
         });
 
     Ok(serde_json::json!({
@@ -497,7 +501,11 @@ pub fn list_system_fonts() -> Vec<String> {
     let dirs: &[&str] = &[r"C:\Windows\Fonts"];
     #[cfg(target_os = "linux")]
     let dirs: &[&str] = &["/usr/share/fonts", "/usr/local/share/fonts"];
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux"
+    )))]
     let dirs: &[&str] = &[];
 
     for dir in dirs {
@@ -578,13 +586,16 @@ fn config_file_path() -> Result<PathBuf, String> {
 }
 
 /// Load config, or write a default and load that.
-pub(crate) fn load_or_default_config(cfg_dir: &std::path::Path) -> Result<Config, String> {
+pub(crate) fn load_or_default_config(
+    cfg_dir: &std::path::Path,
+) -> Result<Config, String> {
     match Config::load_from_dir(cfg_dir) {
         Ok(c) => Ok(c),
         Err(_) => {
             let path = cfg_dir.join("config.toml");
             write_default_config(&path)?;
-            Config::load_file(&path).map_err(|e| format!("load default config: {e}"))
+            Config::load_file(&path)
+                .map_err(|e| format!("load default config: {e}"))
         }
     }
 }
