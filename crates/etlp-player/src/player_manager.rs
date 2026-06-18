@@ -167,8 +167,7 @@ impl PlayerManager {
                 continue;
             }
 
-            let update_success =
-                self.realtime_started.load(Ordering::Acquire);
+            let update_success = self.realtime_started.load(Ordering::Acquire);
             match update_progress(http, ep, stop_sec, update_success).await {
                 Ok(()) => {
                     info!("progress written: {:?} @ {stop_sec}s", ep.basename)

@@ -200,11 +200,7 @@ async fn run_player_chain(
                         cur_idx,
                         "M3U8 playlist written for launch"
                     );
-                    (
-                        m3u8_path.display().to_string(),
-                        Some(cur_idx),
-                        cur_idx,
-                    )
+                    (m3u8_path.display().to_string(), Some(cur_idx), cur_idx)
                 }
                 Err(e) => {
                     warn!(
@@ -298,7 +294,10 @@ async fn run_player_chain(
                 .skip(launch_cur_idx + 1)
                 .take(cfg.playlist_limit)
                 .collect();
-            debug!(after_count = after.len(), "fallback: appending episodes via loadlist");
+            debug!(
+                after_count = after.len(),
+                "fallback: appending episodes via loadlist"
+            );
 
             let m3u8_path = std::env::temp_dir().join(PLAYLIST_M3U8);
             let mut m3u8 = String::from("#EXTM3U\n");
@@ -318,11 +317,17 @@ async fn run_player_chain(
                     let path_str = m3u8_path.display().to_string();
                     match h
                         .client
-                        .command("loadlist", &[json!(path_str), json!("append")])
+                        .command(
+                            "loadlist",
+                            &[json!(path_str), json!("append")],
+                        )
                         .await
                     {
                         Ok(_) => {
-                            debug!("M3U8 fallback loaded ({} entries)", after.len());
+                            debug!(
+                                "M3U8 fallback loaded ({} entries)",
+                                after.len()
+                            );
                             true
                         }
                         Err(e) => {
