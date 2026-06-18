@@ -205,7 +205,10 @@ pub fn parse_episode_item(
     // The fallback handles episodes_info items that lacked ParentIndexNumber:
     // build_title_intro_maps stores their titles under just the index number.
     let idx_key = index.to_string();
-    let title = ctx.maps.title.get(&unique_key)
+    let title = ctx
+        .maps
+        .title
+        .get(&unique_key)
         .or_else(|| ctx.maps.title.get(&idx_key));
     let raw_title = match title {
         Some(t) if ctx.pretty_title && !t.is_empty() => {
@@ -350,7 +353,10 @@ mod tests {
         };
         let (maps, fail) = build_title_intro_maps(&[ep], "s1", false);
         assert!(!fail);
-        assert!(maps.title.contains_key("1-1"), "episode without SeasonId must be included");
+        assert!(
+            maps.title.contains_key("1-1"),
+            "episode without SeasonId must be included"
+        );
     }
 
     #[test]
@@ -365,7 +371,10 @@ mod tests {
             ..Item::default()
         };
         let (maps, _) = build_title_intro_maps(&[ep], "s1", false);
-        assert!(maps.title.is_empty(), "episode from different season must be excluded");
+        assert!(
+            maps.title.is_empty(),
+            "episode from different season must be excluded"
+        );
     }
 
     #[test]
@@ -399,14 +408,15 @@ mod tests {
         // via the index-only key ("3") even though the assembled episode has
         // parent_index_number=Some(1) and episode_key returns "1-3".
         let mut maps = TitleIntroMaps::default();
-        maps.title.insert("3".to_owned(), "Show S1:E3 - Three".to_owned());
+        maps.title
+            .insert("3".to_owned(), "Show S1:E3 - Three".to_owned());
         let context = ctx(&maps);
         let base = PlaybackData::default();
         let item = ep_with_source("300", 3, "/m/s01e03.mkv", 12_000_000_000);
-        let data = parse_episode_item(&context, &base, &item, 2).expect("entry");
+        let data =
+            parse_episode_item(&context, &base, &item, 2).expect("entry");
         assert_eq!(
-            data.media_title,
-            "Show S1:E3 - Three  |  s01e03.mkv",
+            data.media_title, "Show S1:E3 - Three  |  s01e03.mkv",
             "title must be resolved via index-only fallback key"
         );
     }

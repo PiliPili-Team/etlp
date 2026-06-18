@@ -27,7 +27,7 @@ use etlp_download::{
 };
 use etlp_logging::{Masker, init as init_logging};
 use etlp_net::HttpClientBuilder;
-use etlp_server::{AppState, build_router};
+use etlp_server::{AppState, build_router, platform};
 
 use cli::{Cli, Commands};
 
@@ -35,31 +35,35 @@ use cli::{Cli, Commands};
 async fn main() {
     let cli = Cli::parse();
 
-    let working_dir =
-        cli.config_dir.clone().unwrap_or_else(|| PathBuf::from("."));
+    // Data directory priority: --data-dir flag > XDG / platform default > cwd.
+    let data_dir = cli
+        .data_dir
+        .clone()
+        .or_else(|| platform::data_dir())
+        .unwrap_or_else(|| PathBuf::from("."));
 
     if let Some(cmd) = cli.command {
-        if let Err(e) = run_command(cmd, &working_dir).await {
+        // For sub-commands, use the explicit config dir or the XDG config dir.
+        let cmd_working_dir = cli
+            .config_dir
+            .clone()
+            .or_else(|| platform::config_dir())
+            .unwrap_or_else(|| PathBuf::from("."));
+        if let Err(e) = run_command(cmd, &cmd_working_dir).await {
             eprintln!("error: {e}");
             std::process::exit(1);
         }
         return;
     }
 
-    // Load config first so logging can be configured from it.
-    let config = match cli.config_file.as_deref() {
-        Some(file) => Config::load_file(file),
-        None => Config::load_from_dir(&working_dir),
-    };
-    let config = match config {
+    // Resolve the config file, searching XDG dirs and generating a default if
+    // none exists.
+    let config_path = resolve_config(&cli);
+    let config = match Config::load_file(&config_path) {
         Ok(c) => c,
         Err(e) => {
-            // Init logging with safe defaults before printing the error.
             let _ = init_logging(Masker::new(true), "info", None);
-            eprintln!(
-                "failed to load config from {}: {e}",
-                working_dir.display()
-            );
+            eprintln!("failed to load config {}: {e}", config_path.display());
             std::process::exit(1);
         }
     };
@@ -67,7 +71,13 @@ async fn main() {
     // `dev.mix_log = false` disables log masking; absent keeps the default true.
     let mix_log = config.dev.mix_log;
     let log_level = config.dev.log_level.clone();
-    let log_file = config.dev.log_file.clone();
+    // Use the configured log file, or default to data_dir/etlp.log.
+    let log_file = config
+        .dev
+        .log_file
+        .clone()
+        .or_else(|| Some(data_dir.join("etlp.log")));
+    let _ = std::fs::create_dir_all(&data_dir);
 
     let _ = init_logging(Masker::new(mix_log), &log_level, log_file.as_deref());
 
@@ -90,6 +100,7 @@ async fn main() {
     let http_client = match HttpClientBuilder::new()
         .proxy(proxy)
         .cert_verify(cert_verify)
+        .user_agent(config.dev.user_agent.clone())
         .build()
     {
         Ok(c) => c,
@@ -103,7 +114,7 @@ async fn main() {
         .gui
         .server_cache_path
         .clone()
-        .unwrap_or_else(|| working_dir.join("cache"));
+        .unwrap_or_else(|| data_dir.join("cache"));
     let speed_limit: u64 = config.gui.speed_limit_mb * 1024 * 1024;
 
     let dl_client = match reqwest::Client::builder().build() {
@@ -123,7 +134,7 @@ async fn main() {
     dl_manager.start_update_db_loop(30);
 
     let state =
-        Arc::new(AppState::new(config, dl_manager, http_client, working_dir));
+        Arc::new(AppState::new(config, dl_manager, http_client, data_dir));
 
     let addr: SocketAddr = format!("{}:{}", cli.host, cli.port)
         .parse()
@@ -151,6 +162,43 @@ async fn main() {
     }
 }
 
+/// Locate the config file, searching XDG dirs and generating a default if absent.
+fn resolve_config(cli: &Cli) -> PathBuf {
+    // Explicit --config-file / --config-dir flags take priority.
+    if let Some(file) = &cli.config_file {
+        return file.clone();
+    }
+    if let Some(dir) = &cli.config_dir {
+        if let Ok(c) = Config::load_from_dir(dir) {
+            return c.path().to_path_buf();
+        }
+    }
+
+    // Search XDG / platform config dir.
+    if let Some(cfg_dir) = platform::config_dir() {
+        if let Ok(c) = Config::load_from_dir(&cfg_dir) {
+            return c.path().to_path_buf();
+        }
+        // Nothing found — generate a default config.
+        let default = cfg_dir.join("config.toml");
+        match Config::write_default(&default) {
+            Ok(()) => {
+                eprintln!(
+                    "no config found; created default at {}",
+                    default.display()
+                );
+                return default;
+            }
+            Err(e) => {
+                eprintln!("could not write default config: {e}");
+            }
+        }
+    }
+
+    // Last resort: current directory.
+    PathBuf::from("config.toml")
+}
+
 async fn run_command(
     cmd: Commands,
     working_dir: &std::path::Path,
@@ -176,7 +224,10 @@ async fn run_trakt_auth(
     let client_secret = std::env::var("TRAKT_CLIENT_SECRET")
         .map_err(|_| "TRAKT_CLIENT_SECRET not set")?;
 
-    let token_path = working_dir.join("trakt_token.json");
+    // Prefer data_dir for the token file; fall back to working_dir.
+    let token_dir =
+        platform::data_dir().unwrap_or_else(|| working_dir.to_path_buf());
+    let token_path = token_dir.join("trakt_token.json");
     let mut api = TraktApi::new(
         &client_id,
         &client_secret,
