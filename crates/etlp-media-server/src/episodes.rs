@@ -63,10 +63,8 @@ pub fn build_title_intro_maps(
         // Only exclude an episode whose SeasonId is explicitly set to a
         // *different* season. When SeasonId is absent (None) we include it:
         // the userscript payload often omits SeasonId from episodesInfo items.
-        if let Some(sid) = ep.season_id.as_deref() {
-            if sid != season_id {
-                continue;
-            }
+        if ep.season_id.as_deref().is_some_and(|sid| sid != season_id) {
+            continue;
         }
         // IndexNumber is required; ParentIndexNumber is optional.
         // When ParentIndexNumber is absent (userscript often omits it) we
