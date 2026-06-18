@@ -88,7 +88,7 @@ impl Config {
         })?;
         let trimmed = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
         // Disable backslash escaping so Windows paths like `F:\media` survive
-        // verbatim, matching Python's configparser (which does not unescape).
+        // verbatim (the ini format does not unescape backslashes).
         let opt = ini::ParseOption {
             enabled_quote: false,
             enabled_escape: false,
@@ -106,7 +106,7 @@ impl Config {
         })
     }
 
-    /// Reload from the originally loaded path (the Python `update()` hot path).
+    /// Reload from the originally loaded path.
     pub fn reload(&mut self) -> Result<()> {
         let fresh = Self::load_file(&self.path)?;
         self.ini = fresh.ini;

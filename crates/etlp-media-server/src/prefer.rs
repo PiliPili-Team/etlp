@@ -1,5 +1,4 @@
-//! Per-episode version preference for playlists, ported from
-//! `tools.version_prefer_for_playlist`.
+//! Per-episode version preference for playlists.
 //!
 //! When a season exposes several versions per episode, the playlist must pick
 //! one version for every episode key. The chosen version follows, in order:
@@ -84,7 +83,7 @@ fn pick_by_rules<'a>(
 /// Choose one version per episode key for the playlist.
 ///
 /// Returns `None` when the feature is disabled or no `version_prefer` rules are
-/// configured (mirroring the Python early `return`). `ep_success_map` maps an
+/// configured. `ep_success_map` maps an
 /// episode key to the version already chosen by the ini regex filter;
 /// `current_key`/`file_path` identify the episode being played now.
 #[must_use]

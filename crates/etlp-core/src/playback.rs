@@ -13,9 +13,9 @@ use crate::{IntroMarkers, Server, Subtitle};
 
 /// A full playback context for one media item.
 ///
-/// Fields mirror the Python `data` dict. Connection/identity fields drive
-/// progress write-back; media fields drive player launch; the trailing
-/// playlist fields are populated when the item is part of a playlist.
+/// Connection/identity fields drive progress write-back; media fields drive
+/// player launch; the trailing playlist fields are populated when the item is
+/// part of a playlist.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlaybackData {
     // ---- server / connection ----

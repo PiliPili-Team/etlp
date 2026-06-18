@@ -1,4 +1,4 @@
-//! Version selection and comparison, ported from `tools.py`.
+//! Version selection and comparison.
 //!
 //! * [`select_version_index`] reproduces `version_prefer_emby`: given the
 //!   per-source file names and the user's ordered preference keywords, pick the
@@ -15,8 +15,7 @@ const JOIN: &str = "_|_";
 /// `names` are the per-source basenames, already lowercased. Each rule is
 /// matched (case-insensitively) against the joined names; the first rule that
 /// appears wins, and its source index is the count of separators before its
-/// first occurrence. Returns `0` when `rules` is empty or nothing matches
-/// (mirroring the Python fallback to `sources[0]`).
+/// first occurrence. Returns `0` when `rules` is empty or nothing matches.
 #[must_use]
 pub fn select_version_index(names: &[String], rules: &[String]) -> usize {
     if rules.is_empty() || names.is_empty() {

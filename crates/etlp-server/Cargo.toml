@@ -1,0 +1,37 @@
+[package]
+name = "etlp-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "HTTP server layer for etlp: AppState, axum routes, and platform utilities"
+
+[dependencies]
+etlp-core       = { path = "../etlp-core" }
+etlp-config     = { path = "../etlp-config" }
+etlp-net        = { path = "../etlp-net" }
+etlp-media-server = { path = "../etlp-media-server" }
+etlp-player     = { path = "../etlp-player" }
+etlp-download   = { path = "../etlp-download" }
+etlp-sync       = { path = "../etlp-sync" }
+axum.workspace       = true
+tokio.workspace      = true
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+sysinfo.workspace    = true
+tokio-util.workspace = true
+regex.workspace      = true
+
+[dev-dependencies]
+tower.workspace    = true
+http.workspace     = true
+tempfile.workspace = true
+reqwest.workspace  = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

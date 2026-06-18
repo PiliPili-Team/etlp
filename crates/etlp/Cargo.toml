@@ -1,0 +1,31 @@
+[package]
+name = "etlp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "embyToLocalPlayer rewritten in Rust – binary entry point"
+
+[[bin]]
+name = "etlp"
+path = "src/main.rs"
+
+[dependencies]
+etlp-server     = { path = "../etlp-server" }
+etlp-config     = { path = "../etlp-config" }
+etlp-logging    = { path = "../etlp-logging" }
+etlp-net        = { path = "../etlp-net" }
+etlp-download   = { path = "../etlp-download" }
+etlp-sync       = { path = "../etlp-sync" }
+axum.workspace      = true
+tokio.workspace     = true
+serde.workspace     = true
+serde_json.workspace = true
+tracing.workspace   = true
+clap.workspace      = true
+reqwest = { workspace = true }
+
+[lints]
+workspace = true

@@ -41,8 +41,7 @@ pub fn locate_current(
 ///
 /// `pre` is the up-to-`limit` episodes immediately before the current one
 /// (exclusive of it) and `suf` is the current episode plus the up-to-`limit`
-/// episodes after it, mirroring the Python `episodes[pre:cur]` /
-/// `episodes[cur:cur+limit]` slices.
+/// episodes after it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlaylistWindow<'a> {
     /// The clamped index of the current episode within `episodes`.
@@ -72,7 +71,7 @@ pub fn playlist_window(
 }
 
 /// Locate the current episode and build its window, or `None` when the current
-/// episode is not present (the safe replacement for the Python `None - limit`).
+/// episode is not present.
 #[must_use]
 pub fn build_window<'a>(
     episodes: &'a [PlaybackData],

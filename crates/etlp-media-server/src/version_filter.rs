@@ -1,5 +1,4 @@
-//! Multi-version playlist filtering helpers, ported from the nested functions
-//! of `data_parser.list_episodes`.
+//! Multi-version playlist filtering helpers.
 //!
 //! When several files back the same episode (e.g. `S01E01.mkv` and
 //! `S01E01 - VCB.mkv`), the playlist must collapse them to one entry per

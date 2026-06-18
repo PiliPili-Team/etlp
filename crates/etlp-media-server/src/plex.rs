@@ -1,4 +1,4 @@
-//! Plex payload parsing, ported from `data_parser.parse_received_data_plex`.
+//! Plex payload parsing.
 //!
 //! Plex sends a `MediaContainer.Metadata` array; each entry becomes one
 //! [`PlaybackData`]. Unlike Emby, the connection details live in the

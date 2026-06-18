@@ -1,9 +1,7 @@
-//! Title and intro-marker derivation, ported from `tools.py`.
+//! Title and intro-marker derivation.
 //!
-//! * [`emby_title`] reproduces `main_ep_to_title`: a pretty display title for
-//!   movies and episodes.
-//! * [`intro_markers`] reproduces `main_ep_intro_time`: extract opening
-//!   start/end seconds from chapter markers, with the same filtering.
+//! * [`emby_title`]: pretty display title for movies and episodes.
+//! * [`intro_markers`]: extract opening start/end seconds from chapter markers.
 
 use etlp_core::IntroMarkers;
 
@@ -49,7 +47,7 @@ fn is_placeholder_ticks(ticks: i64) -> bool {
 ///
 /// Considers the first five chapters, keeps those with a marker type that are
 /// neither placeholder ticks nor a zero-position generic `Chapter`, and only
-/// yields markers when one or two such chapters remain (matching Python).
+/// yields markers when one or two such chapters remain.
 #[must_use]
 pub fn intro_markers(item: &Item) -> IntroMarkers {
     let mut result = IntroMarkers::default();
