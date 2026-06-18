@@ -11,6 +11,8 @@
 //! them silently.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use etlp_core::PlaybackData;
@@ -94,6 +96,10 @@ pub struct PlayerManager {
     pub stop_times: HashMap<String, i64>,
     /// Per-episode total durations reported by the player (mpv only for now).
     pub total_secs: HashMap<String, i64>,
+    /// Set to `true` by the realtime feedback loop when it successfully sends
+    /// the initial `Sessions/Playing` (Start) event. `write_progress` reads
+    /// this to avoid sending a redundant Start when the loop already ran.
+    realtime_started: Arc<AtomicBool>,
 }
 
 impl PlayerManager {
@@ -105,6 +111,7 @@ impl PlayerManager {
             playlist: HashMap::new(),
             stop_times: HashMap::new(),
             total_secs: HashMap::new(),
+            realtime_started: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -160,7 +167,9 @@ impl PlayerManager {
                 continue;
             }
 
-            match update_progress(http, ep, stop_sec, false).await {
+            let update_success =
+                self.realtime_started.load(Ordering::Acquire);
+            match update_progress(http, ep, stop_sec, update_success).await {
                 Ok(()) => {
                     info!("progress written: {:?} @ {stop_sec}s", ep.basename)
                 }
@@ -208,6 +217,7 @@ impl PlayerManager {
         let playlist = self.playlist.clone();
         let data = self.data.clone();
         let http2 = http.clone();
+        let realtime_started = self.realtime_started.clone();
 
         tokio::spawn(realtime_playing_feedback_loop(
             data,
@@ -215,6 +225,7 @@ impl PlayerManager {
             http2,
             playlist.clone(),
             cancel_tx,
+            realtime_started,
         ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
@@ -270,6 +281,7 @@ pub async fn realtime_playing_feedback_loop(
     http: HttpClient,
     playlist: HashMap<String, PlaybackData>,
     cancel_tx: Option<UnboundedSender<String>>,
+    realtime_started: Arc<AtomicBool>,
 ) {
     // STRM sentinel (total_sec == 86400) and Plex are not supported.
     if data.runtime_missing() || data.server == etlp_core::Server::Plex {
@@ -287,27 +299,32 @@ pub async fn realtime_playing_feedback_loop(
     let mut pause_started_at: Option<std::time::Instant> = None;
 
     loop {
-        // Poll mpv: exit when IPC disconnects.
+        // Poll mpv: only Err means IPC disconnected. Ok(None) means the
+        // property is not yet available (mpv still loading) — treat as a
+        // safe default and retry rather than exiting the loop prematurely.
         let title = match client
             .command("get_property", &[serde_json::json!("media-title")])
             .await
         {
             Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
-            _ => break,
+            Ok(None) => String::new(),
+            Err(_) => break,
         };
         let pos_sec: i64 = match client
             .command("get_property", &[serde_json::json!("time-pos")])
             .await
         {
             Ok(Some(v)) => v.as_f64().unwrap_or(0.0) as i64,
-            _ => break,
+            Ok(None) => 0,
+            Err(_) => break,
         };
         let paused: bool = match client
             .command("get_property", &[serde_json::json!("pause")])
             .await
         {
             Ok(Some(v)) => v.as_bool().unwrap_or(false),
-            _ => break,
+            Ok(None) => false,
+            Err(_) => break,
         };
 
         let pause_changed = paused != was_paused;
@@ -341,6 +358,7 @@ pub async fn realtime_playing_feedback_loop(
             }
             let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Start)
                 .await;
+            realtime_started.store(true, Ordering::Release);
             last_key = Some(title.clone());
             last_ep = Some(ep.clone());
             req_sec = pos_sec;
@@ -396,11 +414,11 @@ pub async fn realtime_playing_feedback_loop(
         tokio::time::sleep(interval).await;
     }
 
-    // Send End for the last tracked episode.
-    if let (Some(ep), Some(_)) = (last_ep, last_key) {
-        let _ =
-            realtime_progress(&http, &ep, req_sec, PlaybackEvent::End).await;
-    }
+    // The final Sessions/Playing/Stopped is sent by write_progress, which
+    // uses the position captured by mpv_stop_sec (polled at 500 ms) for
+    // higher accuracy than the last heartbeat position here.
+    let _ = last_ep;
+    let _ = last_key;
 
     info!("realtime_feedback loop exited");
 }
