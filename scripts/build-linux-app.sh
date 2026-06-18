@@ -71,21 +71,19 @@ main() {
         esac
         shift
     done
-
     if [[ "${ARCH}" != "amd64" ]]; then
         _log_err "only amd64 is supported for Linux app builds (got: ${ARCH})"
         exit 1
     fi
-
-    "${DRY_RUN}" && printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
-
+    if "${DRY_RUN}"; then
+        printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
+    fi
     check_rust_toolchain
     check_node
     _ensure_linux_deps
     add_rust_target "${TARGET}"
     install_frontend_deps
     build_tauri_app "${TARGET}"
-
     _log "Done" \
         "bundle → etlp-gui/src-tauri/target/${TARGET}/release/bundle/appimage/"
     printf "\n${C_GREEN}%12s${C_RESET} build complete\n" "Finished"

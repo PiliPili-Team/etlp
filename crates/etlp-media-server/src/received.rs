@@ -10,6 +10,16 @@ use serde::Deserialize;
 
 use crate::dto::{Item, MediaSource};
 
+/// Deserializes a field that may be absent OR explicitly `null` in JSON.
+/// Both cases produce `T::default()`.
+fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
+
 /// The full payload posted by the userscript.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ReceivedData {
@@ -24,7 +34,7 @@ pub struct ReceivedData {
     #[serde(rename = "playbackData", default)]
     pub playback_data: PlaybackPayload,
     /// `"true"` / `"false"` string, mirroring the JS payload.
-    #[serde(rename = "mountDiskEnable", default)]
+    #[serde(rename = "mountDiskEnable", default, deserialize_with = "null_as_default")]
     pub mount_disk_enable: String,
     #[serde(rename = "showTaskManager", default)]
     pub show_task_manager: bool,
@@ -46,7 +56,7 @@ pub struct ExtraData {
     pub main_ep_info: Item,
     #[serde(rename = "episodesInfo", default)]
     pub episodes_info: Vec<Item>,
-    #[serde(rename = "playlistInfo", default)]
+    #[serde(rename = "playlistInfo", default, deserialize_with = "null_as_default")]
     pub playlist_info: Vec<serde_json::Value>,
     #[serde(rename = "userAgent", default)]
     pub user_agent: Option<String>,
@@ -134,5 +144,24 @@ mod tests {
         assert!(!data.mount_disk_mode());
         assert!(data.playback_url.is_empty());
         assert!(data.extra_data.episodes_info.is_empty());
+    }
+
+    #[test]
+    fn null_fields_use_defaults() {
+        // The userscript sends null for mountDiskEnable and playlistInfo when
+        // the feature is disabled. Without null_as_default these would produce
+        // a 422 from axum, making it look like mpv was never called.
+        let json = r#"{
+            "mountDiskEnable": null,
+            "extraData": {
+                "mainEpInfo": {},
+                "episodesInfo": [],
+                "playlistInfo": null
+            }
+        }"#;
+        let data: ReceivedData =
+            serde_json::from_str(json).expect("parse null fields");
+        assert!(!data.mount_disk_mode());
+        assert!(data.extra_data.playlist_info.is_empty());
     }
 }

@@ -47,19 +47,17 @@ main() {
         esac
         shift
     done
-
     if [[ "${ARCH}" != "amd64" ]]; then
         _log_err "only amd64 is supported for Windows builds (got: ${ARCH})"
         exit 1
     fi
-
-    "${DRY_RUN}" && printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
-
+    if "${DRY_RUN}"; then
+        printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
+    fi
     check_rust_toolchain
     add_rust_target "${TARGET}"
     build_binary    "${TARGET}"
     package_zip     "${TARGET}" "${ASSET}"
-
     printf "\n${C_GREEN}%12s${C_RESET} build complete\n" "Finished"
 }
 
