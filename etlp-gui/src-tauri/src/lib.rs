@@ -280,18 +280,20 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 // ── macOS vibrancy ─────────────────────────────────────────────
-                // Use Tauri's built-in set_effects() instead of the external
-                // window-vibrancy crate to avoid duplicate symbol conflicts with
-                // the window-vibrancy version already bundled inside Tauri itself.
+                // Pin to window-vibrancy 0.6 (same version bundled in tauri
+                // 2.11.3) so Cargo deduplicates to a single copy — no multiply-
+                // defined symbol. Tauri's set_effects() sets NSVisualEffectView
+                // interactionType differently and breaks CSS drag regions.
                 #[cfg(target_os = "macos")]
                 {
-                    use tauri::window::{Effect, EffectState, EffectsBuilder};
-                    let cfg = EffectsBuilder::new()
-                        .effect(Effect::Sidebar)
-                        .state(EffectState::Active)
-                        .radius(12.0)
-                        .build();
-                    let _ = window.set_effects(Some(cfg));
+                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                    apply_vibrancy(
+                        &window,
+                        NSVisualEffectMaterial::Sidebar,
+                        None,
+                        Some(12.0),
+                    )
+                    .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
                 }
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
