@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "etlp CLI binary – media-player bridge for Emby, Jellyfin and Plex"
+description = "Genshin-powered media-player bridge for Emby – CLI binary"
 
 [[bin]]
 name = "etlp"

@@ -5,9 +5,9 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](https://github.com/PiliPili-Team/etlp/releases)
 
-**etlp** is a local media-player bridge for Emby, Jellyfin and Plex.
-It runs a lightweight HTTP service that receives playback requests from a
-browser userscript and dispatches them to a local media player, handling
+**etlp** is a Genshin-powered media-player bridge, primarily for Emby.
+It runs a lightweight local HTTP service that receives playback requests from a
+browser userscript and dispatches them to a local media player — handling
 playlist construction, progress write-back, and optional watch-history sync.
 
 **Key features**

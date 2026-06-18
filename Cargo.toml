@@ -9,7 +9,7 @@ rust-version = "1.89"
 license = "MIT"
 authors = ["PiliPili Team"]
 repository = "https://github.com/PiliPili-Team"
-description = "Local media-player bridge for Emby/Jellyfin/Plex with playlist management and watch-history sync"
+description = "Genshin-powered media-player bridge for Emby, Jellyfin and Plex"
 
 # Shared dependency versions so member crates stay in lockstep.
 [workspace.dependencies]

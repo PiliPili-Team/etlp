@@ -19,7 +19,7 @@ fn sys_is_chinese() -> bool {
     // sys-locale uses NSLocale on macOS, GetUserDefaultLocaleName on Windows,
     // and setlocale() on Linux — all more reliable than env vars for GUI apps.
     let native = sys_locale::get_locale()
-        .or_else(|| sys_locale::get_locales().into_iter().next())
+        .or_else(|| sys_locale::get_locales().next())
         .unwrap_or_default()
         .to_lowercase();
     if !native.is_empty() {
@@ -208,11 +208,10 @@ pub fn run() {
                                     }
                                     // Rebuild menu to reflect new state
                                     let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
-                                    if let Some(tray) = app_c.tray_by_id("") {
-                                        if let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
+                                    if let Some(tray) = app_c.tray_by_id("")
+                                        && let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
                                             let _ = tray.set_menu(Some(m));
                                         }
-                                    }
                                 });
                             }
                             "reload" => {
@@ -221,11 +220,10 @@ pub fn run() {
                                     let state2 = app_c.state::<GuiState>();
                                     let _ = commands::restart_server(state2).await;
                                     let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
-                                    if let Some(tray) = app_c.tray_by_id("") {
-                                        if let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
+                                    if let Some(tray) = app_c.tray_by_id("")
+                                        && let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
                                             let _ = tray.set_menu(Some(m));
                                         }
-                                    }
                                 });
                             }
                             "about" => {

@@ -203,7 +203,7 @@ body:not(.platform-macos) .titlebar {
     -webkit-app-region: no-drag;
 }
 
-/* ── Nav item (网易云 style: plain icon, accent color on active) ─────── */
+/* ── Nav item ────────────────────────────────────────────────────────── */
 .nav-item {
     display: flex;
     align-items: center;
@@ -212,7 +212,7 @@ body:not(.platform-macos) .titlebar {
     margin: 1px 6px;
     border-radius: 9px;
     cursor: pointer;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: 13px;
     font-weight: 500;
     transition:
@@ -224,14 +224,33 @@ body:not(.platform-macos) .titlebar {
 
 .nav-item:hover {
     background: var(--surface-hover);
-    color: var(--text-2);
+    color: var(--text);
 }
 
-/* Active: accent background + white/bright text */
+/* Active: soft accent background, accent-colored label */
 .nav-item.active {
     background: var(--accent-soft);
     color: var(--accent);
     font-weight: 600;
+}
+
+/* Dark mode: nav text is always white for readability on dark sidebar */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .nav-item {
+        color: rgba(255, 255, 255, 0.78);
+    }
+
+    :root:not([data-theme="light"]) .nav-item:hover {
+        color: #fff;
+    }
+}
+
+:root[data-theme="dark"] .nav-item {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+:root[data-theme="dark"] .nav-item:hover {
+    color: #fff;
 }
 
 /* Icon: no background box, just the SVG */
@@ -1068,7 +1087,7 @@ body.platform-macos .titlebar {
     backdrop-filter: none;
 }
 body.platform-macos .sidebar {
-    background: rgba(248, 248, 252, 0.38);
+    background: rgba(248, 248, 252, 0.65);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
 }
@@ -1094,7 +1113,7 @@ body.platform-macos .log-body {
         background: rgba(20, 20, 22, 0.26);
     }
     html:not([data-theme="light"]) body.platform-macos .sidebar {
-        background: rgba(20, 20, 22, 0.32);
+        background: rgba(20, 20, 22, 0.55);
     }
     html:not([data-theme="light"]) body.platform-macos .content {
         background: rgba(12, 12, 14, 0.72);
@@ -1115,7 +1134,7 @@ body.platform-macos .log-body {
     background: rgba(20, 20, 22, 0.26);
 }
 [data-theme="dark"] body.platform-macos .sidebar {
-    background: rgba(20, 20, 22, 0.32);
+    background: rgba(20, 20, 22, 0.55);
 }
 [data-theme="dark"] body.platform-macos .content {
     background: rgba(12, 12, 14, 0.72);
@@ -1135,7 +1154,7 @@ body.platform-macos .log-body {
     background: rgba(248, 248, 252, 0.32);
 }
 [data-theme="light"] body.platform-macos .sidebar {
-    background: rgba(248, 248, 252, 0.38);
+    background: rgba(248, 248, 252, 0.65);
 }
 [data-theme="light"] body.platform-macos .content {
     background: rgba(240, 240, 246, 0.76);
