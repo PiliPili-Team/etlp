@@ -34,14 +34,6 @@ export default function App() {
       platform !== "unknown" ? `platform-${platform}` : "";
   }, [platform]);
 
-  // Fetch initial status on mount
-  useEffect(() => {
-    void refreshStatus();
-    invoke<boolean>("get_autostart")
-      .then(setAutostart)
-      .catch(() => {});
-  }, []);
-
   const addToast = useCallback((message: string, error = false) => {
     const id = ++toastId.current;
     setToasts((prev) => [...prev, { id, message, error }]);
@@ -59,6 +51,14 @@ export default function App() {
       // ignore
     }
   }, []);
+
+  // Fetch initial status on mount
+  useEffect(() => {
+    void refreshStatus();
+    invoke<boolean>("get_autostart")
+      .then(setAutostart)
+      .catch(() => {});
+  }, [refreshStatus]);
 
   const handleStart = useCallback(async () => {
     setBusy(true);

@@ -35,6 +35,7 @@ pub async fn emby_to_local_player(
     State(state): State<SharedState>,
     Json(received): Json<ReceivedData>,
 ) -> (StatusCode, Json<Value>) {
+    info!("POST /embyToLocalPlayer received");
     if received.show_task_manager {
         info!("show_task_manager requested (GUI not available)");
         return (
@@ -58,6 +59,7 @@ pub async fn plex_to_local_player(
     State(state): State<SharedState>,
     Json(received): Json<PlexReceivedData>,
 ) -> (StatusCode, Json<Value>) {
+    info!("POST /plexToLocalPlayer received");
     reload_config(&state);
 
     let state2 = state.clone();

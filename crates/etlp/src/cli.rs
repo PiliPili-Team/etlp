@@ -10,6 +10,10 @@ pub struct Cli {
     #[arg(long, short = 'C', value_name = "DIR")]
     pub config_dir: Option<std::path::PathBuf>,
 
+    /// Path to the configuration file (overrides --config-dir search).
+    #[arg(long, value_name = "FILE")]
+    pub config_file: Option<std::path::PathBuf>,
+
     /// HTTP listen address.
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
