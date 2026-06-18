@@ -231,6 +231,7 @@ mod tests {
             http_proxy: None,
             static_ipc: None,
             event_handler: None,
+            playlist_start: None,
         }
     }
 
