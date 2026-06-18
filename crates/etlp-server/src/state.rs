@@ -31,6 +31,9 @@ pub struct AppState {
     pub config: RwLock<Config>,
     /// Working directory (config and token files are resolved relative to it).
     pub working_dir: PathBuf,
+    /// Persistent device identifier; used as fallback when the request
+    /// does not carry a DeviceId query parameter.
+    pub device_id: String,
 }
 
 /// The shared handle used by every route handler.
@@ -52,6 +55,7 @@ impl AppState {
             http_client,
             config: RwLock::new(config),
             working_dir,
+            device_id: crate::platform::device_id::load_or_create(),
         }
     }
 }

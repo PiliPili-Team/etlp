@@ -25,6 +25,8 @@ tracing.workspace    = true
 sysinfo.workspace    = true
 tokio-util.workspace = true
 regex.workspace      = true
+uuid.workspace       = true
+dirs.workspace       = true
 
 [dev-dependencies]
 tower.workspace    = true

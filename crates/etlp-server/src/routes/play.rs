@@ -88,7 +88,7 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
         (pc, rc)
     };
 
-    let data = match parse_received_data_emby(
+    let mut data = match parse_received_data_emby(
         &received,
         &parse_cfg,
         &state.http_client,
@@ -102,6 +102,10 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
             return;
         }
     };
+    // Fall back to the persistent device ID when the request omits one.
+    if data.device_id.is_empty() {
+        data.device_id = state.device_id.clone();
+    }
 
     // Enforce one-instance-mode: reject if another player is already running.
     if state

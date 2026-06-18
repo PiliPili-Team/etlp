@@ -1,6 +1,7 @@
 //! Platform-specific utilities for process management, file access, and
 //! path translation.
 
+pub mod device_id;
 pub mod kill;
 pub mod path;
 
