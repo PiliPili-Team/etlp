@@ -77,20 +77,18 @@ main() {
         esac
         shift
     done
-
     [[ "${ARCH}" == "native" ]] && ARCH="$(_native_arch)"
-    "${DRY_RUN}" && printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
-
+    if "${DRY_RUN}"; then
+        printf "${C_YELLOW}%12s${C_RESET} no changes will be made\n\n" "dry-run"
+    fi
     check_rust_toolchain
     _ensure_musl_tools
-
     if [[ "${ARCH}" == "all" ]]; then
         _build_one "amd64"
         _build_one "arm64"
     else
         _build_one "${ARCH}"
     fi
-
     printf "\n${C_GREEN}%12s${C_RESET} build complete\n" "Finished"
 }
 

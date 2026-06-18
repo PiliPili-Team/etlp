@@ -10,7 +10,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Json;
 use serde_json::{Value, json};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use etlp_core::{PlaybackData, PlayerKind};
 use etlp_media_server::{
@@ -148,6 +148,13 @@ async fn run_player_chain(
     let kind = PlayerKind::detect_from_path(&cfg.player_exe)
         .unwrap_or(PlayerKind::Mpv);
     let play_multiple = episode_list.len() > 1;
+    debug!(
+        player_kind = ?kind,
+        exe = %cfg.player_exe,
+        mount_disk_mode = data.mount_disk_mode,
+        episode_count = episode_list.len(),
+        "launching player",
+    );
 
     // `stream_url` is the resolved play URL (HTTP stream or translated local path).
     let args = LaunchArgs {
@@ -279,6 +286,12 @@ async fn run_player_chain(
 // ── Emby / Jellyfin play ──────────────────────────────────────────────────────
 
 async fn start_emby_play(state: SharedState, received: ReceivedData) {
+    debug!(
+        mount_disk_enable = %received.mount_disk_enable,
+        playlist_info_len = received.extra_data.playlist_info.len(),
+        episodes_info_len = received.extra_data.episodes_info.len(),
+        "emby play chain starting",
+    );
     let (parse_cfg, redirect_cache) = {
         let cfg = match state.config.read() {
             Ok(c) => c,

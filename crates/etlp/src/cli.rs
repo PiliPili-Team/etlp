@@ -11,7 +11,7 @@ pub struct Cli {
     pub config_dir: Option<std::path::PathBuf>,
 
     /// Path to the configuration file (overrides --config-dir search).
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, short = 'c', value_name = "FILE")]
     pub config_file: Option<std::path::PathBuf>,
 
     /// HTTP listen address.
