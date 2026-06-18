@@ -58,15 +58,30 @@ pub fn build_title_intro_maps(
     if playlist {
         return (maps, false);
     }
-    let fail = episodes_info.is_empty();
+    let mut fail = episodes_info.is_empty();
     for ep in episodes_info {
-        if ep.season_id.as_deref() != Some(season_id) {
+        // Only exclude an episode whose SeasonId is explicitly set to a
+        // *different* season. When SeasonId is absent (None) we include it:
+        // the userscript payload often omits SeasonId from episodesInfo items.
+        if let Some(sid) = ep.season_id.as_deref() {
+            if sid != season_id {
+                continue;
+            }
+        }
+        // IndexNumber is required; ParentIndexNumber is optional.
+        // When ParentIndexNumber is absent (userscript often omits it) we
+        // store the title under the index-only key ("3") instead of the
+        // composite key ("4-3"). parse_episode_item falls back to this key
+        // when the full composite key is not found.
+        let Some(index_num) = ep.index_number else {
+            fail = true;
             continue;
-        }
-        if ep.parent_index_number.is_none() || ep.index_number.is_none() {
-            return (maps, true);
-        }
-        let key = episode_key(ep);
+        };
+        let key = if ep.parent_index_number.is_some() {
+            episode_key(ep)
+        } else {
+            index_num.to_string()
+        };
         maps.title.insert(key.clone(), emby_title(ep));
         let intro = intro_markers(ep);
         if let Some(start) = intro.start {
@@ -186,7 +201,12 @@ pub fn parse_episode_item(
     let base_name = basename(&file_path).to_owned();
     let index = item.index_number.unwrap_or(0);
     let unique_key = episode_key(item);
-    let title = ctx.maps.title.get(&unique_key);
+    // Try the full composite key ("4-3") first, then the index-only key ("3").
+    // The fallback handles episodes_info items that lacked ParentIndexNumber:
+    // build_title_intro_maps stores their titles under just the index number.
+    let idx_key = index.to_string();
+    let title = ctx.maps.title.get(&unique_key)
+        .or_else(|| ctx.maps.title.get(&idx_key));
     let raw_title = match title {
         Some(t) if ctx.pretty_title && !t.is_empty() => {
             format!("{t}  |  {base_name}")
@@ -313,6 +333,82 @@ mod tests {
     fn empty_episodes_fail_flag() {
         let (_, fail) = build_title_intro_maps(&[], "s1", false);
         assert!(fail);
+    }
+
+    #[test]
+    fn no_season_id_on_item_is_included() {
+        // The userscript often omits SeasonId from episodesInfo items.
+        // Episodes without SeasonId should be included in the title map, not
+        // silently dropped.
+        let ep = Item {
+            name: Some("Pilot".to_owned()),
+            season_id: None, // no SeasonId
+            series_name: Some("Show".to_owned()),
+            parent_index_number: Some(1),
+            index_number: Some(1),
+            ..Item::default()
+        };
+        let (maps, fail) = build_title_intro_maps(&[ep], "s1", false);
+        assert!(!fail);
+        assert!(maps.title.contains_key("1-1"), "episode without SeasonId must be included");
+    }
+
+    #[test]
+    fn mismatched_season_id_is_excluded() {
+        // Episodes explicitly belonging to a different season are filtered out.
+        let ep = Item {
+            name: Some("Other".to_owned()),
+            season_id: Some("s2".to_owned()),
+            series_name: Some("Show".to_owned()),
+            parent_index_number: Some(2),
+            index_number: Some(1),
+            ..Item::default()
+        };
+        let (maps, _) = build_title_intro_maps(&[ep], "s1", false);
+        assert!(maps.title.is_empty(), "episode from different season must be excluded");
+    }
+
+    #[test]
+    fn no_parent_index_uses_index_only_key() {
+        // The userscript often omits ParentIndexNumber. When that happens the
+        // title must still be stored (under the index-only key "3") so that
+        // parse_episode_item can find it via the fallback lookup.
+        let ep = Item {
+            name: Some("Episode Three".to_owned()),
+            season_id: None,
+            series_name: Some("Show".to_owned()),
+            parent_index_number: None,
+            index_number: Some(3),
+            ..Item::default()
+        };
+        let (maps, _) = build_title_intro_maps(&[ep], "s1", false);
+        assert!(
+            maps.title.contains_key("3"),
+            "title must be stored under index-only key when parent_index_number is absent"
+        );
+        assert!(
+            !maps.title.contains_key("None-3"),
+            "must not use 'None-N' format"
+        );
+    }
+
+    #[test]
+    fn parse_item_uses_index_only_fallback() {
+        // When the title map was built from episodes_info lacking
+        // ParentIndexNumber, parse_episode_item must still resolve the title
+        // via the index-only key ("3") even though the assembled episode has
+        // parent_index_number=Some(1) and episode_key returns "1-3".
+        let mut maps = TitleIntroMaps::default();
+        maps.title.insert("3".to_owned(), "Show S1:E3 - Three".to_owned());
+        let context = ctx(&maps);
+        let base = PlaybackData::default();
+        let item = ep_with_source("300", 3, "/m/s01e03.mkv", 12_000_000_000);
+        let data = parse_episode_item(&context, &base, &item, 2).expect("entry");
+        assert_eq!(
+            data.media_title,
+            "Show S1:E3 - Three  |  s01e03.mkv",
+            "title must be resolved via index-only fallback key"
+        );
     }
 
     fn ctx<'a>(maps: &'a TitleIntroMaps) -> EpisodeContext<'a> {
