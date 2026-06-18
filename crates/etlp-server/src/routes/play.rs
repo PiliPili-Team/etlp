@@ -216,15 +216,38 @@ async fn run_player_chain(
         && let PlayerHandle::Mpv(ref h) = mgr.handle
     {
         let new_fmt = h.detect_new_loadfile_format().await;
+
+        // Log mpv version to diagnose version-specific playlist/N/title behaviour.
+        if let Ok(Some(ver)) = h
+            .client
+            .command("get_property", &[json!("mpv-version")])
+            .await
+        {
+            debug!("mpv version: {ver}");
+        }
+
         let cur_idx = episode_list
             .iter()
-            .position(|e| e.item_id == data.item_id)
-            .unwrap_or(0);
+            .position(|e| {
+                e.item_id == data.item_id
+                    || e.media_source_id == data.media_source_id
+            })
+            .unwrap_or_else(|| {
+                warn!(
+                    item_id = %data.item_id,
+                    media_source_id = %data.media_source_id,
+                    "current episode not found in assembled playlist; defaulting cur_idx=0"
+                );
+                0
+            });
+        debug!(cur_idx, "current episode index in assembled playlist");
+
         let after: Vec<&PlaybackData> = episode_list
             .iter()
             .skip(cur_idx + 1)
             .take(cfg.playlist_limit)
             .collect();
+        debug!(after_count = after.len(), "episodes to append after current");
 
         for ep in &after {
             let title_escaped =
@@ -241,19 +264,44 @@ async fn run_player_chain(
             }
         }
 
+        // Verify mpv has processed all loadfile commands by checking that
+        // playlist-count matches expectation before setting titles.
+        let expected_count = (after.len() + 1) as i64;
+        if let Ok(Some(cnt)) = h
+            .client
+            .command("get_property", &[json!("playlist-count")])
+            .await
+        {
+            debug!(
+                "playlist-count after loadfile batch: {cnt} (expected {expected_count})"
+            );
+        }
+
         // Write playlist titles so the UI shows episode names immediately.
         for (slot, ep) in after.iter().enumerate() {
             let prop = format!("playlist/{}/title", slot + 1);
-            debug!(
-                "setting {prop} = {:?}",
-                ep.media_title
-            );
+            debug!("setting {prop} = {:?}", ep.media_title);
             if let Err(e) = h
                 .client
                 .command("set_property", &[json!(prop), json!(ep.media_title)])
                 .await
             {
                 warn!("set_property {prop}: {e}  (title={:?})", ep.media_title);
+            }
+        }
+
+        // Read back each title to verify mpv actually persisted the values.
+        // This catches silent failures (e.g. read-only on older mpv builds).
+        for (slot, _ep) in after.iter().enumerate() {
+            let prop = format!("playlist/{}/title", slot + 1);
+            match h
+                .client
+                .command("get_property", &[json!(prop)])
+                .await
+            {
+                Ok(Some(v)) => debug!("readback {prop} = {v}"),
+                Ok(None) => warn!("readback {prop} = None (title was not stored)"),
+                Err(e) => warn!("readback {prop} failed: {e}"),
             }
         }
 
