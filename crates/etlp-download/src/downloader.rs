@@ -251,15 +251,11 @@ impl Downloader {
         file.seek(std::io::SeekFrom::Start(start)).await?;
 
         let mut pos = start;
-        let sleep_per_chunk = if speed_bps > 0 {
-            // Throttle: sleep so throughput ≈ speed_bps.
-            let chunk_sz = 1024u64 * 256; // target chunk size for rate calc
-            Some(std::time::Duration::from_micros(
-                chunk_sz * 1_000_000 / speed_bps,
-            ))
-        } else {
-            None
-        };
+        // Throttle: sleep so throughput ≈ speed_bps.
+        let chunk_sz = 1024u64 * 256; // target chunk size for rate calc
+        let sleep_per_chunk = (chunk_sz * 1_000_000)
+            .checked_div(speed_bps)
+            .map(std::time::Duration::from_micros);
 
         while let Some(chunk) = resp.chunk().await? {
             if self.cancel.load(Ordering::Relaxed) {
