@@ -14,14 +14,18 @@ pub use redirect::{RedirectCache, cache_key};
 
 use thiserror::Error;
 
-/// Default User-Agent for all etlp HTTP requests.
+/// Default User-Agent used when the config does not override it.
 pub const UA_ETLP: &str = "etlp";
 
-/// User-Agent for prefetch background downloads.
+/// User-Agent for prefetch background downloads (not user-configurable).
 pub const UA_PREFETCH: &str = "etlp-prefetch";
 
-/// User-Agent for active media downloads.
+/// User-Agent for active media downloads (not user-configurable).
 pub const UA_DOWNLOAD: &str = "etlp-download";
+
+/// `X-Emby-Client` / `X-Emby-Device-Name` header value sent with every
+/// Emby / Jellyfin progress report.
+pub const DEVICE_NAME: &str = "Genshin";
 
 /// Errors from proxy configuration parsing.
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -29,15 +33,6 @@ pub enum ProxyError {
     /// SOCKS proxies are not supported (only HTTP).
     #[error("only http proxy is supported, got: {0}")]
     SocksUnsupported(String),
-}
-
-/// Returns the default etlp User-Agent regardless of URL.
-///
-/// All requests use `UA_ETLP` ("etlp") by default. Use [`UA_PREFETCH`] or
-/// [`UA_DOWNLOAD`] when constructing specialised clients for those purposes.
-#[must_use]
-pub fn user_agent_for(_url: &str) -> &'static str {
-    UA_ETLP
 }
 
 /// Normalize an HTTP proxy string the way `Configs._get_proxy` does:
@@ -63,13 +58,6 @@ pub fn parse_http_proxy(raw: &str) -> Result<Option<String>, ProxyError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ua_always_returns_etlp() {
-        assert_eq!(user_agent_for("https://v.pili.app/x"), UA_ETLP);
-        assert_eq!(user_agent_for("https://push.bili.io/y"), UA_ETLP);
-        assert_eq!(user_agent_for("https://media.example.com/z"), UA_ETLP);
-    }
 
     #[test]
     fn ua_constants_are_correct() {

@@ -14,11 +14,12 @@ use serde::de::DeserializeOwned;
 use thiserror::Error;
 use url::Url;
 
+use crate::UA_ETLP;
 use crate::url_tools::{build_referer, safe_url};
-use crate::user_agent_for;
 
 /// Emit a DEBUG-level curl equivalent for the outgoing request.
 fn log_curl(
+    ua: &str,
     method: &str,
     url: &str,
     params: &[(&str, &str)],
@@ -38,7 +39,6 @@ fn log_curl(
             .join("&");
         format!("{url}?{qs}")
     };
-    let ua = user_agent_for(url);
     let mut parts = vec![format!("curl -X {method} '{full_url}'")];
     parts.push(format!("-H 'User-Agent: {ua}'"));
     for (k, v) in extra_headers {
@@ -92,6 +92,8 @@ pub struct HttpClientBuilder {
     cert_verify: bool,
     timeout: Duration,
     retry: u32,
+    /// User-Agent for normal requests. `None` → [`UA_ETLP`].
+    user_agent: Option<String>,
 }
 
 impl Default for HttpClientBuilder {
@@ -101,6 +103,7 @@ impl Default for HttpClientBuilder {
             cert_verify: true,
             timeout: DEFAULT_TIMEOUT,
             retry: DEFAULT_RETRY,
+            user_agent: None,
         }
     }
 }
@@ -141,6 +144,16 @@ impl HttpClientBuilder {
         self
     }
 
+    /// Override the User-Agent for normal requests.
+    ///
+    /// Empty strings are treated the same as `None` — both fall back to
+    /// [`UA_ETLP`]. Download and prefetch clients are not affected.
+    #[must_use]
+    pub fn user_agent(mut self, ua: Option<String>) -> Self {
+        self.user_agent = ua.filter(|s| !s.is_empty());
+        self
+    }
+
     /// Build the client (constructs one redirect-following and one
     /// redirect-stopping inner client).
     pub fn build(self) -> Result<HttpClient> {
@@ -148,10 +161,12 @@ impl HttpClientBuilder {
             build_inner(&self.proxy, self.cert_verify, self.timeout, true)?;
         let no_follow =
             build_inner(&self.proxy, self.cert_verify, self.timeout, false)?;
+        let ua = self.user_agent.unwrap_or_else(|| UA_ETLP.to_owned());
         Ok(HttpClient {
             follow,
             no_follow,
             retry: self.retry,
+            user_agent: ua,
         })
     }
 }
@@ -196,10 +211,13 @@ pub struct HttpClient {
     follow: Client,
     no_follow: Client,
     retry: u32,
+    /// Effective User-Agent for normal requests (resolved from config / default).
+    user_agent: String,
 }
 
 impl HttpClient {
-    /// A default client with no proxy and TLS verification enabled.
+    /// A default client with no proxy, TLS verification enabled, and the
+    /// built-in User-Agent.
     pub fn new() -> Result<Self> {
         HttpClientBuilder::new().build()
     }
@@ -212,13 +230,12 @@ impl HttpClient {
         params: &[(&str, &str)],
     ) -> reqwest::RequestBuilder {
         let safe = safe_url(url);
-        let ua = user_agent_for(&safe);
         let referer = build_referer(&safe);
         let mut rb = client.request(method, safe);
         if !params.is_empty() {
             rb = rb.query(params);
         }
-        rb = rb.header(USER_AGENT, ua);
+        rb = rb.header(USER_AGENT, &self.user_agent);
         if let Some(referer) = referer {
             rb = rb.header(REFERER, referer);
         }
@@ -261,7 +278,14 @@ impl HttpClient {
         url: &str,
         params: &[(&str, &str)],
     ) -> Result<T> {
-        log_curl("GET", url, params, &[("Accept", "application/json")], None);
+        log_curl(
+            &self.user_agent,
+            "GET",
+            url,
+            params,
+            &[("Accept", "application/json")],
+            None,
+        );
         let rb = self
             .prepare(&self.follow, Method::GET, url, params)
             .header(ACCEPT, "application/json");
@@ -279,7 +303,7 @@ impl HttpClient {
         url: &str,
         params: &[(&str, &str)],
     ) -> Result<String> {
-        log_curl("GET", url, params, &[], None);
+        log_curl(&self.user_agent, "GET", url, params, &[], None);
         let rb = self.prepare(&self.follow, Method::GET, url, params);
         let resp = self.send_with_retry(url, rb).await?;
         let resp = error_for_status(resp, url)?;
@@ -299,6 +323,7 @@ impl HttpClient {
     ) -> Result<()> {
         let body_str = serde_json::to_string(body).unwrap_or_default();
         log_curl(
+            &self.user_agent,
             "POST",
             url,
             params,
@@ -322,7 +347,7 @@ impl HttpClient {
     /// `Location` target, or the original URL when there is no redirect
     /// (mirrors `net_tools.get_redirect_url`).
     pub async fn resolve_redirect(&self, url: &str) -> Result<String> {
-        log_curl("GET", url, &[], &[], None);
+        log_curl(&self.user_agent, "GET", url, &[], &[], None);
         let rb = self.prepare(&self.no_follow, Method::GET, url, &[]);
         let resp = self.send_with_retry(url, rb).await?;
         if resp.status().is_redirection()
@@ -387,6 +412,38 @@ mod tests {
                 name: "x".to_owned()
             }
         );
+    }
+
+    #[tokio::test]
+    async fn custom_user_agent_is_sent() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/item"))
+            .and(wiremock::matchers::header("user-agent", "MyCustomUA/1.0"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"a": 1, "name": "y"})),
+            )
+            .mount(&server)
+            .await;
+
+        let client = HttpClientBuilder::new()
+            .user_agent(Some("MyCustomUA/1.0".to_owned()))
+            .build()
+            .expect("client");
+        let url = format!("{}/item", server.uri());
+        let got: Payload = client.get_json(&url, &[]).await.expect("get_json");
+        assert_eq!(got.name, "y");
+    }
+
+    #[tokio::test]
+    async fn empty_user_agent_falls_back_to_default() {
+        let client = HttpClientBuilder::new()
+            .user_agent(Some(String::new()))
+            .build()
+            .expect("client");
+        // Verify the effective UA is the built-in default, not empty.
+        assert_eq!(client.user_agent, UA_ETLP);
     }
 
     #[tokio::test]

@@ -7,6 +7,7 @@
 use etlp_core::{PlaybackData, Server};
 use serde_json::json;
 
+use crate::DEVICE_NAME;
 use crate::client::{HttpClient, Result};
 
 /// Realtime playback event kind for `Sessions/Playing/Progress` heartbeats.
@@ -52,8 +53,8 @@ async fn emby_realtime(
     let params = [
         ("X-Emby-Token", data.api_key.as_str()),
         ("X-Emby-Device-Id", data.device_id.as_str()),
-        ("X-Emby-Client", "embyToLocalPlayer"),
-        ("X-Emby-Device-Name", "embyToLocalPlayer"),
+        ("X-Emby-Client", DEVICE_NAME),
+        ("X-Emby-Device-Name", DEVICE_NAME),
     ];
     let body = json!({
         "PositionTicks": ticks,
@@ -155,8 +156,8 @@ async fn emby_stopped(
     let params = [
         ("X-Emby-Token", data.api_key.as_str()),
         ("X-Emby-Device-Id", data.device_id.as_str()),
-        ("X-Emby-Client", "embyToLocalPlayer"),
-        ("X-Emby-Device-Name", "embyToLocalPlayer"),
+        ("X-Emby-Client", DEVICE_NAME),
+        ("X-Emby-Device-Name", DEVICE_NAME),
     ];
     let base = format!("{}://{}/emby", data.scheme, data.netloc);
     if !update_success {

@@ -118,6 +118,12 @@ pub struct DevSection {
     /// Example: `'，＇，"，＂` maps ASCII quotes to their full-width equivalents.
     /// Empty string disables translation.
     pub media_title_translate: String,
+    /// Custom `User-Agent` for normal HTTP requests.
+    ///
+    /// Absent or empty falls back to the built-in default (`"etlp"`).
+    /// Download and prefetch clients always use their own fixed User-Agents
+    /// regardless of this setting.
+    pub user_agent: Option<String>,
 }
 
 impl Default for DevSection {
@@ -145,6 +151,7 @@ impl Default for DevSection {
             http_server_token: None,
             sub_extract_priority: Vec::new(),
             media_title_translate: String::new(),
+            user_agent: None,
         }
     }
 }
@@ -352,6 +359,17 @@ impl Config {
             .collect()
     }
 
+    /// Write a minimal default config to `path`, creating parent dirs.
+    ///
+    /// The written file is valid TOML that loads with all defaults; callers
+    /// can pass the same path immediately to [`Config::load_file`].
+    pub fn write_default(path: &Path) -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(path, DEFAULT_CONFIG_TOML)
+    }
+
     fn from_raw(raw: RawConfig, path: PathBuf) -> Self {
         Self {
             emby: raw.emby,
@@ -366,6 +384,23 @@ impl Config {
         }
     }
 }
+
+/// Minimal default configuration written on first run.
+const DEFAULT_CONFIG_TOML: &str = "\
+# etlp configuration — https://github.com/your-org/etlp
+# All keys shown here are the built-in defaults; uncomment and edit as needed.
+
+[emby]
+# player = \"mpv\"
+# fullscreen = false
+# disable_audio = false
+
+[dev]
+# log_level = \"info\"
+# kill_process_at_start = true
+# pretty_title = true
+# user_agent = \"etlp\"   # custom User-Agent for normal requests; download/prefetch UAs are fixed
+";
 
 #[cfg(test)]
 mod tests {
