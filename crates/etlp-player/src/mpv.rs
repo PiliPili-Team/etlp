@@ -260,6 +260,10 @@ pub struct LaunchArgs {
     /// index. `--force-media-title` / `--osd-playing-msg` are suppressed
     /// because titles come from the playlist's `#EXTINF` fields instead.
     pub playlist_start: Option<usize>,
+    /// Write mpv's own log to this file.
+    /// stdout/stderr → null handles terminal silence; the log file lets us
+    /// inspect mpv internals without re-enabling terminal output.
+    pub mpv_log_file: Option<std::path::PathBuf>,
 }
 
 // ── Command-line builder ──────────────────────────────────────────────────────
@@ -273,7 +277,13 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
     let is_mpvnet = exe_lower.contains("mpvnet");
     let is_darwin = cfg!(target_os = "macos");
 
-    let mut cmd: Vec<String> = vec![args.media_path.clone()];
+    // In playlist mode use --playlist=<file> so that --playlist-start=N
+    // indexes into the expanded entries rather than the unexpanded sub-playlist.
+    let mut cmd: Vec<String> = if args.playlist_start.is_some() {
+        vec![format!("--playlist={}", args.media_path)]
+    } else {
+        vec![args.media_path.clone()]
+    };
 
     if let Some(idx) = args.sub.inner_index {
         cmd.push(format!("--sid={idx}"));
@@ -320,7 +330,11 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
     let ipc_str = ipc.path.to_string_lossy();
     cmd.push(format!("--input-ipc-server={ipc_str}"));
     cmd.push("--script-opts-append=autoload-disabled=yes".into());
-    cmd.push("--really-quiet".into());
+    // stdout/stderr are redirected to null at spawn time; the log file captures
+    // mpv internals without --really-quiet which would suppress --log-file too.
+    if let Some(ref log_file) = args.mpv_log_file {
+        cmd.push(format!("--log-file={}", log_file.display()));
+    }
 
     if args.fullscreen {
         cmd.push("--fullscreen=yes".into());
@@ -862,6 +876,7 @@ mod tests {
             static_ipc: None,
             event_handler: None,
             playlist_start: None,
+            mpv_log_file: None,
         }
     }
 
@@ -912,17 +927,30 @@ mod tests {
     }
 
     #[test]
-    fn build_args_playlist_start_adds_flag_and_drops_title_override() {
+    fn build_args_playlist_start_uses_playlist_flag_and_drops_title_override() {
         let mut args = default_launch();
         args.is_multiple_episodes = true;
         args.playlist_start = Some(5);
         let ipc = IpcPath::generate();
         let cmd = build_args(&args, &ipc);
         let flat = cmd.join(" ");
+        // media_path is embedded in --playlist= rather than as a bare positional arg
+        assert!(cmd.iter().any(|s| s == "--playlist=http://x/v.mkv"));
+        assert!(!cmd.iter().any(|s| s == "http://x/v.mkv"));
         assert!(flat.contains("--playlist-start=5"));
         assert!(!flat.contains("--force-media-title="));
         assert!(!flat.contains("--osd-playing-msg="));
         assert!(flat.contains("--pause"));
+    }
+
+    #[test]
+    fn build_args_log_file_adds_log_flag() {
+        let mut args = default_launch();
+        args.mpv_log_file = Some(std::path::PathBuf::from("/tmp/mpv.log"));
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(flat.contains("--log-file=/tmp/mpv.log"));
     }
 
     // ── MpvHandle commands ────────────────────────────────────────────────────
