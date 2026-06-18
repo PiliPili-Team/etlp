@@ -130,6 +130,7 @@ pub async fn stop_sec_pot(pid: u32) -> Option<i64> {
 }
 
 #[cfg(windows)]
+#[allow(unsafe_code)]
 async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;

@@ -18,6 +18,7 @@ pub use path::{
 /// On Windows this uses `EnumWindows` + `SetForegroundWindow` to bring the
 /// target process's top-level window to the foreground. On all other platforms
 /// this is a no-op (macOS apps surface themselves; Linux desktops vary).
+#[cfg_attr(target_os = "windows", allow(unsafe_code))]
 pub fn activate_window_by_pid(_pid: u32) {
     #[cfg(target_os = "windows")]
     {
