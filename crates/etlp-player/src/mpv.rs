@@ -320,7 +320,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
     let ipc_str = ipc.path.to_string_lossy();
     cmd.push(format!("--input-ipc-server={ipc_str}"));
     cmd.push("--script-opts-append=autoload-disabled=yes".into());
-    cmd.push("--msg-level=ffmpeg=no".into());
+    cmd.push("--really-quiet".into());
 
     if args.fullscreen {
         cmd.push("--fullscreen=yes".into());
@@ -406,6 +406,8 @@ impl MpvHandle {
         let cmd_args = build_args(&args, &ipc);
         let child = std::process::Command::new(&args.exe)
             .args(&cmd_args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn()?;
 
         let is_iina = args.exe.to_lowercase().contains("iina");
