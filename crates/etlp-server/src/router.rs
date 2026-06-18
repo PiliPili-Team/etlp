@@ -4,6 +4,8 @@ use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use tower_http::normalize_path::NormalizePathLayer;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 
 use crate::routes::download::{action_route, dl_route, gui_route, pl_route};
 use crate::routes::media::send_media_file;
@@ -35,6 +37,14 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/openFolder", post(open_folder_route))
         .route("/playMediaFile", post(play_media_file))
         .with_state(state)
+        // Log every request/response at INFO so 422 rejections and routing
+        // mismatches are visible even when the handler itself is never called.
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO))
+                .on_failure(DefaultOnFailure::new().level(Level::ERROR)),
+        )
         // Userscript sends trailing slashes (e.g. /embyToLocalPlayer/);
         // strip them before routing so exact-match routes are found.
         .layer(NormalizePathLayer::trim_trailing_slash())
