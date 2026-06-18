@@ -1,20 +1,20 @@
-//! INI configuration loading and string-match rules for etlp.
+//! TOML configuration loading and string-match rules for etlp.
 //!
-//! Wraps the on-disk `embyToLocalPlayer*.ini` file and exposes typed getters
-//! plus the [`matching`] helpers used throughout the pipeline. Parsing of the
-//! match rules lives in [`matching`] so it can be tested without IO.
+//! Wraps the on-disk `embyToLocalPlayer*.toml` file and exposes typed section
+//! structs. Every field carries a sensible default so a minimal config file
+//! only needs to specify the keys that differ from the defaults.
 
 pub mod matching;
 
 use std::path::{Path, PathBuf};
 
-use ini::Ini;
+use serde::Deserialize;
 use thiserror::Error;
 
 /// Errors raised while locating or parsing the configuration file.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    /// No candidate ini file existed in the search directory.
+    /// No candidate toml file existed in the search directory.
     #[error("no config file found in {0}")]
     NotFound(PathBuf),
 
@@ -26,27 +26,245 @@ pub enum ConfigError {
         source: std::io::Error,
     },
 
-    /// The file was not valid INI.
+    /// The file was not valid TOML.
     #[error("failed to parse config {path}: {source}")]
     Parse {
         path: PathBuf,
         #[source]
-        source: ini::ParseError,
+        source: toml::de::Error,
     },
 }
 
 /// Convenience alias for config results.
 pub type Result<T> = std::result::Result<T, ConfigError>;
 
-/// Loaded configuration backed by an INI file.
+// ── Section structs ───────────────────────────────────────────────────────────
+
+/// `[emby]` section — player selection and launch options.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct EmbySection {
+    /// Player to launch (`mpv` / `vlc` / `mpc` / `potplayer` / `iina` / …).
+    pub player: String,
+    /// Launch the player in full-screen mode.
+    pub fullscreen: bool,
+    /// Mute audio on launch (mpv `--no-audio`).
+    pub disable_audio: bool,
+}
+
+impl Default for EmbySection {
+    fn default() -> Self {
+        Self {
+            player: "mpv".to_owned(),
+            fullscreen: false,
+            disable_audio: false,
+        }
+    }
+}
+
+/// `[dev]` section — developer / advanced options.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct DevSection {
+    /// Absolute path to the player binary; overrides `emby.player` for lookup.
+    pub player_path: Option<String>,
+    /// HTTP proxy passed to the player (`host:port`).
+    pub http_proxy: Option<String>,
+    /// mpv `--input-ipc-server` socket path; enables IPC control.
+    pub mpv_input_ipc_server: Option<String>,
+    /// Enable log masking (mix sensitive tokens into placeholder text).
+    pub mix_log: bool,
+    /// Minimum log level: `trace` / `debug` / `info` / `warn` / `error`.
+    pub log_level: String,
+    /// Optional path to a log file; absent means stderr only.
+    pub log_file: Option<PathBuf>,
+    /// Kill leftover player processes on startup.
+    pub kill_process_at_start: bool,
+    /// HTTP proxy for the etlp process itself (`host:port`).
+    pub proxy: Option<String>,
+    /// Disable TLS certificate verification (insecure; for local dev only).
+    pub skip_certificate_verify: bool,
+    /// Hosts whose `.strm` files are played in-place without redirect.
+    pub strm_direct_host: Vec<String>,
+    /// `[from, to, …]` pairs used to rewrite the resolved stream URL.
+    pub stream_redirect: Vec<String>,
+    /// Hosts probed for a 30x redirect before handing the URL to the player.
+    pub redirect_check_host: Vec<String>,
+    /// Literal prefix prepended to the stream URL.
+    pub stream_prefix: Vec<String>,
+    /// Path prefixes that force read-from-disk mode.
+    pub force_disk_mode_path: Vec<String>,
+    /// Ordered keywords for multi-version preference (first wins).
+    pub version_prefer: Vec<String>,
+    /// Ordered keywords for subtitle selection.
+    pub subtitle_priority: Vec<String>,
+    /// Prepend the server title to the player window title.
+    pub pretty_title: bool,
+    /// Disable the playlist when the current episode is the last one.
+    pub last_ep_disable_playlist: bool,
+    /// Fill remaining playlist slots using `version_prefer` order.
+    pub version_prefer_for_playlist: bool,
+    /// Bearer token required by `GET /send_media_file`; absent disables auth.
+    pub http_server_token: Option<String>,
+}
+
+impl Default for DevSection {
+    fn default() -> Self {
+        Self {
+            player_path: None,
+            http_proxy: None,
+            mpv_input_ipc_server: None,
+            mix_log: true,
+            log_level: "info".to_owned(),
+            log_file: None,
+            kill_process_at_start: true,
+            proxy: None,
+            skip_certificate_verify: false,
+            strm_direct_host: Vec::new(),
+            stream_redirect: Vec::new(),
+            redirect_check_host: Vec::new(),
+            stream_prefix: Vec::new(),
+            force_disk_mode_path: Vec::new(),
+            version_prefer: Vec::new(),
+            subtitle_priority: Vec::new(),
+            pretty_title: true,
+            last_ep_disable_playlist: true,
+            version_prefer_for_playlist: true,
+            http_server_token: None,
+        }
+    }
+}
+
+/// `[playlist]` section — playlist assembly options.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct PlaylistSection {
+    /// Maximum episodes to append to the player playlist.
+    pub item_limit: u32,
+    /// Regex that selects one version per episode (empty = no filter).
+    pub version_filter: String,
+}
+
+impl Default for PlaylistSection {
+    fn default() -> Self {
+        Self {
+            item_limit: 10,
+            version_filter: String::new(),
+        }
+    }
+}
+
+/// `[dandan]` section — local DanDanPlay integration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct DanDanSection {
+    /// Local DanDanPlay API port.
+    pub port: u16,
+    /// Optional API key for DanDanPlay.
+    pub api_key: Option<String>,
+}
+
+impl Default for DanDanSection {
+    fn default() -> Self {
+        Self {
+            port: 8080,
+            api_key: None,
+        }
+    }
+}
+
+/// `[gui]` section — download and cache options.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct GuiSection {
+    /// Download speed cap in MiB/s (0 = unlimited).
+    pub speed_limit_mb: u64,
+    /// Directory for the download cache; defaults to `{working_dir}/cache`.
+    pub server_cache_path: Option<PathBuf>,
+}
+
+fn default_redirect_uri() -> String {
+    "http://localhost:58000/trakt_auth".to_owned()
+}
+
+/// `[trakt]` section — Trakt.tv scrobble integration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct TraktSection {
+    pub client_id: String,
+    pub client_secret: String,
+    /// OAuth redirect URI registered with Trakt.
+    #[serde(default = "default_redirect_uri")]
+    pub redirect_uri: String,
+    /// Host suffix that triggers Trakt scrobble.
+    pub enable_host: String,
+}
+
+impl Default for TraktSection {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            client_secret: String::new(),
+            redirect_uri: default_redirect_uri(),
+            enable_host: String::new(),
+        }
+    }
+}
+
+/// `[bangumi]` section — bgm.tv integration.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct BangumiSection {
+    /// Personal access token for the bgm.tv API.
+    pub access_token: Option<String>,
+}
+
+/// A single path-translation entry (one element of `[[path_map]]`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct PathMapEntry {
+    /// Source path prefix (as seen by the media server).
+    pub src: String,
+    /// Destination path prefix (as seen by the local player).
+    pub dst: String,
+}
+
+// ── Internal serde target ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+struct RawConfig {
+    emby: EmbySection,
+    dev: DevSection,
+    playlist: PlaylistSection,
+    dandan: DanDanSection,
+    gui: GuiSection,
+    trakt: TraktSection,
+    bangumi: BangumiSection,
+    path_map: Vec<PathMapEntry>,
+}
+
+// ── Public Config ─────────────────────────────────────────────────────────────
+
+/// Loaded configuration backed by a TOML file.
+///
+/// Every section has a `Default` implementation, so missing sections or keys
+/// silently fall back to the documented defaults.
 #[derive(Debug, Clone)]
 pub struct Config {
-    ini: Ini,
+    pub emby: EmbySection,
+    pub dev: DevSection,
+    pub playlist: PlaylistSection,
+    pub dandan: DanDanSection,
+    pub gui: GuiSection,
+    pub trakt: TraktSection,
+    pub bangumi: BangumiSection,
+    /// Ordered src→dst path-translation pairs (`[[path_map]]` array).
+    pub path_map: Vec<PathMapEntry>,
     path: PathBuf,
 }
 
-/// The Python `platform.system()` name used in the platform-specific ini file
-/// (`embyToLocalPlayer-<Platform>.ini`).
+/// The `platform.system()` name used in the platform-specific config file
+/// (`embyToLocalPlayer-<Platform>.toml`).
 #[must_use]
 pub fn platform_name() -> &'static str {
     match std::env::consts::OS {
@@ -56,13 +274,11 @@ pub fn platform_name() -> &'static str {
     }
 }
 
-/// Candidate config file names, in the same priority order as the Python
-/// implementation.
 fn candidate_names() -> [String; 3] {
     [
-        format!("embyToLocalPlayer-{}.ini", platform_name()),
-        "embyToLocalPlayer.ini".to_owned(),
-        "embyToLocalPlayer_config.ini".to_owned(),
+        format!("embyToLocalPlayer-{}.toml", platform_name()),
+        "embyToLocalPlayer.toml".to_owned(),
+        "embyToLocalPlayer_config.toml".to_owned(),
     ]
 }
 
@@ -78,7 +294,7 @@ impl Config {
         Err(ConfigError::NotFound(dir.to_path_buf()))
     }
 
-    /// Load a specific config file, tolerating a UTF-8 BOM (`utf-8-sig`).
+    /// Load a specific TOML config file, tolerating a UTF-8 BOM.
     pub fn load_file(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).map_err(|source| {
             ConfigError::Io {
@@ -86,30 +302,18 @@ impl Config {
                 source,
             }
         })?;
-        let trimmed = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
-        // Disable backslash escaping so Windows paths like `F:\media` survive
-        // verbatim (the ini format does not unescape backslashes).
-        let opt = ini::ParseOption {
-            enabled_quote: false,
-            enabled_escape: false,
-            ..ini::ParseOption::default()
-        };
-        let ini = Ini::load_from_str_opt(trimmed, opt).map_err(|source| {
-            ConfigError::Parse {
+        let content = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+        let inner: RawConfig =
+            toml::from_str(content).map_err(|source| ConfigError::Parse {
                 path: path.to_path_buf(),
                 source,
-            }
-        })?;
-        Ok(Self {
-            ini,
-            path: path.to_path_buf(),
-        })
+            })?;
+        Ok(Self::from_raw(inner, path.to_path_buf()))
     }
 
     /// Reload from the originally loaded path.
     pub fn reload(&mut self) -> Result<()> {
-        let fresh = Self::load_file(&self.path)?;
-        self.ini = fresh.ini;
+        *self = Self::load_file(&self.path)?;
         Ok(())
     }
 
@@ -119,94 +323,29 @@ impl Config {
         &self.path
     }
 
-    /// Raw option value, if present.
-    #[must_use]
-    pub fn get(&self, section: &str, option: &str) -> Option<&str> {
-        self.ini.get_from(Some(section), option)
-    }
-
-    /// Raw option value or a default.
-    #[must_use]
-    pub fn get_or<'a>(
-        &'a self,
-        section: &str,
-        option: &str,
-        default: &'a str,
-    ) -> &'a str {
-        self.get(section, option).unwrap_or(default)
-    }
-
-    /// Boolean option using configparser-style truthy strings.
-    #[must_use]
-    pub fn get_bool(&self, section: &str, option: &str, default: bool) -> bool {
-        self.get(section, option)
-            .and_then(parse_bool)
-            .unwrap_or(default)
-    }
-
-    /// Integer option, falling back to `default` on absence or parse failure.
-    #[must_use]
-    pub fn get_int(&self, section: &str, option: &str, default: i64) -> i64 {
-        self.get(section, option)
-            .and_then(|v| v.trim().parse().ok())
-            .unwrap_or(default)
-    }
-
-    /// Float option, falling back to `default` on absence or parse failure.
-    #[must_use]
-    pub fn get_float(&self, section: &str, option: &str, default: f64) -> f64 {
-        self.get(section, option)
-            .and_then(|v| v.trim().parse().ok())
-            .unwrap_or(default)
-    }
-
-    /// Split an option into trimmed tokens ([`matching::split_list`]).
-    #[must_use]
-    pub fn split_list(
-        &self,
-        section: &str,
-        option: &str,
-        split_by: char,
-    ) -> Vec<String> {
-        matching::split_list(self.get_or(section, option, ""), split_by)
-    }
-
-    /// All `(key, value)` entries in a section, in file order. Used to read the
-    /// `[src]` / `[dst]` path-translation tables.
-    #[must_use]
-    pub fn section_entries(&self, section: &str) -> Vec<(String, String)> {
-        match self.ini.section(Some(section)) {
-            Some(props) => props
-                .iter()
-                .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                .collect(),
-            None => Vec::new(),
-        }
-    }
-
-    /// Pair the ordered `[src]` prefixes with their matching `[dst]` prefixes
-    /// by key, producing `(src_prefix, dst_prefix)` translation pairs.
+    /// Src→dst translation pairs as `(src, dst)` tuples.
+    ///
+    /// Convenience method for callers that already use `Vec<(String, String)>`.
     #[must_use]
     pub fn path_translation_pairs(&self) -> Vec<(String, String)> {
-        let dst = self.ini.section(Some("dst"));
-        self.section_entries("src")
-            .into_iter()
-            .filter_map(|(key, src_prefix)| {
-                dst.and_then(|d| d.get(&key))
-                    .map(|dst_prefix| (src_prefix, dst_prefix.to_owned()))
-            })
+        self.path_map
+            .iter()
+            .map(|e| (e.src.clone(), e.dst.clone()))
             .collect()
     }
-}
 
-/// Parse a configparser-style boolean (`1/yes/true/on`, `0/no/false/off`),
-/// case-insensitively. Returns `None` for unrecognized values.
-#[must_use]
-pub fn parse_bool(value: &str) -> Option<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "1" | "yes" | "true" | "on" => Some(true),
-        "0" | "no" | "false" | "off" => Some(false),
-        _ => None,
+    fn from_raw(raw: RawConfig, path: PathBuf) -> Self {
+        Self {
+            emby: raw.emby,
+            dev: raw.dev,
+            playlist: raw.playlist,
+            dandan: raw.dandan,
+            gui: raw.gui,
+            trakt: raw.trakt,
+            bangumi: raw.bangumi,
+            path_map: raw.path_map,
+            path,
+        }
     }
 }
 
@@ -218,19 +357,18 @@ mod tests {
 
     use super::*;
 
-    const SAMPLE: &str = "\
+    const SAMPLE: &str = r#"
 [emby]
-player = mpv
-fullscreen = no
-update_progress = yes
+player = "mpv"
+fullscreen = false
 
 [playlist]
 item_limit = 50
 
 [dev]
-version_prefer = VCB, Baha
-speed = 1.5
-";
+version_prefer = ["VCB", "Baha"]
+speed_dummy = 1.5
+"#;
 
     fn write_config(dir: &Path, name: &str, body: &str) -> PathBuf {
         let path = dir.join(name);
@@ -240,39 +378,48 @@ speed = 1.5
     }
 
     #[test]
-    fn parse_bool_truthy_and_falsy() {
-        assert_eq!(parse_bool("YES"), Some(true));
-        assert_eq!(parse_bool(" on "), Some(true));
-        assert_eq!(parse_bool("0"), Some(false));
-        assert_eq!(parse_bool("maybe"), None);
+    fn typed_fields_read_values() {
+        let dir = tempdir().expect("tempdir");
+        write_config(dir.path(), "embyToLocalPlayer.toml", SAMPLE);
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+
+        assert_eq!(cfg.emby.player, "mpv");
+        assert!(!cfg.emby.fullscreen);
+        assert_eq!(cfg.playlist.item_limit, 50);
+        assert_eq!(cfg.dev.version_prefer, vec!["VCB", "Baha"]);
     }
 
     #[test]
-    fn typed_getters_read_values() {
+    fn missing_keys_use_defaults() {
         let dir = tempdir().expect("tempdir");
-        write_config(dir.path(), "embyToLocalPlayer.ini", SAMPLE);
+        write_config(
+            dir.path(),
+            "embyToLocalPlayer.toml",
+            "[emby]\nplayer = \"vlc\"\n",
+        );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
 
-        assert_eq!(cfg.get("emby", "player"), Some("mpv"));
-        assert!(!cfg.get_bool("emby", "fullscreen", true));
-        assert!(cfg.get_bool("emby", "update_progress", false));
-        assert_eq!(cfg.get_int("playlist", "item_limit", -1), 50);
-        assert!((cfg.get_float("dev", "speed", 1.0) - 1.5).abs() < 1e-9);
-        assert_eq!(
-            cfg.split_list("dev", "version_prefer", ','),
-            vec!["VCB".to_string(), "Baha".to_string()]
-        );
-        // Missing option falls back.
-        assert_eq!(cfg.get_or("dev", "absent", "def"), "def");
+        // explicit
+        assert_eq!(cfg.emby.player, "vlc");
+        // all defaulted
+        assert!(!cfg.emby.disable_audio);
+        assert!(cfg.dev.mix_log);
+        assert_eq!(cfg.dev.log_level, "info");
+        assert!(cfg.dev.kill_process_at_start);
+        assert_eq!(cfg.playlist.item_limit, 10);
+        assert_eq!(cfg.dandan.port, 8080);
+        assert_eq!(cfg.gui.speed_limit_mb, 0);
+        assert!(cfg.dev.version_prefer.is_empty());
+        assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
     }
 
     #[test]
     fn bom_is_tolerated() {
         let dir = tempdir().expect("tempdir");
-        let body = format!("\u{feff}{SAMPLE}");
-        write_config(dir.path(), "embyToLocalPlayer.ini", &body);
+        let body = format!("\u{feff}[emby]\nplayer = \"mpv\"\n");
+        write_config(dir.path(), "embyToLocalPlayer.toml", &body);
         let cfg = Config::load_from_dir(dir.path()).expect("load bom");
-        assert_eq!(cfg.get("emby", "player"), Some("mpv"));
+        assert_eq!(cfg.emby.player, "mpv");
     }
 
     #[test]
@@ -283,24 +430,24 @@ speed = 1.5
     }
 
     #[test]
-    fn path_translation_pairs_zip_src_dst_by_key() {
-        let body = "\
-[src]
-a = /mnt/disk1
-b = /mnt/disk2/media
+    fn path_translation_pairs_from_path_map() {
+        let body = r#"
+[[path_map]]
+src = "/mnt/disk1"
+dst = "E:"
 
-[dst]
-a = E:
-b = F:\\media
-";
+[[path_map]]
+src = "/mnt/disk2/media"
+dst = 'F:\media'
+"#;
         let dir = tempdir().expect("tempdir");
-        write_config(dir.path(), "embyToLocalPlayer.ini", body);
+        write_config(dir.path(), "embyToLocalPlayer.toml", body);
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(
             cfg.path_translation_pairs(),
             vec![
                 ("/mnt/disk1".to_owned(), "E:".to_owned()),
-                ("/mnt/disk2/media".to_owned(), "F:\\media".to_owned()),
+                ("/mnt/disk2/media".to_owned(), r"F:\media".to_owned()),
             ]
         );
     }

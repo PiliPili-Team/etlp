@@ -89,44 +89,18 @@ impl EmbyParseConfig {
     #[must_use]
     pub fn from_config(config: &Config) -> Self {
         Self {
-            strm_direct_hosts: config.split_list(
-                "dev",
-                "strm_direct_host",
-                ',',
-            ),
-            stream_redirect: config.split_list("dev", "stream_redirect", ','),
-            redirect_check_hosts: config.split_list(
-                "dev",
-                "redirect_check_host",
-                ',',
-            ),
-            stream_prefix: config.split_list("dev", "stream_prefix", ','),
-            force_disk_prefixes: config.split_list(
-                "dev",
-                "force_disk_mode_path",
-                ',',
-            ),
+            strm_direct_hosts: config.dev.strm_direct_host.clone(),
+            stream_redirect: config.dev.stream_redirect.clone(),
+            redirect_check_hosts: config.dev.redirect_check_host.clone(),
+            stream_prefix: config.dev.stream_prefix.clone(),
+            force_disk_prefixes: config.dev.force_disk_mode_path.clone(),
             path_pairs: config.path_translation_pairs(),
-            version_prefer: config.split_list("dev", "version_prefer", ','),
-            subtitle_priority: config.split_list(
-                "dev",
-                "subtitle_priority",
-                ',',
-            ),
-            pretty_title: config.get_bool("dev", "pretty_title", true),
-            last_ep_disable_playlist: config.get_bool(
-                "dev",
-                "last_ep_disable_playlist",
-                true,
-            ),
-            version_filter: config
-                .get_or("playlist", "version_filter", "")
-                .to_owned(),
-            version_prefer_for_playlist: config.get_bool(
-                "dev",
-                "version_prefer_for_playlist",
-                true,
-            ),
+            version_prefer: config.dev.version_prefer.clone(),
+            subtitle_priority: config.dev.subtitle_priority.clone(),
+            pretty_title: config.dev.pretty_title,
+            last_ep_disable_playlist: config.dev.last_ep_disable_playlist,
+            version_filter: config.playlist.version_filter.clone(),
+            version_prefer_for_playlist: config.dev.version_prefer_for_playlist,
         }
     }
 }

@@ -58,13 +58,12 @@ async fn main() {
         }
     };
 
-    // `dev.mix_log = no` disables log masking; any other value (or absent)
-    // keeps masking enabled by default.
-    let mix_log = config.get_bool("dev", "mix_log", true);
-    let log_level = config.get_or("dev", "log_level", "info");
-    let log_file = config.get("dev", "log_file").map(PathBuf::from);
+    // `dev.mix_log = false` disables log masking; absent keeps the default true.
+    let mix_log = config.dev.mix_log;
+    let log_level = config.dev.log_level.clone();
+    let log_file = config.dev.log_file.clone();
 
-    let _ = init_logging(Masker::new(mix_log), log_level, log_file.as_deref());
+    let _ = init_logging(Masker::new(mix_log), &log_level, log_file.as_deref());
 
     info!(
         "etlp {} starting (config={})",
@@ -72,7 +71,7 @@ async fn main() {
         config.path().display(),
     );
 
-    if config.get_bool("dev", "kill_process_at_start", true) {
+    if config.dev.kill_process_at_start {
         let _ = etlp_server::platform::kill_matching_processes(
             r"(embyToLocalPlayer\.py|autohotkey_tool|mpv.*exe|mpc-.*exe|\
               vlc\.exe|PotPlayer.*exe|/IINA|/VLC|/mpv)",
@@ -80,8 +79,8 @@ async fn main() {
         );
     }
 
-    let proxy = config.get("dev", "proxy").map(str::to_owned);
-    let cert_verify = !config.get_bool("dev", "skip_certificate_verify", false);
+    let proxy = config.dev.proxy.clone();
+    let cert_verify = !config.dev.skip_certificate_verify;
     let http_client = match HttpClientBuilder::new()
         .proxy(proxy)
         .cert_verify(cert_verify)
@@ -95,11 +94,11 @@ async fn main() {
     };
 
     let cache_path = config
-        .get("gui", "server_cache_path")
-        .map(PathBuf::from)
+        .gui
+        .server_cache_path
+        .clone()
         .unwrap_or_else(|| working_dir.join("cache"));
-    let speed_limit: u64 =
-        config.get_int("gui", "speed_limit_mb", 0).max(0) as u64 * 1024 * 1024;
+    let speed_limit: u64 = config.gui.speed_limit_mb * 1024 * 1024;
 
     let dl_client = match reqwest::Client::builder().build() {
         Ok(c) => c,
@@ -205,9 +204,7 @@ async fn run_bgm_mark_played(
     let config = Config::load_from_dir(working_dir).ok();
     let token = token_override
         .or_else(|| {
-            config.as_ref().and_then(|c| {
-                c.get("bangumi", "access_token").map(str::to_owned)
-            })
+            config.as_ref().and_then(|c| c.bangumi.access_token.clone())
         })
         .ok_or("bangumi access_token required (--token or config)")?;
 
