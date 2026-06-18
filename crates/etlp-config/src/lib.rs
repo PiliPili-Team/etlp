@@ -140,7 +140,7 @@ impl Default for DevSection {
             version_prefer: Vec::new(),
             subtitle_priority: Vec::new(),
             pretty_title: true,
-            last_ep_disable_playlist: true,
+            last_ep_disable_playlist: false,
             version_prefer_for_playlist: true,
             http_server_token: None,
             sub_extract_priority: Vec::new(),
