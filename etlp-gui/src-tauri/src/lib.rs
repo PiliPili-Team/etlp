@@ -1,9 +1,7 @@
 //! Tauri application entry point for etlp GUI.
-//!
-//! Wires up plugins, the system tray/menu-bar icon, the managed state,
-//! and all command handlers, then calls `Builder::run`.
 
 pub mod commands;
+pub mod config_patch;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -12,9 +10,6 @@ use tauri_plugin_autostart::MacosLauncher;
 
 use commands::GuiState;
 
-/// On macOS GUI apps, the inherited PATH is `/usr/bin:/bin:/usr/sbin:/sbin` —
-/// Homebrew and user-installed binaries are invisible. Prepend the standard
-/// locations so `mpv`, `iina-cli`, etc. can be found by name.
 #[cfg(target_os = "macos")]
 fn augment_path() {
     const EXTRA: &[&str] = &[
@@ -30,7 +25,7 @@ fn augment_path() {
             parts.insert(0, p);
         }
     }
-    // SAFETY: called before any threads spawn; no concurrent env reads.
+    // SAFETY: called before any threads spawn.
     unsafe { std::env::set_var("PATH", parts.join(":")) };
 }
 
@@ -40,22 +35,46 @@ fn augment_path() {}
 pub fn run() {
     augment_path();
 
-    // Mark this process as the packaged GUI app so platform code can query
-    // RuntimeMode::detect(). Called here, before Builder spawns any threads.
-    // SAFETY: single-threaded at this point; no concurrent env reads.
+    // SAFETY: single-threaded at this point.
     unsafe { std::env::set_var(etlp_server::platform::ENV_RUNTIME, "app") };
 
-    // Emit the effective directories to stderr so crash logs are navigable.
+    // Initialise logging to a file in the data directory so the Logs tab can
+    // tail it. Do this before any Tauri threads start.
+    let data_dir = etlp_server::platform::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    std::fs::create_dir_all(&data_dir).ok();
+    let log_file = data_dir.join("etlp.log");
+
+    let masker = etlp_logging::Masker::new(false);
+    etlp_logging::init(masker, "info", Some(log_file.as_path())).ok();
+
     if let Some(d) = etlp_server::platform::config_dir() {
         eprintln!("[etlp] config dir: {}", d.display());
     }
-    if let Some(d) = etlp_server::platform::data_dir() {
-        eprintln!("[etlp] data   dir: {}", d.display());
-    }
+    eprintln!("[etlp] data   dir: {}", data_dir.display());
+    eprintln!("[etlp] log    file: {}", log_file.display());
 
-    // Embed the monochrome tray icon at compile time so the packaged .app
-    // bundle does not need to resolve a runtime resource path.
-    let tray_icon_bytes = include_bytes!("../icons/tray-icon.png");
+    // Decode the monochrome PNG to raw RGBA at startup.
+    let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon.png");
+    let tray_rgba = {
+        use image::ImageDecoder as _;
+        let cursor = std::io::Cursor::new(tray_icon_bytes);
+        let decoder = image::codecs::png::PngDecoder::new(cursor)
+            .expect("tray-icon.png is a valid PNG");
+        let (w, h) = decoder.dimensions();
+        let mut buf = vec![0u8; decoder.total_bytes() as usize];
+        decoder.read_image(&mut buf).expect("decode tray icon");
+        (buf, w, h)
+    };
+
+    let gui_state = {
+        let s = GuiState::default();
+        // Store the resolved log file path so get_log_lines knows where to read.
+        if let Ok(mut lf) = s.log_file.lock() {
+            *lf = log_file;
+        }
+        s
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -69,8 +88,9 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_opener::init())
-        .manage(GuiState::default())
+        .manage(gui_state)
         .setup(move |app| {
+            let (tray_buf, tray_w, tray_h) = tray_rgba;
             let show =
                 MenuItemBuilder::with_id("show", "Show Window").build(app)?;
             let hide =
@@ -81,12 +101,7 @@ pub fn run() {
                 .items(&[&show, &hide, &quit])
                 .build()?;
 
-            // Load the monochrome icon from the compile-time-embedded bytes.
-            // icon_as_template(true) tells macOS to render it as a system
-            // template image (auto-colours to white/black for dark/light bar).
-            let tray_img =
-                tauri::image::Image::from_bytes(tray_icon_bytes)
-                    .map_err(|e| format!("tray icon: {e}"))?;
+            let tray_img = tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
 
             let _tray = TrayIconBuilder::new()
                 .icon(tray_img)
@@ -126,14 +141,17 @@ pub fn run() {
             commands::start_server,
             commands::stop_server,
             commands::get_server_status,
+            commands::get_config,
+            commands::update_config_field,
             commands::reload_config,
             commands::open_config_folder,
             commands::edit_config,
+            commands::get_log_lines,
+            commands::clear_log_position,
             commands::set_autostart,
             commands::get_autostart,
         ])
         .on_window_event(|window, event| {
-            // Keep the app alive in the tray when the user closes the window.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
