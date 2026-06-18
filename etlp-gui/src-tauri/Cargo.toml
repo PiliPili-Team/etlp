@@ -5,7 +5,7 @@ resolver = "3"
 
 [package]
 name = "etlp-gui"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
@@ -32,12 +32,12 @@ tokio = { version = "1", features = ["full"] }
 axum = "0.8"
 tracing = "0.1"
 dirs = "6"
-toml_edit = "0.22"
+toml_edit = "0.25"
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["normalize-path"] }
+tower-http = { version = "0.7", features = ["normalize-path"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-window-vibrancy = "0.5"
+window-vibrancy = "0.7"
 sys-locale = "0.3"
 
 etlp-config  = { path = "../../crates/etlp-config" }

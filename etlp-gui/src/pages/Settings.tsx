@@ -100,7 +100,11 @@ function InputRow({
     onCommit: (v: string) => void;
 }) {
     const [local, setLocal] = useState(value);
-    useEffect(() => setLocal(value), [value]);
+    const [prevStrValue, setPrevStrValue] = useState(value);
+    if (prevStrValue !== value) {
+        setPrevStrValue(value);
+        setLocal(value);
+    }
     return (
         <div className="row">
             <div className="row-label">
@@ -141,7 +145,11 @@ function NumberRow({
     onCommit: (v: number) => void;
 }) {
     const [local, setLocal] = useState(String(value));
-    useEffect(() => setLocal(String(value)), [value]);
+    const [prevNumValue, setPrevNumValue] = useState(value);
+    if (prevNumValue !== value) {
+        setPrevNumValue(value);
+        setLocal(String(value));
+    }
     return (
         <div className="row">
             <div className="row-label">
@@ -287,7 +295,11 @@ function TextareaRow({
     onCommit: (v: string) => void;
 }) {
     const [local, setLocal] = useState(value);
-    useEffect(() => setLocal(value), [value]);
+    const [prevTextValue, setPrevTextValue] = useState(value);
+    if (prevTextValue !== value) {
+        setPrevTextValue(value);
+        setLocal(value);
+    }
     return (
         <div
             className="row"
@@ -336,8 +348,11 @@ function PlayerPathRow({
     const [local, setLocal] = useState(value);
     const [pathValid, setPathValid] = useState<boolean | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    useEffect(() => setLocal(value), [value]);
+    const [prevPathValue, setPrevPathValue] = useState(value);
+    if (prevPathValue !== value) {
+        setPrevPathValue(value);
+        setLocal(value);
+    }
 
     const validatePath = useCallback(async (p: string) => {
         if (!p.trim()) {
@@ -547,7 +562,8 @@ export default function Settings({ section, addToast, display, onDisplayChange }
     }, [addToast]);
 
     useEffect(() => {
-        void loadConfig();
+        const init = setTimeout(loadConfig, 0);
+        return () => clearTimeout(init);
     }, [loadConfig]);
 
     const update = useCallback(

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
@@ -27,18 +27,18 @@ reqwest = { version = "0.13", default-features = false, features = [
     "query",
 ] }
 axum = "0.8"
-toml = "0.8"
+toml = "1.1"
 url = "2"
 sysinfo = "0.38"
 tempfile = "3"
 clap = { version = "4", features = ["derive"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tower = { version = "0.5", features = ["util", "make"] }
-tower-http = { version = "0.6", features = ["normalize-path", "trace"] }
+tower-http = { version = "0.7", features = ["normalize-path", "trace"] }
 http = "1"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
-toml_edit = "0.22"
+toml_edit = "0.25"
 
 # Deny crash-prone and sloppy patterns workspace-wide. Member crates opt in via
 # `[lints] workspace = true`. Test code re-allows these locally where needed.

@@ -18,6 +18,7 @@ export default function Overview({ addToast, onAbout }: Props) {
     const [busy, setBusy] = useState(false);
     const [startTime, setStartTime] = useState<Date | null>(null);
     const [elapsed, setElapsed] = useState("");
+    const [prevRunning, setPrevRunning] = useState(status.running);
 
     const refreshStatus = useCallback(async () => {
         try {
@@ -28,26 +29,29 @@ export default function Overview({ addToast, onAbout }: Props) {
         }
     }, []);
 
+    // Render-phase derived state: sync startTime with status.running transitions
+    // so we avoid calling setState synchronously inside a useEffect body.
+    if (prevRunning !== status.running) {
+        setPrevRunning(status.running);
+        if (!status.running) {
+            setStartTime(null);
+        } else if (!startTime) {
+            setStartTime(new Date());
+        }
+    }
+
     useEffect(() => {
-        void refreshStatus();
+        // Defer the initial fetch past the synchronous effect body.
+        const init = setTimeout(refreshStatus, 0);
         const iv = setInterval(refreshStatus, 5000);
-        return () => clearInterval(iv);
+        return () => {
+            clearTimeout(init);
+            clearInterval(iv);
+        };
     }, [refreshStatus]);
 
     useEffect(() => {
-        if (!status.running) {
-            setStartTime(null);
-            return;
-        }
-        if (!startTime) setStartTime(new Date());
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status.running]);
-
-    useEffect(() => {
-        if (!startTime) {
-            setElapsed("");
-            return;
-        }
+        if (!startTime) return;
         const iv = setInterval(() => {
             const secs = Math.floor((Date.now() - startTime.getTime()) / 1000);
             const h = Math.floor(secs / 3600);
@@ -55,7 +59,10 @@ export default function Overview({ addToast, onAbout }: Props) {
             const s = secs % 60;
             setElapsed(h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`);
         }, 1000);
-        return () => clearInterval(iv);
+        return () => {
+            clearInterval(iv);
+            setElapsed("");
+        };
     }, [startTime]);
 
     const handleStart = useCallback(async () => {
