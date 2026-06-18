@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 
-interface ServerStatus { running: boolean; port: number; }
+interface ServerStatus {
+    running: boolean;
+    port: number;
+}
 
 interface Props {
     addToast: (msg: string, err?: boolean) => void;
-    onAbout:  () => void;
+    onAbout: () => void;
 }
 
 export default function Overview({ addToast, onAbout }: Props) {
@@ -20,7 +23,9 @@ export default function Overview({ addToast, onAbout }: Props) {
         try {
             const s = await invoke<ServerStatus>("get_server_status");
             setStatus(s);
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }, []);
 
     useEffect(() => {
@@ -30,13 +35,19 @@ export default function Overview({ addToast, onAbout }: Props) {
     }, [refreshStatus]);
 
     useEffect(() => {
-        if (!status.running) { setStartTime(null); return; }
+        if (!status.running) {
+            setStartTime(null);
+            return;
+        }
         if (!startTime) setStartTime(new Date());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status.running]);
 
     useEffect(() => {
-        if (!startTime) { setElapsed(""); return; }
+        if (!startTime) {
+            setElapsed("");
+            return;
+        }
         const iv = setInterval(() => {
             const secs = Math.floor((Date.now() - startTime.getTime()) / 1000);
             const h = Math.floor(secs / 3600);
@@ -54,8 +65,11 @@ export default function Overview({ addToast, onAbout }: Props) {
             setStatus({ running: true, port });
             setStartTime(new Date());
             addToast(t("toast_started", { port }));
-        } catch (e) { addToast(String(e), true); }
-        finally { setBusy(false); }
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setBusy(false);
+        }
     }, [addToast, t]);
 
     const handleStop = useCallback(async () => {
@@ -65,8 +79,11 @@ export default function Overview({ addToast, onAbout }: Props) {
             setStatus((s) => ({ ...s, running: false }));
             setStartTime(null);
             addToast(t("toast_stopped"));
-        } catch (e) { addToast(String(e), true); }
-        finally { setBusy(false); }
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setBusy(false);
+        }
     }, [addToast, t]);
 
     const handleRestart = useCallback(async () => {
@@ -76,18 +93,27 @@ export default function Overview({ addToast, onAbout }: Props) {
             setStatus({ running: true, port });
             setStartTime(new Date());
             addToast(t("toast_restarted", { port }));
-        } catch (e) { addToast(String(e), true); }
-        finally { setBusy(false); }
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setBusy(false);
+        }
     }, [addToast, t]);
 
     const handleOpenFolder = useCallback(async () => {
-        try { await invoke("open_config_folder"); }
-        catch (e) { addToast(String(e), true); }
+        try {
+            await invoke("open_config_folder");
+        } catch (e) {
+            addToast(String(e), true);
+        }
     }, [addToast]);
 
     const handleEditConfig = useCallback(async () => {
-        try { await invoke("edit_config"); }
-        catch (e) { addToast(String(e), true); }
+        try {
+            await invoke("edit_config");
+        } catch (e) {
+            addToast(String(e), true);
+        }
     }, [addToast]);
 
     return (
@@ -100,7 +126,9 @@ export default function Overview({ addToast, onAbout }: Props) {
                     <div>
                         <div className="overview-hero-title">{t("ov_service")}</div>
                         <div style={{ marginTop: 8 }}>
-                            <span className={`status-badge ${status.running ? "running" : "stopped"}`}>
+                            <span
+                                className={`status-badge ${status.running ? "running" : "stopped"}`}
+                            >
                                 <span className="status-dot" />
                                 {status.running ? t("ov_running") : t("ov_stopped")}
                             </span>
@@ -108,11 +136,19 @@ export default function Overview({ addToast, onAbout }: Props) {
                     </div>
                     <div className="overview-actions">
                         {!status.running ? (
-                            <button className="btn btn-primary" onClick={handleStart} disabled={busy}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleStart}
+                                disabled={busy}
+                            >
                                 {t("ov_start")}
                             </button>
                         ) : (
-                            <button className="btn btn-danger" onClick={handleStop} disabled={busy}>
+                            <button
+                                className="btn btn-danger"
+                                onClick={handleStop}
+                                disabled={busy}
+                            >
                                 {t("ov_stop")}
                             </button>
                         )}
@@ -139,7 +175,9 @@ export default function Overview({ addToast, onAbout }: Props) {
             </div>
 
             {/* Config actions */}
-            <div className="settings-group-title" style={{ marginTop: 0 }}>{t("ov_config")}</div>
+            <div className="settings-group-title" style={{ marginTop: 0 }}>
+                {t("ov_config")}
+            </div>
             <div
                 style={{
                     background: "var(--surface)",
@@ -155,8 +193,12 @@ export default function Overview({ addToast, onAbout }: Props) {
                         <div className="row-desc">{t("ov_config_file_desc")}</div>
                     </div>
                     <div className="row-control">
-                        <button className="btn" onClick={handleOpenFolder}>{t("open_dir")}</button>
-                        <button className="btn" onClick={handleEditConfig}>{t("ov_edit_config")}</button>
+                        <button className="btn" onClick={handleOpenFolder}>
+                            {t("open_dir")}
+                        </button>
+                        <button className="btn" onClick={handleEditConfig}>
+                            {t("ov_edit_config")}
+                        </button>
                     </div>
                 </div>
                 <div className="row">
@@ -176,7 +218,9 @@ export default function Overview({ addToast, onAbout }: Props) {
                         <div className="row-desc">{t("ov_about_desc")}</div>
                     </div>
                     <div className="row-control">
-                        <button className="btn" onClick={onAbout}>{t("ov_view")}</button>
+                        <button className="btn" onClick={onAbout}>
+                            {t("ov_view")}
+                        </button>
                     </div>
                 </div>
             </div>

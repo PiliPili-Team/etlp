@@ -3,10 +3,7 @@ import { usePlatform } from "./hooks/usePlatform";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { I18nProvider, useI18n } from "./i18n";
-import {
-    type DisplaySettings,
-    loadDisplay, applyDisplay,
-} from "./display";
+import { type DisplaySettings, loadDisplay, applyDisplay } from "./display";
 import Overview from "./pages/Overview";
 import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
@@ -17,8 +14,16 @@ export type { ThemeMode, LangMode, AccentColor, DisplaySettings } from "./displa
 
 function IconOverview() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <rect x="2.5" y="2.5" width="6" height="6" rx="1.5" />
             <rect x="11.5" y="2.5" width="6" height="3.5" rx="1.5" />
             <rect x="11.5" y="9" width="6" height="8.5" rx="1.5" />
@@ -29,8 +34,16 @@ function IconOverview() {
 
 function IconPlayer() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <circle cx="10" cy="10" r="7.5" />
             <polygon points="8.5,7 14,10 8.5,13" fill="currentColor" stroke="none" />
         </svg>
@@ -39,8 +52,16 @@ function IconPlayer() {
 
 function IconVersionPrefer() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <line x1="3" y1="5.5" x2="17" y2="5.5" />
             <line x1="3" y1="10" x2="17" y2="10" />
             <line x1="3" y1="14.5" x2="11" y2="14.5" />
@@ -51,8 +72,16 @@ function IconVersionPrefer() {
 
 function IconNetwork() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <circle cx="10" cy="10" r="7.5" />
             <path d="M2.5 10h15M10 2.5c-2.8 2.2-4.5 4.7-4.5 7.5s1.7 5.3 4.5 7.5M10 2.5c2.8 2.2 4.5 4.7 4.5 7.5s-1.7 5.3-4.5 7.5" />
         </svg>
@@ -61,8 +90,16 @@ function IconNetwork() {
 
 function IconSystem() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <circle cx="10" cy="10" r="2.8" />
             <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" />
         </svg>
@@ -71,8 +108,16 @@ function IconSystem() {
 
 function IconLogs() {
     return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6"
-            strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+        <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="18"
+            height="18"
+        >
             <rect x="3" y="3" width="14" height="14" rx="2.5" />
             <line x1="6" y1="7" x2="14" y2="7" />
             <line x1="6" y1="10.5" x2="14" y2="10.5" />
@@ -83,7 +128,11 @@ function IconLogs() {
 
 // ── Toast ───────────────────────────────────────────────────────────────────────
 
-export interface Toast { id: number; message: string; error: boolean; }
+export interface Toast {
+    id: number;
+    message: string;
+    error: boolean;
+}
 
 // ── About modal ─────────────────────────────────────────────────────────────────
 
@@ -92,47 +141,81 @@ function AboutModal({ onClose }: { onClose: () => void }) {
     const [version, setVersion] = useState("0.1.0");
 
     useEffect(() => {
-        invoke<string>("get_app_version").then(setVersion).catch(() => {});
+        invoke<string>("get_app_version")
+            .then(setVersion)
+            .catch(() => {});
     }, []);
 
     const openLink = async (url: string) => {
-        try { await openUrl(url); } catch { window.open(url, "_blank"); }
+        try {
+            await openUrl(url);
+        } catch {
+            window.open(url, "_blank");
+        }
     };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
-                <button className="modal-close" onClick={onClose}>✕</button>
+            <div
+                className="modal-card"
+                onClick={(e) => e.stopPropagation()}
+                style={{ position: "relative" }}
+            >
+                <button className="modal-close" onClick={onClose}>
+                    ✕
+                </button>
 
                 <img
                     className="about-icon"
                     src="/app-icon.png"
                     alt="etlp icon"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                    }}
                 />
 
                 <div className="about-name">{t("app_name")}</div>
-                <div className="about-version">{t("about_version_label")} {version}</div>
+                <div className="about-version">
+                    {t("about_version_label")} {version}
+                </div>
 
                 <div className="about-links">
                     <button
                         className="about-link-btn"
                         title="GitHub"
-                        onClick={() => void openLink("https://github.com/PiliPili-Team/etlp")}
+                        onClick={() =>
+                            void openLink("https://github.com/PiliPili-Team/etlp")
+                        }
                     >
-                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12c0-5.523-4.477-10-10-10z"/>
+                        <svg
+                            viewBox="0 0 24 24"
+                            width="22"
+                            height="22"
+                            fill="currentColor"
+                        >
+                            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12c0-5.523-4.477-10-10-10z" />
                         </svg>
                     </button>
                     <button
                         className="about-link-btn"
                         title="Greasy Fork (Tampermonkey)"
-                        onClick={() => void openLink("https://greasyfork.org/zh-CN/scripts/448648-embytolocalplayer")}
+                        onClick={() =>
+                            void openLink(
+                                "https://greasyfork.org/zh-CN/scripts/448648-embytolocalplayer",
+                            )
+                        }
                     >
                         {/* Tampermonkey-style userscript icon */}
-                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
-                            stroke="currentColor" strokeWidth="1.6"
-                            strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                            viewBox="0 0 24 24"
+                            width="22"
+                            height="22"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
                             <circle cx="12" cy="12" r="9" />
                             <path d="M9 9.5a3 3 0 1 1 6 0c0 1.3-.82 2.4-2 2.83V15h-2v-2.67C9.82 11.9 9 10.8 9 9.5Z" />
                             <line x1="10.5" y1="16.5" x2="13.5" y2="16.5" />
@@ -148,7 +231,9 @@ function AboutModal({ onClose }: { onClose: () => void }) {
                             href="#"
                             onClick={(e) => {
                                 e.preventDefault();
-                                void openLink("https://github.com/kjtsune/embyToLocalPlayer");
+                                void openLink(
+                                    "https://github.com/kjtsune/embyToLocalPlayer",
+                                );
                             }}
                         >
                             embyToLocalPlayer
@@ -169,10 +254,17 @@ function AboutModal({ onClose }: { onClose: () => void }) {
 type TabId = "overview" | "player" | "version-prefer" | "network" | "system" | "logs";
 
 const LAST_TAB_KEY = "etlp-last-tab";
-const VALID_TABS: TabId[] = ["overview", "player", "version-prefer", "network", "system", "logs"];
+const VALID_TABS: TabId[] = [
+    "overview",
+    "player",
+    "version-prefer",
+    "network",
+    "system",
+    "logs",
+];
 
 interface AppInnerProps {
-    display:         DisplaySettings;
+    display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
 }
 
@@ -181,7 +273,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const platform = usePlatform();
     const [tab, setTab] = useState<TabId>(() => {
         const saved = localStorage.getItem(LAST_TAB_KEY) as TabId | null;
-        return (saved && VALID_TABS.includes(saved)) ? saved : "overview";
+        return saved && VALID_TABS.includes(saved) ? saved : "overview";
     });
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [showAbout, setShowAbout] = useState(false);
@@ -195,9 +287,13 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         import("@tauri-apps/api/event").then(({ listen }) => {
-            listen("show-about", () => setShowAbout(true)).then((fn) => { unlisten = fn; });
+            listen("show-about", () => setShowAbout(true)).then((fn) => {
+                unlisten = fn;
+            });
         });
-        return () => { unlisten?.(); };
+        return () => {
+            unlisten?.();
+        };
     }, []);
 
     const handleTabChange = useCallback((id: TabId) => {
@@ -214,19 +310,35 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const isMac = platform === "macos";
 
     const NAV_SECTIONS = [
-        { items: [{ id: "overview" as TabId, icon: <IconOverview />, label: t("nav_overview") }] },
+        {
+            items: [
+                {
+                    id: "overview" as TabId,
+                    icon: <IconOverview />,
+                    label: t("nav_overview"),
+                },
+            ],
+        },
         {
             label: t("nav_sec_play"),
             items: [
-                { id: "player" as TabId,         icon: <IconPlayer />,        label: t("nav_player") },
-                { id: "version-prefer" as TabId, icon: <IconVersionPrefer />, label: t("nav_version_prefer") },
+                { id: "player" as TabId, icon: <IconPlayer />, label: t("nav_player") },
+                {
+                    id: "version-prefer" as TabId,
+                    icon: <IconVersionPrefer />,
+                    label: t("nav_version_prefer"),
+                },
             ],
         },
         {
             label: t("nav_sec_config"),
             items: [
-                { id: "network" as TabId, icon: <IconNetwork />, label: t("nav_network") },
-                { id: "system" as TabId,  icon: <IconSystem />,  label: t("nav_system") },
+                {
+                    id: "network" as TabId,
+                    icon: <IconNetwork />,
+                    label: t("nav_network"),
+                },
+                { id: "system" as TabId, icon: <IconSystem />, label: t("nav_system") },
             ],
         },
         {
@@ -249,7 +361,9 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                     {NAV_SECTIONS.map((section, si) => (
                         <div key={si}>
                             {section.label && (
-                                <div className="sidebar-section-label">{section.label}</div>
+                                <div className="sidebar-section-label">
+                                    {section.label}
+                                </div>
                             )}
                             {section.items.map((item) => (
                                 <div
@@ -267,10 +381,15 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 
                 <main className="content">
                     {tab === "overview" && (
-                        <Overview addToast={addToast} onAbout={() => setShowAbout(true)} />
+                        <Overview
+                            addToast={addToast}
+                            onAbout={() => setShowAbout(true)}
+                        />
                     )}
-                    {(tab === "player" || tab === "version-prefer"
-                        || tab === "network" || tab === "system") && (
+                    {(tab === "player" ||
+                        tab === "version-prefer" ||
+                        tab === "network" ||
+                        tab === "system") && (
                         <Settings
                             section={tab}
                             addToast={addToast}
@@ -284,7 +403,9 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 
             <div className="toast-area">
                 {toasts.map((tst) => (
-                    <div key={tst.id} className={`toast${tst.error ? " error" : ""}`}>{tst.message}</div>
+                    <div key={tst.id} className={`toast${tst.error ? " error" : ""}`}>
+                        {tst.message}
+                    </div>
                 ))}
             </div>
 
