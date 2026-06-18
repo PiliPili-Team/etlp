@@ -21,11 +21,12 @@ pub use path::{
 pub fn activate_window_by_pid(_pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+        use windows::Win32::Foundation::{HWND, LPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{
             EnumWindows, GetWindowThreadProcessId, SW_RESTORE,
             SetForegroundWindow, ShowWindow,
         };
+        use windows::core::BOOL;
 
         unsafe extern "system" fn find_and_activate(
             hwnd: HWND,
