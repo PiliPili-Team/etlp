@@ -181,7 +181,8 @@ async fn stop_sec_pot_win32(pid: u32) -> Option<i64> {
                     let mut win_pid: u32 = 0;
                     GetWindowThreadProcessId(hwnd, &mut win_pid);
                     if win_pid == *target_pid {
-                        let ms = SendMessageW(hwnd, POT_GET_CUR_TIME, 0x5004, 1);
+                        let ms =
+                            SendMessageW(hwnd, POT_GET_CUR_TIME, 0x5004, 1);
                         if ms > 0 {
                             if let Ok(mut g) = found.lock() {
                                 *g = true;
