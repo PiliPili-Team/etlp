@@ -320,6 +320,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
     let ipc_str = ipc.path.to_string_lossy();
     cmd.push(format!("--input-ipc-server={ipc_str}"));
     cmd.push("--script-opts-append=autoload-disabled=yes".into());
+    cmd.push("--msg-level=ffmpeg=no".into());
 
     if args.fullscreen {
         cmd.push("--fullscreen=yes".into());
