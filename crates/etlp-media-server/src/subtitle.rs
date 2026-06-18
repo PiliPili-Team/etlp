@@ -73,13 +73,13 @@ pub fn subtitle_checker(
         .collect();
 
     // -1 with no external but some embedded: pick embedded by priority.
-    if sub_index == -1 && external.is_empty() && !inner.is_empty() {
-        if let Some(global) = best_by_priority(&inner, priority) {
-            let pos = inner.iter().position(|(gi, _)| *gi == global);
-            if let Some(pos) = pos {
-                result.sub_inner_idx = (pos + 1) as i64;
-            }
-        }
+    if sub_index == -1
+        && external.is_empty()
+        && !inner.is_empty()
+        && let Some(global) = best_by_priority(&inner, priority)
+        && let Some(pos) = inner.iter().position(|(gi, _)| *gi == global)
+    {
+        result.sub_inner_idx = (pos + 1) as i64;
     }
 
     // Explicit selection.

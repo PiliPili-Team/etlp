@@ -24,12 +24,11 @@ pub fn locate_current(
     episodes: &[PlaybackData],
     current: &PlaybackData,
 ) -> Option<usize> {
-    if !current.item_id.is_empty() {
-        if let Some(idx) =
+    if !current.item_id.is_empty()
+        && let Some(idx) =
             episodes.iter().position(|e| e.item_id == current.item_id)
-        {
-            return Some(idx);
-        }
+    {
+        return Some(idx);
     }
     if current.basename.is_empty() {
         return None;

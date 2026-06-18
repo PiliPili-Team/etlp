@@ -214,14 +214,14 @@ fn pick_source<'a>(
     is_emby: bool,
     version_prefer: &[String],
 ) -> Result<(&'a MediaSource, String), ParseError> {
-    if let Some(id) = requested_id {
-        if id != "undefined" {
-            let found = sources
-                .iter()
-                .find(|s| s.id == id)
-                .ok_or(ParseError::NoMediaSource)?;
-            return Ok((found, id.to_owned()));
-        }
+    if let Some(id) = requested_id
+        && id != "undefined"
+    {
+        let found = sources
+            .iter()
+            .find(|s| s.id == id)
+            .ok_or(ParseError::NoMediaSource)?;
+        return Ok((found, id.to_owned()));
     }
     let index = if sources.len() > 1 && is_emby {
         let http_first =
@@ -256,10 +256,10 @@ fn correct_multi_version_path(
     }
     for ep in &received.extra_data.episodes_info {
         for source in &ep.media_sources {
-            if source.id == media_source_id {
-                if let Some(path) = ep.path.as_deref() {
-                    return path.to_owned();
-                }
+            if source.id == media_source_id
+                && let Some(path) = ep.path.as_deref()
+            {
+                return path.to_owned();
             }
         }
     }
@@ -403,11 +403,10 @@ pub async fn parse_received_data_emby(
                 stream_url = resolved;
             }
         }
-        if matches(&stream_netloc, &config.stream_prefix) {
-            if let Some(prefix) = config.stream_prefix.first() {
-                stream_url =
-                    format!("{}{stream_url}", prefix.trim_matches('/'));
-            }
+        if matches(&stream_netloc, &config.stream_prefix)
+            && let Some(prefix) = config.stream_prefix.first()
+        {
+            stream_url = format!("{}{stream_url}", prefix.trim_matches('/'));
         }
     }
 

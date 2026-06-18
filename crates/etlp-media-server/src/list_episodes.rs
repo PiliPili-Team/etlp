@@ -64,10 +64,10 @@ fn scan_errors(fetched: &[Item]) -> EpisodeErrors<'_> {
         if item.index_number.is_none() {
             errors.index_missing = true;
         }
-        if missing_path {
-            if let Some(source) = item.media_sources.first() {
-                errors.path_error_source_ids.push(source.id.as_str());
-            }
+        if missing_path
+            && let Some(source) = item.media_sources.first()
+        {
+            errors.path_error_source_ids.push(source.id.as_str());
         }
     }
     errors
@@ -206,17 +206,17 @@ fn apply_stream_rewrites(
         }
     }
 
-    if matches(&base.netloc, &config.stream_prefix) {
-        if let Some(prefix) = config.stream_prefix.first() {
-            let prefix = prefix.trim_matches('/');
-            for ep in result.iter_mut() {
-                if ep.stream_url.starts_with(prefix) {
-                    continue;
-                }
-                ep.stream_url = format!("{prefix}{}", ep.stream_url);
-                if !base.mount_disk_mode {
-                    ep.media_path = ep.stream_url.clone();
-                }
+    if matches(&base.netloc, &config.stream_prefix)
+        && let Some(prefix) = config.stream_prefix.first()
+    {
+        let prefix = prefix.trim_matches('/');
+        for ep in result.iter_mut() {
+            if ep.stream_url.starts_with(prefix) {
+                continue;
+            }
+            ep.stream_url = format!("{prefix}{}", ep.stream_url);
+            if !base.mount_disk_mode {
+                ep.media_path = ep.stream_url.clone();
             }
         }
     }

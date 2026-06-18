@@ -281,14 +281,14 @@ pub fn version_filter(
     // Files derived from a raw original (S01E01.mkv -> S01E01 - ver.mkv).
     if curr_count > 1 {
         let group = episodes.get(curr_raw_index..curr_raw_index + curr_count);
-        if let Some((shortest, true)) = group.and_then(shortest_episode) {
-            if shortest.path.as_deref() == Some(input.file_path) {
-                let raw = filter_by_raw_name(episodes);
-                if let Some(idx) = raw.iter().position(|e| e == ep_current) {
-                    if raw.get(idx + 1..).is_some_and(|r| !r.is_empty()) {
-                        return raw;
-                    }
-                }
+        if let Some((shortest, true)) = group.and_then(shortest_episode)
+            && shortest.path.as_deref() == Some(input.file_path)
+        {
+            let raw = filter_by_raw_name(episodes);
+            if let Some(idx) = raw.iter().position(|e| e == ep_current)
+                && raw.get(idx + 1..).is_some_and(|r| !r.is_empty())
+            {
+                return raw;
             }
         }
     }

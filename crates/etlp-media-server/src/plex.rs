@@ -144,10 +144,10 @@ fn pick_subtitle_key(
         .iter()
         .filter(|s| s.stream_type == SUBTITLE_STREAM_TYPE && s.key.is_some())
         .collect();
-    if is_first {
-        if let Some(sel) = subs.iter().find(|s| s.selected) {
-            return sel.key.clone();
-        }
+    if is_first
+        && let Some(sel) = subs.iter().find(|s| s.selected)
+    {
+        return sel.key.clone();
     }
     // First item with no selection, or any later item: match by priority.
     subs.iter()
