@@ -1,21 +1,18 @@
-import { platform as getPlatform } from "@tauri-apps/plugin-os";
-
 export type Platform = "macos" | "windows" | "linux" | "unknown";
 
-// platform() is synchronous in @tauri-apps/plugin-os v2.
 let _cached: Platform | null = null;
 
+function detectFromUA(): Platform {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes("mac os x") || ua.includes("macintosh")) return "macos";
+    if (ua.includes("windows nt")) return "windows";
+    if (ua.includes("linux")) return "linux";
+    return "unknown";
+}
+
 export function usePlatform(): Platform {
-    if (_cached !== null) return _cached;
-    try {
-        const p = getPlatform();
-        if (p === "macos" || p === "windows" || p === "linux") {
-            _cached = p;
-        } else {
-            _cached = "unknown";
-        }
-    } catch {
-        _cached = "unknown";
+    if (_cached === null) {
+        _cached = detectFromUA();
     }
     return _cached;
 }

@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useI18n } from "../i18n";
 
-interface ServerStatus {
-    running: boolean;
-    port: number;
-}
+interface ServerStatus { running: boolean; port: number; }
 
 interface Props {
     addToast: (msg: string, err?: boolean) => void;
+    onAbout:  () => void;
 }
 
-export default function Overview({ addToast }: Props) {
+export default function Overview({ addToast, onAbout }: Props) {
+    const t = useI18n();
     const [status, setStatus] = useState<ServerStatus>({ running: false, port: 58000 });
     const [busy, setBusy] = useState(false);
     const [startTime, setStartTime] = useState<Date | null>(null);
@@ -29,10 +29,10 @@ export default function Overview({ addToast }: Props) {
         return () => clearInterval(iv);
     }, [refreshStatus]);
 
-    // Uptime counter
     useEffect(() => {
         if (!status.running) { setStartTime(null); return; }
         if (!startTime) setStartTime(new Date());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status.running]);
 
     useEffect(() => {
@@ -42,13 +42,7 @@ export default function Overview({ addToast }: Props) {
             const h = Math.floor(secs / 3600);
             const m = Math.floor((secs % 3600) / 60);
             const s = secs % 60;
-            setElapsed(
-                h > 0
-                    ? `${h}h ${m}m ${s}s`
-                    : m > 0
-                    ? `${m}m ${s}s`
-                    : `${s}s`,
-            );
+            setElapsed(h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`);
         }, 1000);
         return () => clearInterval(iv);
     }, [startTime]);
@@ -59,13 +53,10 @@ export default function Overview({ addToast }: Props) {
             const port = await invoke<number>("start_server");
             setStatus({ running: true, port });
             setStartTime(new Date());
-            addToast(`服务已启动，端口 ${port}`);
-        } catch (e) {
-            addToast(String(e), true);
-        } finally {
-            setBusy(false);
-        }
-    }, [addToast]);
+            addToast(t("toast_started", { port }));
+        } catch (e) { addToast(String(e), true); }
+        finally { setBusy(false); }
+    }, [addToast, t]);
 
     const handleStop = useCallback(async () => {
         setBusy(true);
@@ -73,22 +64,21 @@ export default function Overview({ addToast }: Props) {
             await invoke("stop_server");
             setStatus((s) => ({ ...s, running: false }));
             setStartTime(null);
-            addToast("服务已停止");
-        } catch (e) {
-            addToast(String(e), true);
-        } finally {
-            setBusy(false);
-        }
-    }, [addToast]);
+            addToast(t("toast_stopped"));
+        } catch (e) { addToast(String(e), true); }
+        finally { setBusy(false); }
+    }, [addToast, t]);
 
-    const handleReload = useCallback(async () => {
+    const handleRestart = useCallback(async () => {
+        setBusy(true);
         try {
-            await invoke("reload_config");
-            addToast("配置已重新加载");
-        } catch (e) {
-            addToast(String(e), true);
-        }
-    }, [addToast]);
+            const port = await invoke<number>("restart_server");
+            setStatus({ running: true, port });
+            setStartTime(new Date());
+            addToast(t("toast_restarted", { port }));
+        } catch (e) { addToast(String(e), true); }
+        finally { setBusy(false); }
+    }, [addToast, t]);
 
     const handleOpenFolder = useCallback(async () => {
         try { await invoke("open_config_folder"); }
@@ -102,38 +92,28 @@ export default function Overview({ addToast }: Props) {
 
     return (
         <>
-            <div className="page-title">概览</div>
+            <div className="page-title">{t("page_overview")}</div>
 
             {/* Hero card */}
             <div className="overview-hero">
                 <div className="overview-hero-header">
                     <div>
-                        <div className="overview-hero-title">本地服务</div>
-                        <div style={{ marginTop: 6 }}>
-                            <span
-                                className={`status-badge ${status.running ? "running" : "stopped"}`}
-                            >
+                        <div className="overview-hero-title">{t("ov_service")}</div>
+                        <div style={{ marginTop: 8 }}>
+                            <span className={`status-badge ${status.running ? "running" : "stopped"}`}>
                                 <span className="status-dot" />
-                                {status.running ? "运行中" : "已停止"}
+                                {status.running ? t("ov_running") : t("ov_stopped")}
                             </span>
                         </div>
                     </div>
                     <div className="overview-actions">
                         {!status.running ? (
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleStart}
-                                disabled={busy}
-                            >
-                                启动
+                            <button className="btn btn-primary" onClick={handleStart} disabled={busy}>
+                                {t("ov_start")}
                             </button>
                         ) : (
-                            <button
-                                className="btn btn-danger"
-                                onClick={handleStop}
-                                disabled={busy}
-                            >
-                                停止
+                            <button className="btn btn-danger" onClick={handleStop} disabled={busy}>
+                                {t("ov_stop")}
                             </button>
                         )}
                     </div>
@@ -141,59 +121,62 @@ export default function Overview({ addToast }: Props) {
 
                 <div className="overview-meta">
                     <div className="meta-item">
-                        <div className="meta-label">端口</div>
-                        <div>
-                            <span className="meta-value">{status.port}</span>
-                        </div>
+                        <div className="meta-label">{t("ov_port")}</div>
+                        <div className="meta-value">{status.port}</div>
+                        <div className="meta-sub">{t("ov_port_desc")}</div>
                     </div>
                     <div className="meta-item">
-                        <div className="meta-label">运行时间</div>
-                        <div>
-                            <span className="meta-value" style={{ fontSize: 15 }}>
-                                {elapsed || (status.running ? "—" : "—")}
-                            </span>
-                        </div>
+                        <div className="meta-label">{t("ov_uptime")}</div>
+                        <div className="meta-value">{elapsed || "—"}</div>
+                        <div className="meta-sub">{t("ov_uptime_desc")}</div>
                     </div>
                     <div className="meta-item">
-                        <div className="meta-label">监听地址</div>
-                        <div>
-                            <span className="meta-value" style={{ fontSize: 13 }}>
-                                127.0.0.1
-                            </span>
-                        </div>
+                        <div className="meta-label">{t("ov_address")}</div>
+                        <div className="meta-value">127.0.0.1</div>
+                        <div className="meta-sub">{t("ov_address_desc")}</div>
                     </div>
                 </div>
             </div>
 
             {/* Config actions */}
-            <div className="settings-group">
+            <div className="settings-group-title" style={{ marginTop: 0 }}>{t("ov_config")}</div>
+            <div
+                style={{
+                    background: "var(--surface)",
+                    borderRadius: 12,
+                    boxShadow: "var(--shadow-sm)",
+                    overflow: "hidden",
+                    marginBottom: 14,
+                }}
+            >
                 <div className="row">
                     <div className="row-label">
-                        <div>配置文件</div>
-                        <div className="row-desc">查看或编辑当前配置</div>
+                        <div>{t("ov_config_file")}</div>
+                        <div className="row-desc">{t("ov_config_file_desc")}</div>
                     </div>
                     <div className="row-control">
-                        <button className="btn" onClick={handleOpenFolder}>
-                            打开目录
-                        </button>
-                        <button className="btn" onClick={handleEditConfig}>
-                            编辑配置
-                        </button>
+                        <button className="btn" onClick={handleOpenFolder}>{t("open_dir")}</button>
+                        <button className="btn" onClick={handleEditConfig}>{t("ov_edit_config")}</button>
                     </div>
                 </div>
                 <div className="row">
                     <div className="row-label">
-                        <div>重新加载</div>
-                        <div className="row-desc">从磁盘重新读取配置，立即生效</div>
+                        <div>{t("ov_restart")}</div>
+                        <div className="row-desc">{t("ov_restart_desc")}</div>
                     </div>
                     <div className="row-control">
-                        <button
-                            className="btn"
-                            onClick={handleReload}
-                            disabled={!status.running}
-                        >
-                            重新加载
+                        <button className="btn" onClick={handleRestart} disabled={busy}>
+                            {t("ov_restart")}
                         </button>
+                    </div>
+                </div>
+                <div className="row" style={{ borderBottom: "none" }}>
+                    <div className="row-label">
+                        <div>{t("ov_about")}</div>
+                        <div className="row-desc">{t("ov_about_desc")}</div>
+                    </div>
+                    <div className="row-control">
+                        <button className="btn" onClick={onAbout}>{t("ov_view")}</button>
                     </div>
                 </div>
             </div>

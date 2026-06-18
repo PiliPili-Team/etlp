@@ -5,10 +5,55 @@ pub mod config_patch;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 use commands::GuiState;
+
+// ── Language helpers ──────────────────────────────────────────────────────────
+
+fn sys_is_chinese() -> bool {
+    let lang = std::env::var("LANG")
+        .or_else(|_| std::env::var("LC_ALL"))
+        .unwrap_or_default()
+        .to_lowercase();
+    lang.starts_with("zh")
+}
+
+struct TrayLabels {
+    show:         &'static str,
+    start:        &'static str,
+    stop:         &'static str,
+    reload:       &'static str,
+    about:        &'static str,
+    quit:         &'static str,
+}
+
+impl TrayLabels {
+    fn detect() -> Self {
+        if sys_is_chinese() {
+            Self {
+                show:   "显示主界面",
+                start:  "启动服务",
+                stop:   "停止服务",
+                reload: "重载配置",
+                about:  "关于",
+                quit:   "退出",
+            }
+        } else {
+            Self {
+                show:   "Show Window",
+                start:  "Start Service",
+                stop:   "Stop Service",
+                reload: "Reload Config",
+                about:  "About",
+                quit:   "Quit",
+            }
+        }
+    }
+}
+
+// ── PATH augmentation (macOS) ─────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
 fn augment_path() {
@@ -31,6 +76,30 @@ fn augment_path() {
 
 #[cfg(not(target_os = "macos"))]
 fn augment_path() {}
+
+// ── Tray menu builder ─────────────────────────────────────────────────────────
+
+fn build_tray_menu(
+    app: &impl tauri::Manager<tauri::Wry>,
+    labels: &TrayLabels,
+    running: bool,
+) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    let show   = MenuItemBuilder::with_id("show",   labels.show).build(app)?;
+    let toggle = MenuItemBuilder::with_id(
+        "toggle",
+        if running { labels.stop } else { labels.start },
+    )
+    .build(app)?;
+    let reload = MenuItemBuilder::with_id("reload", labels.reload).build(app)?;
+    let about  = MenuItemBuilder::with_id("about",  labels.about).build(app)?;
+    let quit   = MenuItemBuilder::with_id("quit",   labels.quit).build(app)?;
+
+    MenuBuilder::new(app)
+        .items(&[&show, &toggle, &reload, &about, &quit])
+        .build()
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run() {
     augment_path();
@@ -69,12 +138,13 @@ pub fn run() {
 
     let gui_state = {
         let s = GuiState::default();
-        // Store the resolved log file path so get_log_lines knows where to read.
         if let Ok(mut lf) = s.log_file.lock() {
             *lf = log_file;
         }
         s
     };
+
+    let labels = TrayLabels::detect();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -87,45 +157,83 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(gui_state)
         .setup(move |app| {
             let (tray_buf, tray_w, tray_h) = tray_rgba;
-            let show =
-                MenuItemBuilder::with_id("show", "Show Window").build(app)?;
-            let hide =
-                MenuItemBuilder::with_id("hide", "Hide Window").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
 
-            let menu = MenuBuilder::new(app)
-                .items(&[&show, &hide, &quit])
-                .build()?;
-
+            // ── Tray icon ──────────────────────────────────────────────────────
             let tray_img = tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
+            let menu = build_tray_menu(app.handle(), &labels, false)?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(tray_img)
                 .icon_as_template(true)
                 .tooltip("etlp")
                 .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                .on_menu_event(|app, event| {
+                        let state = app.state::<GuiState>();
+                        match event.id().as_ref() {
+                            "show" => {
+                                if let Some(w) = app.get_webview_window("main") {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                            "toggle" => {
+                                let running = state.running.load(std::sync::atomic::Ordering::Acquire);
+                                let app_c = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let state2 = app_c.state::<GuiState>();
+                                    if running {
+                                        let _ = commands::stop_server(state2).await;
+                                    } else {
+                                        let _ = commands::start_server(state2).await;
+                                    }
+                                    // Rebuild menu to reflect new state
+                                    let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
+                                    if let Some(tray) = app_c.tray_by_id("") {
+                                        if let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
+                                            let _ = tray.set_menu(Some(m));
+                                        }
+                                    }
+                                });
+                            }
+                            "reload" => {
+                                let app_c = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let state2 = app_c.state::<GuiState>();
+                                    let _ = commands::restart_server(state2).await;
+                                    let new_running = app_c.state::<GuiState>().running.load(std::sync::atomic::Ordering::Acquire);
+                                    if let Some(tray) = app_c.tray_by_id("") {
+                                        if let Ok(m) = build_tray_menu(&app_c, &TrayLabels::detect(), new_running) {
+                                            let _ = tray.set_menu(Some(m));
+                                        }
+                                    }
+                                });
+                            }
+                            "about" => {
+                                // Bring window to front and signal frontend to open about modal
+                                if let Some(w) = app.get_webview_window("main") {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                                app.emit("show-about", ()).ok();
+                            }
+                            "quit" => app.exit(0),
+                            _ => {}
                         }
-                    }
-                    "hide" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.hide();
-                        }
-                    }
-                    "quit" => app.exit(0),
-                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     use tauri::tray::TrayIconEvent;
-                    if let TrayIconEvent::Click { .. } = event {
+                    // Left-click: bring the window to front.
+                    // Do NOT rebuild the menu here — rebuilding while the menu
+                    // animation is in progress causes visible flicker on macOS.
+                    if let TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left, ..
+                    } = event
+                    {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -135,11 +243,20 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // ── macOS vibrancy ─────────────────────────────────────────────────
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
+                    .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::start_server,
             commands::stop_server,
+            commands::restart_server,
             commands::get_server_status,
             commands::get_config,
             commands::update_config_field,
@@ -148,6 +265,11 @@ pub fn run() {
             commands::edit_config,
             commands::get_log_lines,
             commands::clear_log_position,
+            commands::get_log_paths,
+            commands::pick_player_path,
+            commands::path_exists,
+            commands::get_app_version,
+            commands::list_system_fonts,
             commands::set_autostart,
             commands::get_autostart,
         ])
