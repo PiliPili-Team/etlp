@@ -234,6 +234,9 @@ async fn run_player_chain(
         static_ipc: cfg.static_ipc.clone(),
         event_handler: None,
         playlist_start: launch_playlist_start,
+        mpv_log_file: kind
+            .is_mpv_family()
+            .then(|| state.working_dir.join("mpv.log")),
     };
 
     let handle_result: Result<PlayerHandle, String> = match kind {
@@ -478,10 +481,9 @@ async fn build_emby_playlist(
         is_multiple_episodes = data.is_multiple_episodes,
         "build_emby_playlist: entry",
     );
-    if !data.is_multiple_episodes {
-        debug!("build_emby_playlist: skip (is_multiple_episodes=false)");
-        return None;
-    }
+    // Always attempt to build the playlist for series episodes regardless of
+    // is_multiple_episodes — the userscript may set it false for the last
+    // episode, but we still want the full season visible in the playlist panel.
     let main = &received.extra_data.main_ep_info;
     debug!(
         series_id = ?main.series_id,
