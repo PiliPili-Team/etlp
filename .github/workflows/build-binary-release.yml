@@ -27,7 +27,7 @@ jobs:
             platform: linux
             arch: arm64
             asset: etlp-linux-arm64.tar.gz
-          - os: macos-13
+          - os: macos-latest
             target_name: macos-amd64
             platform: macos
             arch: amd64
