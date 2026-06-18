@@ -244,10 +244,17 @@ async fn run_player_chain(
         // Write playlist titles so the UI shows episode names immediately.
         for (slot, ep) in after.iter().enumerate() {
             let prop = format!("playlist/{}/title", slot + 1);
-            let _ = h
+            debug!(
+                "setting {prop} = {:?}",
+                ep.media_title
+            );
+            if let Err(e) = h
                 .client
                 .command("set_property", &[json!(prop), json!(ep.media_title)])
-                .await;
+                .await
+            {
+                warn!("set_property {prop}: {e}  (title={:?})", ep.media_title);
+            }
         }
 
         if let Err(e) = h.set_pause(false).await {
@@ -363,11 +370,28 @@ async fn build_emby_playlist(
     data: &PlaybackData,
     parse_cfg: &EmbyParseConfig,
 ) -> Option<Vec<PlaybackData>> {
+    debug!(
+        is_multiple_episodes = data.is_multiple_episodes,
+        "build_emby_playlist: entry",
+    );
     if !data.is_multiple_episodes {
+        debug!("build_emby_playlist: skip (is_multiple_episodes=false)");
         return None;
     }
     let main = &received.extra_data.main_ep_info;
-    let show_id = main.series_id.as_deref().filter(|s| !s.is_empty())?;
+    debug!(
+        series_id = ?main.series_id,
+        season_id = ?main.season_id,
+        index_number = ?main.index_number,
+        "build_emby_playlist: series ids",
+    );
+    let show_id = match main.series_id.as_deref().filter(|s| !s.is_empty()) {
+        Some(id) => id,
+        None => {
+            debug!("build_emby_playlist: skip (series_id missing or empty)");
+            return None;
+        }
+    };
     let season_id = main.season_id.as_deref();
     let base_url = format!("{}://{}", data.scheme, data.netloc);
     let emby = EmbyClient::new(
@@ -383,6 +407,10 @@ async fn build_emby_playlist(
             return None;
         }
     };
+    debug!(
+        fetched_count = fetched.items.len(),
+        "build_emby_playlist: fetched from server",
+    );
     let ctx = ListContext {
         base: data,
         episodes_info: &received.extra_data.episodes_info,
@@ -391,6 +419,10 @@ async fn build_emby_playlist(
         config: parse_cfg,
     };
     let episodes = assemble_episodes(&ctx, &fetched.items);
+    debug!(
+        assembled_count = episodes.len(),
+        "build_emby_playlist: assembled playlist",
+    );
     if episodes.is_empty() {
         None
     } else {
