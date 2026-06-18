@@ -278,6 +278,44 @@ impl TraktApi {
         }
     }
 
+    // ── OAuth Authorization Code Flow ─────────────────────────────────────────
+
+    /// Exchange an Authorization Code for an access token and persist it.
+    ///
+    /// `redirect_uri` must match the URI registered with Trakt and used when
+    /// initiating the Authorization Code flow (e.g. the `/trakt_auth` callback
+    /// URL). Saves the resulting token to disk and stores it in `self.token`.
+    pub async fn exchange_code(
+        &mut self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<TraktToken> {
+        let body = serde_json::json!({
+            "code":          code,
+            "client_id":     self.client_id,
+            "client_secret": self.client_secret,
+            "redirect_uri":  redirect_uri,
+            "grant_type":    "authorization_code",
+        });
+        let resp = self
+            .http
+            .post(self.url("oauth/token"))
+            .headers(self.base_headers())
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(SyncError::Api { status, body });
+        }
+        let token: TraktToken = resp.json().await?;
+        self.save_token(&token)?;
+        self.token = Some(token.clone());
+        info!("trakt: authorization code exchanged for token");
+        Ok(token)
+    }
+
     /// Refresh the access token using the saved refresh token.
     pub async fn refresh_token(&mut self) -> Result<()> {
         let refresh = self

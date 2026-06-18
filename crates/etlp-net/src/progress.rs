@@ -9,6 +9,92 @@ use serde_json::json;
 
 use crate::client::{HttpClient, Result};
 
+/// Realtime playback event kind for `Sessions/Playing/Progress` heartbeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackEvent {
+    /// Playback session started; maps to `Sessions/Playing`.
+    Start,
+    /// Periodic heartbeat or pause-state update; maps to `Sessions/Playing/Progress`.
+    Playing,
+    /// Playback session ended; maps to `Sessions/Playing/Stopped`.
+    End,
+}
+
+/// Send a realtime playback event to the originating server.
+///
+/// Plex and STRM media (`total_sec == 86400`) are silently skipped; the caller
+/// must check `data.runtime_missing()` if it wants to skip early.
+///
+/// On network error the result is silently discarded — the loop continues.
+pub async fn realtime_progress(
+    client: &HttpClient,
+    data: &PlaybackData,
+    pos_sec: i64,
+    event: PlaybackEvent,
+) -> Result<()> {
+    match data.server {
+        Server::Plex => Ok(()), // Plex does not use Sessions/Playing
+        Server::Emby => emby_realtime(client, data, pos_sec, event).await,
+        Server::Jellyfin => {
+            jellyfin_realtime(client, data, pos_sec, event).await
+        }
+    }
+}
+
+async fn emby_realtime(
+    client: &HttpClient,
+    data: &PlaybackData,
+    pos_sec: i64,
+    event: PlaybackEvent,
+) -> Result<()> {
+    let ticks = pos_sec * EMBY_TICKS_PER_SEC;
+    let base = format!("{}://{}/emby", data.scheme, data.netloc);
+    let params = [
+        ("X-Emby-Token", data.api_key.as_str()),
+        ("X-Emby-Device-Id", data.device_id.as_str()),
+        ("X-Emby-Client", "embyToLocalPlayer"),
+        ("X-Emby-Device-Name", "embyToLocalPlayer"),
+    ];
+    let body = json!({
+        "PositionTicks": ticks,
+        "ItemId": data.item_id,
+        "PlaySessionId": data.play_session_id,
+        "IsPaused": false,
+    });
+    let path = match event {
+        PlaybackEvent::Start => "Sessions/Playing",
+        PlaybackEvent::Playing => "Sessions/Playing/Progress",
+        PlaybackEvent::End => "Sessions/Playing/Stopped",
+    };
+    client
+        .post_json(&format!("{base}/{path}"), &params, &body)
+        .await
+}
+
+async fn jellyfin_realtime(
+    client: &HttpClient,
+    data: &PlaybackData,
+    pos_sec: i64,
+    event: PlaybackEvent,
+) -> Result<()> {
+    let ticks = pos_sec * EMBY_TICKS_PER_SEC;
+    let base = format!("{}://{}", data.scheme, data.netloc);
+    let body = json!({
+        "PositionTicks": ticks,
+        "ItemId": data.item_id,
+        "PlaySessionId": data.play_session_id,
+        "IsPaused": false,
+    });
+    let path = match event {
+        PlaybackEvent::Start => "Sessions/Playing",
+        PlaybackEvent::Playing => "Sessions/Playing/Progress",
+        PlaybackEvent::End => "Sessions/Playing/Stopped",
+    };
+    client
+        .post_json(&format!("{base}/{path}"), &[], &body)
+        .await
+}
+
 /// Seconds in 10 hours; a larger stop second is treated as corrupt and ignored.
 const MAX_STOP_SEC: i64 = 10 * 60 * 60;
 

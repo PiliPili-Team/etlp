@@ -64,11 +64,7 @@ async fn main() {
     let log_level = config.get_or("dev", "log_level", "info");
     let log_file = config.get("dev", "log_file").map(PathBuf::from);
 
-    let _ = init_logging(
-        Masker::new(mix_log),
-        log_level,
-        log_file.as_deref(),
-    );
+    let _ = init_logging(Masker::new(mix_log), log_level, log_file.as_deref());
 
     info!(
         "etlp {} starting (config={})",

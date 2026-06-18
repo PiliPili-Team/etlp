@@ -81,17 +81,77 @@ pub struct TraktAuthQuery {
 
 /// `GET /trakt_auth` – OAuth redirect callback for Trakt.
 ///
-/// If a `?code=…` parameter is present the code is logged (full Authorization
-/// Code exchange requires implementing that flow in `etlp-sync`—tracked as a
-/// TODO). Always returns 200 so the browser page renders successfully.
+/// Exchanges the `?code=…` parameter for a bearer token via the Trakt
+/// Authorization Code Flow, then persists the token. Always returns 200 so
+/// the browser page loads successfully regardless of outcome.
 pub async fn trakt_auth(
+    State(state): State<SharedState>,
     Query(q): Query<TraktAuthQuery>,
 ) -> (StatusCode, String) {
-    if let Some(code) = q.code {
-        info!("trakt_auth: received code={code:?}");
-        // TODO: exchange authorization code for token via TraktApi.
+    let Some(code) = q.code else {
+        return (StatusCode::OK, "etlp: trakt auth – no code".to_owned());
+    };
+    info!("trakt_auth: exchanging code");
+
+    let (client_id, client_secret, redirect_uri, token_path) = {
+        let cfg = match state.config.read() {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("trakt_auth: config lock poisoned: {e}");
+                return (
+                    StatusCode::OK,
+                    "etlp: trakt auth – config error".to_owned(),
+                );
+            }
+        };
+        let id = cfg.get_or("trakt", "client_id", "").to_owned();
+        let secret = cfg.get_or("trakt", "client_secret", "").to_owned();
+        let uri = cfg
+            .get_or(
+                "trakt",
+                "redirect_uri",
+                "http://localhost:58000/trakt_auth",
+            )
+            .to_owned();
+        let path = state.working_dir.join("trakt_token.json");
+        (id, secret, uri, path)
+    };
+
+    if client_id.is_empty() || client_secret.is_empty() {
+        tracing::warn!(
+            "trakt_auth: [trakt] client_id or client_secret missing"
+        );
+        return (
+            StatusCode::OK,
+            "etlp: trakt auth – credentials not configured".to_owned(),
+        );
     }
-    (StatusCode::OK, "etlp: trakt auth success".to_owned())
+
+    match etlp_sync::TraktApi::new(
+        &client_id,
+        &client_secret,
+        "",
+        &token_path,
+        "https://api.trakt.tv",
+    ) {
+        Ok(mut api) => match api.exchange_code(&code, &redirect_uri).await {
+            Ok(_) => {
+                info!("trakt_auth: token saved");
+                (StatusCode::OK, "etlp: trakt auth success".to_owned())
+            }
+            Err(e) => {
+                tracing::warn!("trakt_auth: exchange_code failed: {e}");
+                (
+                    StatusCode::OK,
+                    "etlp: trakt auth – exchange failed".to_owned(),
+                )
+            }
+        },
+        Err(e) => {
+            tracing::warn!("trakt_auth: TraktApi::new failed: {e}");
+            (StatusCode::OK, "etlp: trakt auth – init failed".to_owned())
+        }
+    }
 }
 
 // ── /openFolder ───────────────────────────────────────────────────────────────
