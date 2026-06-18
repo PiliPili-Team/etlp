@@ -456,8 +456,8 @@ pub async fn get_log_paths(
         .as_ref()
         .and_then(|d| Config::load_from_dir(d).ok())
         .and_then(|c| {
-            c.dev.mpv_input_ipc_server.as_ref().map(|_| {
-                platform::data_dir().unwrap_or_default().join("mpv.log")
+            c.dev.mpv_input_ipc_server.as_ref().and_then(|_| {
+                platform::data_dir().map(|d| d.join("mpv.log"))
             })
         });
 
