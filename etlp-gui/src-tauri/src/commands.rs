@@ -7,9 +7,9 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
-use std::sync::Arc;
 
 use tauri::State;
 use tracing::warn;
@@ -19,7 +19,7 @@ use etlp_download::{
     DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_PER_DOMAIN, DownloadManager,
 };
 use etlp_net::HttpClientBuilder;
-use etlp_server::{AppState, SharedState, build_router};
+use etlp_server::{AppState, SharedState, build_router, platform};
 
 // ── Managed state ─────────────────────────────────────────────────────────────
 
@@ -58,11 +58,17 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         return Ok(state.port.load(Ordering::Acquire));
     }
 
-    let working_dir = config_dir()?;
-    std::fs::create_dir_all(&working_dir)
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    std::fs::create_dir_all(&cfg_dir)
         .map_err(|e| format!("create config dir: {e}"))?;
 
-    let config = Config::load_from_dir(&working_dir)
+    let data_dir = platform::data_dir()
+        .ok_or_else(|| "cannot determine data directory".to_owned())?;
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("create data dir: {e}"))?;
+
+    let config = Config::load_from_dir(&cfg_dir)
         .map_err(|e| format!("load config: {e}"))?;
 
     let proxy = config.dev.proxy.clone();
@@ -70,6 +76,7 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     let http_client = HttpClientBuilder::new()
         .proxy(proxy)
         .cert_verify(cert_verify)
+        .user_agent(config.dev.user_agent.clone())
         .build()
         .map_err(|e| format!("build http client: {e}"))?;
 
@@ -78,7 +85,7 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         .gui
         .server_cache_path
         .clone()
-        .unwrap_or_else(|| working_dir.join("cache"));
+        .unwrap_or_else(|| data_dir.join("cache"));
 
     let dl_client = reqwest::Client::builder()
         .build()
@@ -93,7 +100,7 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     dl_manager.start_update_db_loop(30);
 
     let app_state =
-        Arc::new(AppState::new(config, dl_manager, http_client, working_dir));
+        Arc::new(AppState::new(config, dl_manager, http_client, data_dir));
 
     let port = 58000u16;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -123,9 +130,10 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     state.running.store(true, Ordering::Release);
 
     tauri::async_runtime::spawn(async move {
-        let serve = axum::serve(listener, router).with_graceful_shutdown(
-            async move { let _ = shutdown_rx.await; },
-        );
+        let serve =
+            axum::serve(listener, router).with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            });
         if let Err(e) = serve.await {
             warn!("axum server exited: {e}");
         }
@@ -184,7 +192,8 @@ pub fn get_server_status(state: State<'_, GuiState>) -> serde_json::Value {
 /// picked up automatically on the next `start_server` call.
 #[tauri::command]
 pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
-    let working_dir = config_dir()?;
+    let working_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
     let new_config = Config::load_from_dir(&working_dir)
         .map_err(|e| format!("load config: {e}"))?;
 
@@ -206,11 +215,10 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
 
 /// Open the configuration directory in the system file manager.
 #[tauri::command]
-pub async fn open_config_folder(
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt as _;
-    let dir = config_dir()?;
+    let dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("create config dir: {e}"))?;
     app.opener()
@@ -223,6 +231,11 @@ pub async fn open_config_folder(
 pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt as _;
     let path = config_file_path()?;
+    // ensure the config dir exists before opening an editor
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create config dir: {e}"))?;
+    }
     if !path.exists() {
         write_default_config(&path)?;
     }
@@ -262,14 +275,10 @@ pub async fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-fn config_dir() -> Result<PathBuf, String> {
-    Ok(dirs::config_dir()
-        .ok_or("cannot determine config directory")?
-        .join("etlp"))
-}
-
 fn config_file_path() -> Result<PathBuf, String> {
-    Ok(config_dir()?.join("embyToLocalPlayer.toml"))
+    let dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    Ok(dir.join("config.toml"))
 }
 
 fn write_default_config(path: &PathBuf) -> Result<(), String> {

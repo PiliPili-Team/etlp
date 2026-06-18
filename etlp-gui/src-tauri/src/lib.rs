@@ -13,6 +13,11 @@ use tauri_plugin_autostart::MacosLauncher;
 use commands::GuiState;
 
 pub fn run() {
+    // Mark this process as the packaged GUI app so platform code can query
+    // RuntimeMode::detect(). Called here, before Builder spawns any threads.
+    // SAFETY: single-threaded at this point; no concurrent env reads.
+    unsafe { std::env::set_var(etlp_server::platform::ENV_RUNTIME, "app") };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -27,8 +32,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(GuiState::default())
         .setup(|app| {
-            let show = MenuItemBuilder::with_id("show", "Show Window")
-                .build(app)?;
+            let show =
+                MenuItemBuilder::with_id("show", "Show Window").build(app)?;
             let hide =
                 MenuItemBuilder::with_id("hide", "Hide Window").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
