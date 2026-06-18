@@ -484,11 +484,13 @@ version = "0.1.0"
 dependencies = [
  "etlp-core",
  "etlp-net",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "wiremock",
 ]
 
 [[package]]

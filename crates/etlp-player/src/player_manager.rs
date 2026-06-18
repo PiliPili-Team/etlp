@@ -348,8 +348,8 @@ pub async fn realtime_playing_feedback_loop(
         }
 
         // Playing: report every `PROGRESS_INTERVAL_SECS` seconds unconditionally.
-        let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
-            .await;
+        let _ =
+            realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing).await;
         req_sec = pos_sec;
         tokio::time::sleep(interval).await;
     }
@@ -506,10 +506,8 @@ pub async fn redirect_next_ep_loop(
             // option string since they are the option separator; double
             // quotes are dropped because mpv's option parser does not
             // strip them and they would appear in the title literally.
-            let escaped_title = next_ep
-                .media_title
-                .replace('"', "")
-                .replace(',', "\\,");
+            let escaped_title =
+                next_ep.media_title.replace('"', "").replace(',', "\\,");
             let title_opts = format!(
                 "force-media-title={escaped_title},\
                  osd-playing-msg={escaped_title}"

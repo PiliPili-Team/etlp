@@ -64,9 +64,7 @@ fn scan_errors(fetched: &[Item]) -> EpisodeErrors<'_> {
         if item.index_number.is_none() {
             errors.index_missing = true;
         }
-        if missing_path
-            && let Some(source) = item.media_sources.first()
-        {
+        if missing_path && let Some(source) = item.media_sources.first() {
             errors.path_error_source_ids.push(source.id.as_str());
         }
     }

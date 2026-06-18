@@ -12,12 +12,20 @@ use axum::response::Json;
 use serde_json::{Value, json};
 use tracing::{info, warn};
 
-use etlp_media_server::parse::EmbyParseConfig;
-use etlp_media_server::plex::{PlexParseConfig, PlexReceivedData};
-use etlp_media_server::received::ReceivedData;
-use etlp_media_server::{parse_received_data_emby, parse_received_data_plex};
+use etlp_core::{PlaybackData, PlayerKind};
+use etlp_media_server::{
+    EmbyClient, EmbyParseConfig, ListContext, PlexParseConfig,
+    PlexReceivedData, ReceivedData, assemble_episodes,
+    parse_received_data_emby, parse_received_data_plex,
+};
+use etlp_player::{
+    DanDanConfig, DanDanHandle, LaunchArgs, LoadMode, LoadOptions, MpcHandle,
+    MpvHandle, PlayerHandle, PlayerManager, PotHandle, VlcHandle,
+};
 
 use crate::state::SharedState;
+
+// ── Public route handlers ─────────────────────────────────────────────────────
 
 /// `POST /embyToLocalPlayer` – Emby and Jellyfin userscript entry point.
 ///
@@ -60,8 +68,8 @@ pub async fn plex_to_local_player(
     (StatusCode::OK, Json(json!({"msg": "ok"})))
 }
 
-/// Attempt a config reload; logs a warning on failure but never fails the
-/// request.
+// ── Config reload ─────────────────────────────────────────────────────────────
+
 fn reload_config(state: &SharedState) {
     match state.config.write() {
         Ok(mut cfg) => {
@@ -73,7 +81,193 @@ fn reload_config(state: &SharedState) {
     }
 }
 
-/// Background task: parse Emby/Jellyfin payload and launch the player.
+// ── Player launch config ──────────────────────────────────────────────────────
+
+struct LaunchCfg {
+    player_exe: String,
+    fullscreen: bool,
+    disable_audio: bool,
+    http_proxy: Option<String>,
+    static_ipc: Option<String>,
+    dandan: DanDanConfig,
+    playlist_limit: usize,
+}
+
+fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
+    let cfg = state.config.read().ok()?;
+    let player = cfg.get_or("emby", "player", "mpv").to_owned();
+    let player_exe = cfg.get_or("dev", "player_path", &player).to_owned();
+    let fullscreen = cfg.get_bool("emby", "fullscreen", false);
+    let disable_audio = cfg.get_bool("emby", "disable_audio", false);
+    let http_proxy = cfg.get("dev", "http_proxy").map(str::to_owned);
+    let static_ipc = cfg.get("dev", "mpv_input_ipc_server").map(str::to_owned);
+    let dandan = DanDanConfig {
+        port: cfg.get_int("dandan", "port", 8080) as u16,
+        api_key: cfg.get("dandan", "api_key").map(str::to_owned),
+    };
+    let playlist_limit = cfg.get_int("playlist", "item_limit", 10) as usize;
+    Some(LaunchCfg {
+        player_exe,
+        fullscreen,
+        disable_audio,
+        http_proxy,
+        static_ipc,
+        dandan,
+        playlist_limit,
+    })
+}
+
+// ── Core play chain ───────────────────────────────────────────────────────────
+
+/// Spawn the player, manage the playlist, run progress loops, and write
+/// stop-time back to the media server.
+///
+/// `episode_list` must include the currently playing episode (at any index).
+/// `player_running` must be `true` before calling; this function always
+/// resets it to `false` before returning.
+async fn run_player_chain(
+    state: SharedState,
+    data: PlaybackData,
+    episode_list: Vec<PlaybackData>,
+) {
+    let cfg = match read_launch_cfg(&state) {
+        Some(c) => c,
+        None => {
+            warn!("run_player_chain: config lock poisoned");
+            state.player_running.store(false, Ordering::Release);
+            return;
+        }
+    };
+
+    let kind = PlayerKind::detect_from_path(&cfg.player_exe)
+        .unwrap_or(PlayerKind::Mpv);
+    let play_multiple = episode_list.len() > 1;
+
+    // `stream_url` is the resolved play URL (HTTP stream or translated local path).
+    let args = LaunchArgs {
+        exe: cfg.player_exe.clone(),
+        media_path: data.stream_url.clone(),
+        media_title: data.media_title.clone(),
+        start_sec: (data.start_sec > 0).then_some(data.start_sec as f64),
+        sub: data.sub.clone(),
+        is_multiple_episodes: play_multiple,
+        mount_disk_mode: data.mount_disk_mode,
+        intro: data.intro,
+        fullscreen: cfg.fullscreen,
+        disable_audio: cfg.disable_audio,
+        http_proxy: cfg.http_proxy.clone(),
+        static_ipc: cfg.static_ipc.clone(),
+        event_handler: None,
+    };
+
+    let handle_result: Result<PlayerHandle, String> = match kind {
+        PlayerKind::Mpv | PlayerKind::Iina => MpvHandle::spawn(args)
+            .await
+            .map(PlayerHandle::Mpv)
+            .map_err(|e| format!("{e}")),
+
+        PlayerKind::Vlc => VlcHandle::spawn(&args)
+            .await
+            .map(PlayerHandle::Vlc)
+            .map_err(|e| format!("{e}")),
+
+        PlayerKind::Mpc => MpcHandle::spawn(&args)
+            .await
+            .map(PlayerHandle::Mpc)
+            .map_err(|e| format!("{e}")),
+
+        PlayerKind::PotPlayer => PotHandle::spawn(&args)
+            .map(PlayerHandle::Pot)
+            .map_err(|e| format!("{e}")),
+
+        PlayerKind::DandanPlay => DanDanHandle::spawn(&args, &cfg.dandan)
+            .await
+            .map(PlayerHandle::DanDan)
+            .map_err(|e| format!("{e}")),
+    };
+
+    let handle = match handle_result {
+        Ok(h) => h,
+        Err(e) => {
+            warn!("player spawn failed ({kind:?}): {e}");
+            state.player_running.store(false, Ordering::Release);
+            return;
+        }
+    };
+
+    let mut mgr = PlayerManager::new(handle, data.clone());
+
+    // For mpv / iina: append subsequent playlist entries then unpause.
+    if play_multiple
+        && kind.is_mpv_family()
+        && let PlayerHandle::Mpv(ref h) = mgr.handle
+    {
+        let new_fmt = h.detect_new_loadfile_format().await;
+        let cur_idx = episode_list
+            .iter()
+            .position(|e| e.item_id == data.item_id)
+            .unwrap_or(0);
+        let after: Vec<&PlaybackData> = episode_list
+            .iter()
+            .skip(cur_idx + 1)
+            .take(cfg.playlist_limit)
+            .collect();
+
+        for ep in &after {
+            let title_escaped =
+                ep.media_title.replace('"', "").replace(',', "\\,");
+            let opts = LoadOptions {
+                media_title: Some(title_escaped),
+                ..LoadOptions::default()
+            };
+            if let Err(e) = h
+                .loadfile(&ep.stream_url, LoadMode::Append, &opts, new_fmt)
+                .await
+            {
+                warn!("playlist append {:?}: {e}", ep.media_title);
+            }
+        }
+
+        // Write playlist titles so the UI shows episode names immediately.
+        for (slot, ep) in after.iter().enumerate() {
+            let prop = format!("playlist/{}/title", slot + 1);
+            let _ = h
+                .client
+                .command("set_property", &[json!(prop), json!(ep.media_title)])
+                .await;
+        }
+
+        if let Err(e) = h.set_pause(false).await {
+            warn!("mpv unpause: {e}");
+        }
+    }
+
+    // Register all episodes for progress tracking.
+    for ep in &episode_list {
+        mgr.register_playlist(ep.media_title.clone(), ep.clone());
+    }
+
+    // Cancel channel: the feedback loop sends each outgoing episode's
+    // download task-id so the receiver can cancel in-progress downloads.
+    let (cancel_tx, mut cancel_rx) =
+        tokio::sync::mpsc::unbounded_channel::<String>();
+    let state_dl = state.clone();
+    tokio::spawn(async move {
+        while let Some(id) = cancel_rx.recv().await {
+            state_dl.dl_manager.lock().await.cancel_only(&id).await;
+        }
+    });
+
+    let http = state.http_client.clone();
+    mgr.start_loops(http.clone(), Some(cancel_tx));
+    mgr.collect_stop_times().await;
+    mgr.write_progress(&http).await;
+
+    state.player_running.store(false, Ordering::Release);
+}
+
+// ── Emby / Jellyfin play ──────────────────────────────────────────────────────
+
 async fn start_emby_play(state: SharedState, received: ReceivedData) {
     let (parse_cfg, redirect_cache) = {
         let cfg = match state.config.read() {
@@ -83,9 +277,10 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
                 return;
             }
         };
-        let pc = EmbyParseConfig::from_config(&cfg);
-        let rc = state.redirect_cache.clone();
-        (pc, rc)
+        (
+            EmbyParseConfig::from_config(&cfg),
+            state.redirect_cache.clone(),
+        )
     };
 
     let mut data = match parse_received_data_emby(
@@ -102,12 +297,11 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
             return;
         }
     };
-    // Fall back to the persistent device ID when the request omits one.
+
     if data.device_id.is_empty() {
         data.device_id = state.device_id.clone();
     }
 
-    // Enforce one-instance-mode: reject if another player is already running.
     if state
         .player_running
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
@@ -128,24 +322,61 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
         data.file_path,
     );
 
-    // TODO(6.4): build player command, construct PlayerHandle, start
-    //  PlayerManager, register playlist, collect stop times, write progress.
-    //
-    //  Cancel-on-switch wiring (when implementing the above):
-    //    let (cancel_tx, mut cancel_rx) =
-    //        tokio::sync::mpsc::unbounded_channel::<String>();
-    //    let state_dl = state.clone();
-    //    tokio::spawn(async move {
-    //        while let Some(id) = cancel_rx.recv().await {
-    //            state_dl.dl_manager.lock().await.cancel_only(&id).await;
-    //        }
-    //    });
-    //    mgr.start_loops(http, Some(cancel_tx));
+    let episode_list =
+        build_emby_playlist(&state, &received, &data, &parse_cfg)
+            .await
+            .unwrap_or_else(|| vec![data.clone()]);
 
-    state.player_running.store(false, Ordering::Release);
+    run_player_chain(state, data, episode_list).await;
 }
 
-/// Background task: parse Plex payload and launch the player.
+/// Fetch the season episode list from Emby and assemble the playlist.
+///
+/// Returns `None` when multi-episode is not applicable or the fetch fails,
+/// allowing the caller to fall back to single-episode playback.
+async fn build_emby_playlist(
+    state: &SharedState,
+    received: &ReceivedData,
+    data: &PlaybackData,
+    parse_cfg: &EmbyParseConfig,
+) -> Option<Vec<PlaybackData>> {
+    if !data.is_multiple_episodes {
+        return None;
+    }
+    let main = &received.extra_data.main_ep_info;
+    let show_id = main.series_id.as_deref().filter(|s| !s.is_empty())?;
+    let season_id = main.season_id.as_deref();
+    let base_url = format!("{}://{}", data.scheme, data.netloc);
+    let emby = EmbyClient::new(
+        state.http_client.clone(),
+        &base_url,
+        &data.api_key,
+        &data.user_id,
+    );
+    let fetched = match emby.episodes(show_id, season_id).await {
+        Ok(list) => list,
+        Err(e) => {
+            warn!("fetch episodes for {show_id}: {e}");
+            return None;
+        }
+    };
+    let ctx = ListContext {
+        base: data,
+        episodes_info: &received.extra_data.episodes_info,
+        season_id: season_id.unwrap_or(""),
+        playlist: !received.extra_data.playlist_info.is_empty(),
+        config: parse_cfg,
+    };
+    let episodes = assemble_episodes(&ctx, &fetched.items);
+    if episodes.is_empty() {
+        None
+    } else {
+        Some(episodes)
+    }
+}
+
+// ── Plex play ─────────────────────────────────────────────────────────────────
+
 async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
     let plex_cfg = {
         let cfg = match state.config.read() {
@@ -174,10 +405,13 @@ async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
         }
     };
 
-    let Some(data) = items.into_iter().next() else {
+    let mut items_iter = items.into_iter();
+    let Some(data) = items_iter.next() else {
         warn!("plex payload contained no items");
         return;
     };
+    let episode_list: Vec<PlaybackData> =
+        std::iter::once(data.clone()).chain(items_iter).collect();
 
     if state
         .player_running
@@ -196,10 +430,10 @@ async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
         data.item_id, data.file_path,
     );
 
-    // TODO(6.4): build player command and start PlayerManager.
-
-    state.player_running.store(false, Ordering::Release);
+    run_player_chain(state, data, episode_list).await;
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -215,11 +449,19 @@ mod tests {
         let (state, _dir) = test_state();
         let app = build_router(state);
         let body = serde_json::json!({
-            "playbackUrl": "http://emby:8096/emby/Items/1/PlaybackInfo?X-Emby-Token=tok",
-            "ApiClient": {"_serverAddress": "http://emby:8096", "_serverVersion": "4.9"},
+            "playbackUrl":
+                "http://emby:8096/emby/Items/1/PlaybackInfo?X-Emby-Token=tok",
+            "ApiClient": {
+                "_serverAddress": "http://emby:8096",
+                "_serverVersion": "4.9"
+            },
             "request": {"headers": {}},
             "playbackData": {"PlaySessionId": "s1", "MediaSources": []},
-            "extraData": {"mainEpInfo": {"Id": "1"}, "episodesInfo": []},
+            "extraData": {
+                "mainEpInfo": {"Id": "1"},
+                "episodesInfo": [],
+                "playlistInfo": []
+            },
             "mountDiskEnable": "false"
         });
         let req = Request::builder()
@@ -237,7 +479,8 @@ mod tests {
         let (state, _dir) = test_state();
         let app = build_router(state);
         let body = serde_json::json!({
-            "playbackUrl": "http://plex:32400/library/metadata/42?X-Plex-Token=t",
+            "playbackUrl":
+                "http://plex:32400/library/metadata/42?X-Plex-Token=t",
             "mountDiskEnable": "false",
             "playbackData": {"MediaContainer": {"Metadata": []}}
         });
