@@ -20,23 +20,23 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
     "json",
     "stream",
+    "query",
 ] }
-axum = "0.7"
+axum = "0.8"
 rust-ini = "0.21"
 url = "2"
-fs4 = "0.13"
-sysinfo = "0.33"
+sysinfo = "0.38"
 tempfile = "3"
 clap = { version = "4", features = ["derive"] }
 tokio-util = { version = "0.7", features = ["io"] }
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 http = "1"
 uuid = { version = "1", features = ["v4"] }
-dirs = "5"
+dirs = "6"
 
 # Deny crash-prone and sloppy patterns workspace-wide. Member crates opt in via
 # `[lints] workspace = true`. Test code re-allows these locally where needed.

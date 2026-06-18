@@ -361,9 +361,13 @@ pub async fn realtime_playing_feedback_loop(
                 .map(|t| t.elapsed().as_secs() >= PAUSE_TIMEOUT_SECS)
                 .unwrap_or(false);
             if !timed_out {
-                let _ =
-                    realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
-                        .await;
+                let _ = realtime_progress(
+                    &http,
+                    ep,
+                    pos_sec,
+                    PlaybackEvent::Playing,
+                )
+                .await;
                 req_sec = pos_sec;
             }
             tokio::time::sleep(paused_interval).await;

@@ -1,15 +1,11 @@
 //! Cross-platform exclusive file lock for download task files.
 //!
-//! Uses the `fs4` crate for cross-platform locking. The lock file lives
-//! alongside the task JSON:
-//! `{task_path}.lock`. Acquiring returns `false` (non-blocking) if another
-//! process already holds the lock, so the caller can read-only the state
-//! without clobbering it.
+//! The lock file lives alongside the task JSON: `{task_path}.lock`.
+//! Acquiring returns `false` (non-blocking) if another process already holds
+//! the lock, so the caller can read-only the state without clobbering it.
 
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::path::PathBuf;
-
-use fs4::fs_std::FileExt;
 use thiserror::Error;
 
 /// Errors from file-lock operations.
@@ -70,12 +66,15 @@ impl TaskFileLock {
             .read(true)
             .write(true)
             .open(&self.lock_path)?;
-        let acquired = file.try_lock_exclusive().map_err(LockError::Io)?;
-        if acquired {
-            self.lock_file = Some(file);
-            self.has_lock = true;
+        match file.try_lock() {
+            Ok(()) => {
+                self.lock_file = Some(file);
+                self.has_lock = true;
+                Ok(true)
+            }
+            Err(TryLockError::WouldBlock) => Ok(false),
+            Err(TryLockError::Error(e)) => Err(LockError::Io(e.into())),
         }
-        Ok(acquired)
     }
 
     /// Release the lock (safe to call multiple times).

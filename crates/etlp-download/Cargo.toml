@@ -13,7 +13,6 @@ workspace = true
 etlp-core = { path = "../etlp-core" }
 etlp-net = { path = "../etlp-net" }
 etlp-media-server = { path = "../etlp-media-server" }
-fs4 = { workspace = true, features = ["sync"] }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
