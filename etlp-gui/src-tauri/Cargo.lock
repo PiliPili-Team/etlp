@@ -1038,7 +1038,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-config"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "etlp-core",
  "serde",
@@ -1048,7 +1048,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-core"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -1056,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-download"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "etlp-core",
  "etlp-media-server",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-gui"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "axum",
  "dirs 6.0.0",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-logging"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -1112,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-media-server"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "etlp-config",
  "etlp-core",
@@ -1127,14 +1127,14 @@ dependencies = [
 
 [[package]]
 name = "etlp-metrics"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "etlp-net"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "etlp-core",
  "percent-encoding",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-player"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "etlp-core",
  "etlp-net",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-server"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "axum",
  "dirs 6.0.0",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "etlp-sync"
-version = "0.0.2"
+version = "0.0.1"
 dependencies = [
  "reqwest",
  "serde",
