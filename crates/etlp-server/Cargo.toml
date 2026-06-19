@@ -16,6 +16,7 @@ etlp-media-server = { path = "../etlp-media-server" }
 etlp-player     = { path = "../etlp-player" }
 etlp-download   = { path = "../etlp-download" }
 etlp-sync       = { path = "../etlp-sync" }
+etlp-metrics    = { path = "../etlp-metrics" }
 axum.workspace       = true
 tokio.workspace      = true
 serde.workspace      = true

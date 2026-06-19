@@ -286,11 +286,20 @@ impl HttpClient {
             &[("Accept", "application/json")],
             None,
         );
+        let net_start = std::time::Instant::now();
         let rb = self
             .prepare(&self.follow, Method::GET, url, params)
             .header(ACCEPT, "application/json");
-        let resp = self.send_with_retry(url, rb).await?;
-        let resp = error_for_status(resp, url)?;
+        let resp = self.send_with_retry(url, rb).await;
+        let elapsed = net_start.elapsed().as_millis();
+        tracing::debug!(
+            method = "GET_JSON",
+            url,
+            elapsed_ms = elapsed,
+            ok = resp.is_ok(),
+            "http_elapsed"
+        );
+        let resp = error_for_status(resp?, url)?;
         resp.json::<T>().await.map_err(|source| NetError::Decode {
             url: url.to_owned(),
             source,
@@ -304,9 +313,18 @@ impl HttpClient {
         params: &[(&str, &str)],
     ) -> Result<String> {
         log_curl(&self.user_agent, "GET", url, params, &[], None);
+        let net_start = std::time::Instant::now();
         let rb = self.prepare(&self.follow, Method::GET, url, params);
-        let resp = self.send_with_retry(url, rb).await?;
-        let resp = error_for_status(resp, url)?;
+        let resp = self.send_with_retry(url, rb).await;
+        let elapsed = net_start.elapsed().as_millis();
+        tracing::debug!(
+            method = "GET_TEXT",
+            url,
+            elapsed_ms = elapsed,
+            ok = resp.is_ok(),
+            "http_elapsed"
+        );
+        let resp = error_for_status(resp?, url)?;
         resp.text().await.map_err(|source| NetError::Decode {
             url: url.to_owned(),
             source,
@@ -333,13 +351,22 @@ impl HttpClient {
             ],
             Some(&body_str),
         );
+        let net_start = std::time::Instant::now();
         let rb = self
             .prepare(&self.follow, Method::POST, url, params)
             .header(CONTENT_TYPE, "application/json; charset=utf-8")
             .header(ACCEPT, "application/json")
             .json(body);
-        let resp = self.send_with_retry(url, rb).await?;
-        error_for_status(resp, url)?;
+        let resp = self.send_with_retry(url, rb).await;
+        let elapsed = net_start.elapsed().as_millis();
+        tracing::debug!(
+            method = "POST_JSON",
+            url,
+            elapsed_ms = elapsed,
+            ok = resp.is_ok(),
+            "http_elapsed"
+        );
+        error_for_status(resp?, url)?;
         Ok(())
     }
 
@@ -348,8 +375,18 @@ impl HttpClient {
     /// (mirrors `net_tools.get_redirect_url`).
     pub async fn resolve_redirect(&self, url: &str) -> Result<String> {
         log_curl(&self.user_agent, "GET", url, &[], &[], None);
+        let net_start = std::time::Instant::now();
         let rb = self.prepare(&self.no_follow, Method::GET, url, &[]);
-        let resp = self.send_with_retry(url, rb).await?;
+        let resp = self.send_with_retry(url, rb).await;
+        let elapsed = net_start.elapsed().as_millis();
+        tracing::debug!(
+            method = "GET_REDIRECT",
+            url,
+            elapsed_ms = elapsed,
+            ok = resp.is_ok(),
+            "http_elapsed"
+        );
+        let resp = resp?;
         if resp.status().is_redirection()
             && let Some(loc) = resp.headers().get(LOCATION)
             && let Ok(target) = loc.to_str()

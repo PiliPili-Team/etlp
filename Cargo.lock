@@ -464,6 +464,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "etlp-metrics"
+version = "0.0.2"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "etlp-net"
 version = "0.0.2"
 dependencies = [
@@ -504,6 +511,7 @@ dependencies = [
  "etlp-core",
  "etlp-download",
  "etlp-media-server",
+ "etlp-metrics",
  "etlp-net",
  "etlp-player",
  "etlp-sync",
