@@ -504,6 +504,17 @@ body.platform-windows .titlebar {
     font-weight: 500;
 }
 
+/* Draggable priority tags: grab cursor and a subtle lift while dragging. */
+.tag-draggable {
+    cursor: grab;
+}
+.tag-draggable:active {
+    cursor: grabbing;
+}
+.tag-dragging {
+    opacity: 0.45;
+}
+
 .tag-remove {
     cursor: pointer;
     color: var(--accent);

@@ -222,6 +222,14 @@ function SelectRow({
     );
 }
 
+/** Return a copy of `list` with the item at `from` moved to index `to`. */
+function reorder<T>(list: T[], from: number, to: number): T[] {
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    return next;
+}
+
 function TagListRow({
     label,
     desc,
@@ -229,6 +237,7 @@ function TagListRow({
     placeholder,
     onAdd,
     onRemove,
+    onReorder,
 }: {
     label: string;
     desc?: string;
@@ -236,9 +245,13 @@ function TagListRow({
     placeholder?: string;
     onAdd: (tag: string) => void;
     onRemove: (index: number) => void;
+    onReorder?: (from: number, to: number) => void;
 }) {
     const t = useI18n();
     const [input, setInput] = useState("");
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+    // Drag-to-reorder is opt-in: only ordered priority lists pass onReorder.
+    const reorderable = Boolean(onReorder);
     const handleAdd = () => {
         const tag = input.trim();
         if (tag && !tags.includes(tag)) {
@@ -259,7 +272,33 @@ function TagListRow({
                 {tags.length > 0 && (
                     <div className="tag-list">
                         {tags.map((tag, i) => (
-                            <span key={i} className="tag">
+                            <span
+                                key={tag}
+                                className={`tag${reorderable ? " tag-draggable" : ""}${
+                                    dragIndex === i ? " tag-dragging" : ""
+                                }`}
+                                draggable={reorderable}
+                                onDragStart={
+                                    reorderable ? () => setDragIndex(i) : undefined
+                                }
+                                onDragOver={
+                                    reorderable ? (e) => e.preventDefault() : undefined
+                                }
+                                onDrop={
+                                    reorderable
+                                        ? (e) => {
+                                              e.preventDefault();
+                                              if (dragIndex !== null && dragIndex !== i) {
+                                                  onReorder?.(dragIndex, i);
+                                              }
+                                              setDragIndex(null);
+                                          }
+                                        : undefined
+                                }
+                                onDragEnd={
+                                    reorderable ? () => setDragIndex(null) : undefined
+                                }
+                            >
                                 {tag}
                                 <button
                                     className="tag-remove"
@@ -727,6 +766,13 @@ function VersionPreferSection({
                             cfg.version_prefer.filter((_, j) => j !== i),
                         )
                     }
+                    onReorder={(from, to) =>
+                        update(
+                            "dev",
+                            "version_prefer",
+                            reorder(cfg.version_prefer, from, to),
+                        )
+                    }
                 />
                 <ToggleRow
                     label={t("vp_playlist")}
@@ -755,6 +801,13 @@ function VersionPreferSection({
                             cfg.subtitle_priority.filter((_, j) => j !== i),
                         )
                     }
+                    onReorder={(from, to) =>
+                        update(
+                            "dev",
+                            "subtitle_priority",
+                            reorder(cfg.subtitle_priority, from, to),
+                        )
+                    }
                 />
                 <TagListRow
                     label={t("vp_sub_extract")}
@@ -772,6 +825,13 @@ function VersionPreferSection({
                             "dev",
                             "sub_extract_priority",
                             cfg.sub_extract_priority.filter((_, j) => j !== i),
+                        )
+                    }
+                    onReorder={(from, to) =>
+                        update(
+                            "dev",
+                            "sub_extract_priority",
+                            reorder(cfg.sub_extract_priority, from, to),
                         )
                     }
                 />
