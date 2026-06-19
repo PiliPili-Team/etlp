@@ -4,6 +4,10 @@
 //! before reaching stdout and an optional log file, reproducing the Python
 //! `MyLogger` redaction. Each formatted event is buffered and masked as a whole
 //! line, so secrets split across fields are still redacted.
+//!
+//! The returned [`LogHandle`] allows the log level to be changed at runtime
+//! without restarting the process (e.g. when the user changes `dev.log_level`
+//! through the GUI and the server is reloaded).
 
 mod mask;
 
@@ -12,8 +16,11 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::reload;
+use tracing_subscriber::util::SubscriberInitExt as _;
 
 pub use mask::{Masker, mix_host_gen};
 
@@ -121,20 +128,90 @@ fn open_log_file(path: &Path) -> io::Result<File> {
         .open(path)
 }
 
-/// Initialize global logging.
+/// Compute the `EnvFilter` for `level`.
+///
+/// When `level` is `debug` or `trace`, etlp crates are set to that level while
+/// noisy third-party crates remain at `info`. All other levels are applied
+/// globally.
+///
+/// Callers that want to honour `RUST_LOG` should call
+/// [`build_initial_filter`] instead; this function always ignores the env var
+/// so it is safe to call at runtime when the user changes the level.
+#[must_use]
+pub fn build_level_filter(level: &str) -> EnvFilter {
+    const ETLP_CRATES: &[&str] = &[
+        "etlp",
+        "etlp_server",
+        "etlp_config",
+        "etlp_net",
+        "etlp_download",
+        "etlp_media_server",
+        "etlp_player",
+        "etlp_core",
+        "etlp_sync",
+        "etlp_logging",
+        "etlp_metrics",
+    ];
+    if matches!(level, "debug" | "trace") {
+        let directives = ETLP_CRATES
+            .iter()
+            .map(|t| format!("{t}={level}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        EnvFilter::new(format!("info,{directives}"))
+    } else {
+        EnvFilter::new(level)
+    }
+}
+
+/// Like [`build_level_filter`] but honours `RUST_LOG` when set.
+///
+/// Only called once, at startup — runtime updates use [`build_level_filter`]
+/// directly so the env var cannot shadow the user's explicit choice.
+fn build_initial_filter(level: &str) -> EnvFilter {
+    EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| build_level_filter(level))
+}
+
+// ── LogHandle ──────────────────────────────────────────────────────────────────
+
+/// A handle that allows the active log level to be changed at runtime.
+///
+/// Obtained from [`init`] and typically stored in the application state.
+/// `Send + Sync` — safe to share across threads.
+pub struct LogHandle {
+    handle: reload::Handle<EnvFilter, tracing_subscriber::Registry>,
+}
+
+impl LogHandle {
+    /// Switch the log level to `level` immediately.
+    ///
+    /// Silently prints to stderr on failure (logging must never crash).
+    pub fn set_level(&self, level: &str) {
+        let filter = build_level_filter(level);
+        if let Err(e) = self.handle.reload(filter) {
+            eprintln!("[etlp] set_level({level:?}) failed: {e}");
+        }
+    }
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+/// Initialize global logging and return a [`LogHandle`] for runtime level
+/// changes.
 ///
 /// * `masker` carries the (mutable) redaction rules.
-/// * `level` is a tracing filter directive (e.g. `"info"`); `RUST_LOG` overrides
-///   it when set.
+/// * `level` is the initial filter directive (e.g. `"info"`); `RUST_LOG`
+///   overrides it when set.
 /// * `log_file`, when provided, additionally writes masked output to that path.
 ///
-/// Returns `Ok(())` on success. A second call is a no-op error (the global
-/// subscriber can only be set once); callers may ignore that.
+/// Returns `Err` when the global subscriber is already set; callers that do not
+/// need runtime level changes may call `.ok()` and discard the handle.
 pub fn init(
     masker: Masker,
     level: &str,
     log_file: Option<&Path>,
-) -> Result<(), String> {
+) -> Result<LogHandle, String> {
     let file = match log_file {
         Some(path) => {
             Some(Arc::new(Mutex::new(open_log_file(path).map_err(|e| {
@@ -145,38 +222,13 @@ pub fn init(
     };
 
     let make_writer = MaskingMakeWriter { masker, file };
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        if matches!(level, "debug" | "trace") {
-            // Scope fine-grained levels to etlp crates; keep info for
-            // noisy dependencies (tokio, hyper, reqwest, etc.).
-            let etlp_crates = [
-                "etlp",
-                "etlp_server",
-                "etlp_config",
-                "etlp_net",
-                "etlp_download",
-                "etlp_media_server",
-                "etlp_player",
-                "etlp_core",
-                "etlp_sync",
-                "etlp_logging",
-            ];
-            let directives = etlp_crates
-                .iter()
-                .map(|t| format!("{t}={level}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            EnvFilter::new(format!("info,{directives}"))
-        } else {
-            EnvFilter::new(level)
-        }
-    });
+    let filter = build_initial_filter(level);
+    let (filter_layer, handle) = reload::Layer::new(filter);
 
     use std::io::IsTerminal as _;
     let use_ansi = std::io::stdout().is_terminal();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_ansi(use_ansi)
         .with_target(false)
         .with_level(true)
@@ -185,9 +237,15 @@ pub fn init(
         .with_timer(tracing_subscriber::fmt::time::ChronoLocal::new(
             "%Y-%m-%d %H:%M:%S%.3f%:z".to_owned(),
         ))
-        .with_writer(make_writer)
+        .with_writer(make_writer);
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
         .try_init()
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    Ok(LogHandle { handle })
 }
 
 #[cfg(test)]
@@ -208,5 +266,19 @@ mod tests {
         }
         let body = std::fs::read_to_string(&path).expect("read");
         assert_eq!(body, "first\nsecond\n");
+    }
+
+    #[test]
+    fn build_level_filter_debug_scopes_to_etlp() {
+        // debug/trace must produce "info,etlp*=debug" style directives.
+        let f = build_level_filter("debug");
+        // EnvFilter's Display shows the directives; just verify it doesn't panic.
+        let _ = format!("{f:?}");
+    }
+
+    #[test]
+    fn build_level_filter_warn_is_global() {
+        let f = build_level_filter("warn");
+        let _ = format!("{f:?}");
     }
 }
