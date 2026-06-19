@@ -139,6 +139,52 @@ pub async fn update_progress(
     }
 }
 
+/// Mark an item as fully played on the originating server.
+///
+/// Called when `disable_progress_report = true` but the user watched past 90 %
+/// of the runtime, so the item should still be recorded as seen.  Only Emby
+/// and Jellyfin support this endpoint; Plex is skipped silently.
+pub async fn mark_as_played(
+    client: &HttpClient,
+    data: &PlaybackData,
+) -> Result<()> {
+    match data.server {
+        Server::Emby => emby_mark_played(client, data).await,
+        Server::Jellyfin => jellyfin_mark_played(client, data).await,
+        Server::Plex => Ok(()),
+    }
+}
+
+async fn emby_mark_played(
+    client: &HttpClient,
+    data: &PlaybackData,
+) -> Result<()> {
+    let url = format!(
+        "{}://{}/emby/Users/{}/PlayedItems/{}",
+        data.scheme, data.netloc, data.user_id, data.item_id
+    );
+    let params = [
+        ("X-Emby-Token", data.api_key.as_str()),
+        ("X-Emby-Device-Id", data.device_id.as_str()),
+        ("X-Emby-Client", DEVICE_NAME),
+        ("X-Emby-Device-Name", DEVICE_NAME),
+    ];
+    client
+        .post_json(&url, &params, &serde_json::json!({}))
+        .await
+}
+
+async fn jellyfin_mark_played(
+    client: &HttpClient,
+    data: &PlaybackData,
+) -> Result<()> {
+    let url = format!(
+        "{}://{}/Users/{}/PlayedItems/{}",
+        data.scheme, data.netloc, data.user_id, data.item_id
+    );
+    client.post_json(&url, &[], &serde_json::json!({})).await
+}
+
 fn extension_lower(file_path: &str) -> String {
     file_path
         .rsplit_once('.')
