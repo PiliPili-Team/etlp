@@ -14,6 +14,7 @@
 //! the Python `re.compile(rule, re.I)` behaviour.
 
 use regex::RegexBuilder;
+use tracing::debug;
 
 use crate::dto::Item;
 
@@ -100,16 +101,28 @@ pub fn version_prefer_for_playlist(
         return None;
     }
     let groups = group_by_key(cur_list, eps_data);
+    debug!(
+        "version_prefer_for_playlist: {} groups {} rules current_key={:?}",
+        groups.len(),
+        rules.len(),
+        current_key
+    );
     let mut result = Vec::with_capacity(groups.len());
     for (key, sources) in groups {
+        debug!("  group key={:?}: {} version(s)", key, sources.len());
         let Some(first) = sources.first() else {
             continue;
         };
         if sources.len() == 1 {
+            debug!("    -> single: {:?}", first.path.as_deref().unwrap_or("?"));
             result.push((*first).clone());
             continue;
         }
         if let Some((_, ep)) = ep_success_map.iter().find(|(k, _)| *k == key) {
+            debug!(
+                "    -> ini success_map: {:?}",
+                ep.path.as_deref().unwrap_or("?")
+            );
             result.push(ep.clone());
             continue;
         }
@@ -119,12 +132,24 @@ pub fn version_prefer_for_playlist(
                 .find(|s| is_played_version(s, file_path))
                 .copied()
                 .unwrap_or(*first);
+            debug!(
+                "    -> current_key played: {:?}",
+                played.path.as_deref().unwrap_or("?")
+            );
             result.push(played.clone());
             continue;
         }
         let picked = pick_by_rules(&sources, rules).unwrap_or(*first);
+        debug!(
+            "    -> picked by rules: {:?}",
+            picked.path.as_deref().unwrap_or("?")
+        );
         result.push(picked.clone());
     }
+    debug!(
+        "version_prefer_for_playlist: selected {} episodes",
+        result.len()
+    );
     Some(result)
 }
 
