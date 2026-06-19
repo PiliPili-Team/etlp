@@ -165,8 +165,17 @@ function NumberRow({
                     max={max}
                     onChange={(e) => setLocal(e.target.value)}
                     onBlur={() => {
-                        const n = parseInt(local, 10);
-                        if (!isNaN(n) && n !== value) onCommit(n);
+                        let n = parseInt(local, 10);
+                        if (isNaN(n)) {
+                            setLocal(String(value));
+                            return;
+                        }
+                        // Clamp into [min, max] so out-of-range input (e.g. a
+                        // negative episode cap) is corrected instead of saved.
+                        if (min !== undefined && n < min) n = min;
+                        if (max !== undefined && n > max) n = max;
+                        setLocal(String(n));
+                        if (n !== value) onCommit(n);
                     }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
@@ -773,7 +782,7 @@ function VersionPreferSection({
                     label={t("vp_max_eps")}
                     desc={t("vp_max_eps_desc")}
                     value={cfg.item_limit}
-                    min={1}
+                    min={0}
                     max={100}
                     onCommit={(v) => update("playlist", "item_limit", v)}
                 />
@@ -1022,8 +1031,9 @@ function SystemSection({
                 />
                 <InputRow
                     label={t("sys_trakt_secret")}
+                    desc={t("sys_trakt_secret_desc")}
                     value={cfg.trakt_client_secret}
-                    placeholder=""
+                    placeholder={t("sys_trakt_secret_placeholder")}
                     mono
                     onCommit={(v) => update("trakt", "client_secret", v)}
                 />
