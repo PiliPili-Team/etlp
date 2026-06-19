@@ -116,7 +116,11 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         port: cfg.dandan.port,
         api_key: cfg.dandan.api_key.clone(),
     };
-    let playlist_limit = cfg.playlist.item_limit as usize;
+    // `item_limit == 0` means "no cap": append the whole season.
+    let playlist_limit = match cfg.playlist.item_limit {
+        0 => usize::MAX,
+        n => n as usize,
+    };
     let disable_progress_report = cfg.dev.disable_progress_report;
     Some(LaunchCfg {
         player_exe,
