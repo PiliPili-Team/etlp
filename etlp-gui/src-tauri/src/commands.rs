@@ -301,10 +301,8 @@ pub async fn update_config_field(
 ) -> Result<(), String> {
     let cfg_dir = platform::config_dir()
         .ok_or_else(|| "cannot determine config directory".to_owned())?;
-    // Patch the file the app actually loaded. Falling back to a hard-coded
-    // `config.toml` would create a second file that shadows the user's real
-    // config (e.g. `embyToLocalPlayer.toml`) on the next launch, making their
-    // settings appear to reset.
+    // The app reads and writes the same single `config.toml`, so the path we
+    // patch always matches the one that was loaded.
     let path = etlp_config::existing_config_path(&cfg_dir)
         .unwrap_or_else(|| cfg_dir.join("config.toml"));
 
