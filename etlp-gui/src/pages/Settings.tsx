@@ -230,6 +230,14 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
     return next;
 }
 
+/** Index of the tag under a screen point, or null. The dragged tag carries
+ *  `pointer-events: none`, so this hit-tests through to the tag beneath it. */
+function tagIndexAtPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-tag-index]");
+    const idx = el ? Number(el.dataset.tagIndex) : NaN;
+    return Number.isInteger(idx) ? idx : null;
+}
+
 function TagListRow({
     label,
     desc,
@@ -249,8 +257,13 @@ function TagListRow({
 }) {
     const t = useI18n();
     const [input, setInput] = useState("");
+    // Pointer-driven reordering instead of HTML5 drag-and-drop: Tauri's WebView
+    // intercepts native drag-and-drop at the OS level, so `dragstart`/`drop`
+    // never reach the document. The dragged tag follows the cursor live and
+    // the order commits on release.
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [overIndex, setOverIndex] = useState<number | null>(null);
+    const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
     // Drag-to-reorder is opt-in: only ordered priority lists pass onReorder.
     const reorderable = Boolean(onReorder);
     const handleAdd = () => {
@@ -261,43 +274,69 @@ function TagListRow({
         }
     };
 
-    // Pointer-based reordering instead of HTML5 drag-and-drop. Tauri's WebView
-    // intercepts native drag-and-drop at the OS level (dragDropEnabled), so
-    // `dragstart`/`drop` never reach the document; pointer events are immune.
-    const indexAtPoint = (x: number, y: number): number | null => {
-        const el = document
-            .elementFromPoint(x, y)
-            ?.closest<HTMLElement>("[data-tag-index]");
-        const idx = el ? Number(el.dataset.tagIndex) : NaN;
-        return Number.isInteger(idx) ? idx : null;
+    const listRef = useRef<HTMLDivElement>(null);
+    const prevRects = useRef<Map<string, DOMRect>>(new Map());
+    // Live state of an in-flight drag, read by the window listeners.
+    const dragRef = useRef<{
+        key: string;
+        startX: number;
+        startY: number;
+        el: HTMLElement;
+    } | null>(null);
+
+    const startDrag = (e: React.PointerEvent, i: number) => {
+        // Let the remove button keep its click.
+        if ((e.target as HTMLElement).closest(".tag-remove")) return;
+        e.preventDefault();
+        dragRef.current = {
+            key: tags[i],
+            startX: e.clientX,
+            startY: e.clientY,
+            el: e.currentTarget as HTMLElement,
+        };
+        setDragIndex(i);
+        setOverIndex(i);
+        setDragDelta({ x: 0, y: 0 });
     };
 
-    const handleDragMove = (e: React.PointerEvent) => {
+    // While a drag is active, track the pointer on the window so it keeps
+    // working past the tag's bounds and in both directions.
+    useEffect(() => {
         if (dragIndex === null) return;
-        setOverIndex(indexAtPoint(e.clientX, e.clientY));
-    };
-
-    const handleDragEnd = (e: React.PointerEvent) => {
-        if (dragIndex === null) return;
-        const target = indexAtPoint(e.clientX, e.clientY);
-        if (target !== null && target !== dragIndex) {
-            onReorder?.(dragIndex, target);
-        }
-        setDragIndex(null);
-        setOverIndex(null);
-    };
-
-    const cancelDrag = () => {
-        setDragIndex(null);
-        setOverIndex(null);
-    };
+        const onMove = (e: PointerEvent) => {
+            const d = dragRef.current;
+            if (!d) return;
+            setDragDelta({ x: e.clientX - d.startX, y: e.clientY - d.startY });
+            setOverIndex(tagIndexAtPoint(e.clientX, e.clientY));
+        };
+        const onUp = (e: PointerEvent) => {
+            const d = dragRef.current;
+            const target = tagIndexAtPoint(e.clientX, e.clientY);
+            // Seed the FLIP with the release position so the tag settles from
+            // where it was dropped instead of snapping back to its old slot.
+            if (d) prevRects.current.set(d.key, d.el.getBoundingClientRect());
+            if (target !== null && target !== dragIndex) {
+                onReorder?.(dragIndex, target);
+            }
+            dragRef.current = null;
+            setDragIndex(null);
+            setOverIndex(null);
+            setDragDelta({ x: 0, y: 0 });
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+        };
+    }, [dragIndex, onReorder]);
 
     // FLIP animation: when the order changes, slide each tag from its previous
     // position to its new one so a dropped tag visibly pushes the others aside
     // instead of snapping. Keyed by tag text since React reuses the DOM node
     // across reorders.
-    const listRef = useRef<HTMLDivElement>(null);
-    const prevRects = useRef<Map<string, DOMRect>>(new Map());
     useLayoutEffect(() => {
         const list = listRef.current;
         if (!list) return;
@@ -334,7 +373,10 @@ function TagListRow({
             </div>
             <div style={{ width: "100%" }}>
                 {tags.length > 0 && (
-                    <div className="tag-list" ref={listRef}>
+                    <div
+                        className={`tag-list${dragIndex !== null ? " dragging" : ""}`}
+                        ref={listRef}
+                    >
                         {tags.map((tag, i) => (
                             <span
                                 key={tag}
@@ -349,28 +391,19 @@ function TagListRow({
                                         ? " tag-over"
                                         : ""
                                 }`}
-                                onPointerDown={
-                                    reorderable
-                                        ? (e) => {
-                                              // Let the remove button keep its click.
-                                              if (
-                                                  (e.target as HTMLElement).closest(
-                                                      ".tag-remove",
-                                                  )
-                                              )
-                                                  return;
-                                              e.preventDefault();
-                                              e.currentTarget.setPointerCapture(
-                                                  e.pointerId,
-                                              );
-                                              setDragIndex(i);
-                                              setOverIndex(i);
+                                style={
+                                    dragIndex === i
+                                        ? {
+                                              transform: `translate(${dragDelta.x}px, ${dragDelta.y}px)`,
+                                              pointerEvents: "none",
+                                              position: "relative",
+                                              zIndex: 20,
                                           }
                                         : undefined
                                 }
-                                onPointerMove={reorderable ? handleDragMove : undefined}
-                                onPointerUp={reorderable ? handleDragEnd : undefined}
-                                onPointerCancel={reorderable ? cancelDrag : undefined}
+                                onPointerDown={
+                                    reorderable ? (e) => startDrag(e, i) : undefined
+                                }
                             >
                                 {tag}
                                 <button

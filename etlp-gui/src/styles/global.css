@@ -515,8 +515,17 @@ body.platform-windows .titlebar {
 .tag-draggable:active {
     cursor: grabbing;
 }
+/* Keep the grabbing cursor over the whole list while a drag is in flight. */
+.tag-list.dragging {
+    cursor: grabbing;
+}
+/* The dragged tag follows the cursor; lift it with a shadow so it reads as
+   floating above the row. Transform is driven inline (cursor tracking), so it
+   must not be transitioned here. */
 .tag-dragging {
-    opacity: 0.45;
+    opacity: 0.92;
+    box-shadow: var(--shadow-md);
+    background: var(--accent-soft);
 }
 /* Drop target highlight while reordering. */
 .tag-over {
