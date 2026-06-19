@@ -3,7 +3,9 @@
 [![CI Rust](https://github.com/PiliPili-Team/etlp/actions/workflows/ci-rust.yml/badge.svg)](https://github.com/PiliPili-Team/etlp/actions/workflows/ci-rust.yml)
 [![CI App](https://github.com/PiliPili-Team/etlp/actions/workflows/ci-app.yml/badge.svg)](https://github.com/PiliPili-Team/etlp/actions/workflows/ci-app.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](https://github.com/PiliPili-Team/etlp/releases)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](https://github.com/PiliPili-Team/etlp/releases)
+[![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)](https://github.com/PiliPili-Team/etlp/releases)
+[![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white)](https://github.com/PiliPili-Team/etlp/releases)
 
 **etlp** is a Genshin-powered media-player bridge, primarily for Emby.
 It runs a lightweight local HTTP service that receives playback requests from a
@@ -17,7 +19,7 @@ playlist construction, progress write-back, and optional watch-history sync.
 - Progress write-back to Emby / Jellyfin / Plex
 - Trakt.tv and Bangumi.tv watch-history sync
 - Concurrent download manager with pause / resume and rate limiting
-- Native GUI for macOS (Tauri, vibrancy)
+- Native GUI for macOS and Windows (Tauri, vibrancy on macOS)
 - Single static binary — zero runtime dependencies on every platform
 
 ---
@@ -96,7 +98,7 @@ cargo fmt --all
 # Lint (warnings are errors)
 cargo clippy --workspace --all-targets --frozen -- -D warnings
 
-# Test (316 tests across 20 suites)
+# Test (323 tests across 22 suites)
 cargo test --workspace --frozen
 ```
 
@@ -109,6 +111,7 @@ cargo test --workspace --frozen
 | `etlp-core`        | Domain types (`PlaybackData`, `Server`, `PlayerKind`) and trait contracts |
 | `etlp-config`      | TOML config loading, hot-reload, string-match rules          |
 | `etlp-logging`     | `tracing` setup, secret masking, 10 MB rotating file output  |
+| `etlp-metrics`     | Lightweight timing (`Span`) and per-session play-chain telemetry (`PlayMetrics`) |
 | `etlp-net`         | `reqwest`/`rustls` HTTP client, redirect cache, progress write-back |
 | `etlp-media-server`| Emby/Jellyfin/Plex API clients, payload parsing, version selection |
 | `etlp-player`      | mpv JSON IPC, VLC/MPC/PotPlayer/DandanPlay launchers, playlist management |
