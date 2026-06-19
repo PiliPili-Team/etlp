@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
 
 use tokio::sync::Mutex;
@@ -17,8 +17,8 @@ use etlp_net::{HttpClient, RedirectCache};
 /// extractor. Each field uses the minimal synchronisation primitive
 /// required for its access pattern.
 pub struct AppState {
-    /// Guards one-instance-mode: `true` while a player is running.
-    pub player_running: AtomicBool,
+    /// Counts currently active player subprocesses; zero means idle.
+    pub active_players: AtomicUsize,
     /// Redirect URL cache (internally `Arc<RwLock<…>>`—cheap to clone).
     pub redirect_cache: RedirectCache,
     /// Maps `"{netloc}-{item_id}"` → override start-second.
@@ -49,7 +49,7 @@ impl AppState {
         working_dir: PathBuf,
     ) -> Self {
         Self {
-            player_running: AtomicBool::new(false),
+            active_players: AtomicUsize::new(0),
             redirect_cache: RedirectCache::new(),
             miss_runtime: RwLock::new(HashMap::new()),
             dl_manager: Mutex::new(dl_manager),
