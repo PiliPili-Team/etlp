@@ -73,7 +73,7 @@ Install the browser userscript from the
 [embyToLocalPlayer repository](https://github.com/kjtsune/embyToLocalPlayer)
 — it is fully compatible with this server.
 
-Configuration is read from `embyToLocalPlayer.toml` in the working directory.
+Configuration is read from `config.toml` in the working directory.
 See the [Wiki](https://github.com/PiliPili-Team/etlp/wiki) for the full
 configuration reference and advanced settings.
 

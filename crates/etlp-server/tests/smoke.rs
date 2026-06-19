@@ -43,7 +43,7 @@ fn make_test_state() -> (SharedState, TempDir) {
 [trakt]\nenable_host = \"\"\n\
 ";
     let dir = tempfile::tempdir().expect("tempdir");
-    let toml_path = dir.path().join("embyToLocalPlayer.toml");
+    let toml_path = dir.path().join("config.toml");
     {
         let mut f = std::fs::File::create(&toml_path).expect("create toml");
         f.write_all(TOML.as_bytes()).expect("write toml");

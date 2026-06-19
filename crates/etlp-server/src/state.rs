@@ -86,7 +86,7 @@ pub mod test_helpers {
     /// Returns the state and the `TempDir` guard (dropped when test ends).
     pub fn test_state() -> (SharedState, TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
-        let toml_path = dir.path().join("embyToLocalPlayer.toml");
+        let toml_path = dir.path().join("config.toml");
         {
             let mut f = std::fs::File::create(&toml_path).expect("create toml");
             f.write_all(MINIMAL_TOML.as_bytes()).expect("write toml");

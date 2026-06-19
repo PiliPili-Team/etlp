@@ -1,8 +1,8 @@
 //! TOML configuration loading and string-match rules for etlp.
 //!
-//! Wraps the on-disk `embyToLocalPlayer*.toml` file and exposes typed section
-//! structs. Every field carries a sensible default so a minimal config file
-//! only needs to specify the keys that differ from the defaults.
+//! Wraps the on-disk `config.toml` file and exposes typed section structs.
+//! Every field carries a sensible default so a minimal config file only needs
+//! to specify the keys that differ from the defaults.
 
 pub mod matching;
 
@@ -14,7 +14,7 @@ use thiserror::Error;
 /// Errors raised while locating or parsing the configuration file.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    /// No candidate toml file existed in the search directory.
+    /// No `config.toml` existed in the search directory.
     #[error("no config file found in {0}")]
     NotFound(PathBuf),
 
@@ -288,51 +288,27 @@ pub struct Config {
     path: PathBuf,
 }
 
-/// The `platform.system()` name used in the platform-specific config file
-/// (`embyToLocalPlayer-<Platform>.toml`).
-#[must_use]
-pub fn platform_name() -> &'static str {
-    match std::env::consts::OS {
-        "windows" => "Windows",
-        "macos" => "Darwin",
-        _ => "Linux",
-    }
-}
+/// The single canonical config file name. The app reads and writes exactly
+/// this file, so the loaded path always matches the written path.
+pub const CONFIG_FILE_NAME: &str = "config.toml";
 
-fn candidate_names() -> [String; 4] {
-    [
-        "config.toml".to_owned(),
-        format!("embyToLocalPlayer-{}.toml", platform_name()),
-        "embyToLocalPlayer.toml".to_owned(),
-        "embyToLocalPlayer_config.toml".to_owned(),
-    ]
-}
-
-/// The path of the first existing candidate config in `dir`, if any.
+/// The path of the config file in `dir`, if it exists.
 ///
-/// Mirrors [`Config::load_from_dir`]'s search order so that callers writing
-/// config changes can patch the exact file the app loaded, instead of
-/// silently creating a competing `config.toml` that would shadow the user's
-/// real config (e.g. `embyToLocalPlayer.toml`) on the next launch.
+/// Returns `None` when no config is present yet. Because there is only one
+/// canonical name, the file callers write to always matches the one the app
+/// loaded — no shadow file can ever reset the user's settings.
 #[must_use]
 pub fn existing_config_path(dir: &Path) -> Option<PathBuf> {
-    candidate_names()
-        .into_iter()
-        .map(|name| dir.join(name))
-        .find(|path| path.is_file())
+    let path = dir.join(CONFIG_FILE_NAME);
+    path.is_file().then_some(path)
 }
 
 impl Config {
-    /// Load the first existing candidate config from `dir`.
-    ///
-    /// Search order: `config.toml`, `embyToLocalPlayer-<Platform>.toml`,
-    /// `embyToLocalPlayer.toml`, `embyToLocalPlayer_config.toml`.
+    /// Load `config.toml` from `dir`.
     pub fn load_from_dir(dir: &Path) -> Result<Self> {
-        for name in candidate_names() {
-            let path = dir.join(&name);
-            if path.is_file() {
-                return Self::load_file(&path);
-            }
+        let path = dir.join(CONFIG_FILE_NAME);
+        if path.is_file() {
+            return Self::load_file(&path);
         }
         Err(ConfigError::NotFound(dir.to_path_buf()))
     }
@@ -459,7 +435,7 @@ speed_dummy = 1.5
     #[test]
     fn typed_fields_read_values() {
         let dir = tempdir().expect("tempdir");
-        write_config(dir.path(), "embyToLocalPlayer.toml", SAMPLE);
+        write_config(dir.path(), "config.toml", SAMPLE);
         let cfg = Config::load_from_dir(dir.path()).expect("load");
 
         assert_eq!(cfg.emby.player, "mpv");
@@ -471,11 +447,7 @@ speed_dummy = 1.5
     #[test]
     fn missing_keys_use_defaults() {
         let dir = tempdir().expect("tempdir");
-        write_config(
-            dir.path(),
-            "embyToLocalPlayer.toml",
-            "[emby]\nplayer = \"vlc\"\n",
-        );
+        write_config(dir.path(), "config.toml", "[emby]\nplayer = \"vlc\"\n");
         let cfg = Config::load_from_dir(dir.path()).expect("load");
 
         // explicit
@@ -496,7 +468,7 @@ speed_dummy = 1.5
     fn bom_is_tolerated() {
         let dir = tempdir().expect("tempdir");
         let body = "\u{feff}[emby]\nplayer = \"mpv\"\n".to_string();
-        write_config(dir.path(), "embyToLocalPlayer.toml", &body);
+        write_config(dir.path(), "config.toml", &body);
         let cfg = Config::load_from_dir(dir.path()).expect("load bom");
         assert_eq!(cfg.emby.player, "mpv");
     }
@@ -508,21 +480,14 @@ speed_dummy = 1.5
     }
 
     #[test]
-    fn existing_config_path_follows_search_order() {
+    fn existing_config_path_resolves_config_toml() {
         let dir = tempdir().expect("tempdir");
-        // Only a legacy file exists: it must be resolved (not config.toml).
-        write_config(dir.path(), "embyToLocalPlayer.toml", "[emby]\n");
-        assert_eq!(
-            existing_config_path(dir.path()),
-            Some(dir.path().join("embyToLocalPlayer.toml")),
-            "legacy config must be found when it is the only one present"
-        );
-        // Once config.toml exists it takes precedence, matching load_from_dir.
+        assert_eq!(existing_config_path(dir.path()), None);
         write_config(dir.path(), "config.toml", "[emby]\n");
         assert_eq!(
             existing_config_path(dir.path()),
             Some(dir.path().join("config.toml")),
-            "config.toml must win to mirror the load search order"
+            "config.toml must resolve once present"
         );
     }
 
@@ -545,7 +510,7 @@ src = "/mnt/disk2/media"
 dst = 'F:\media'
 "#;
         let dir = tempdir().expect("tempdir");
-        write_config(dir.path(), "embyToLocalPlayer.toml", body);
+        write_config(dir.path(), "config.toml", body);
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(
             cfg.path_translation_pairs(),
