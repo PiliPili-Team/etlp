@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
 import type { LangMode } from "../App";
 import { zhCN } from "./zh-CN";
 import { zhTW } from "./zh-TW";
@@ -22,7 +22,7 @@ function resolveLocale(lang: LangMode): string {
     return "en";
 }
 
-function makeT(lang: LangMode): T {
+export function makeT(lang: LangMode): T {
     const locale = resolveLocale(lang);
     const msgs = MESSAGES[locale] ?? zhCN;
     return (key, vars) => {
@@ -36,18 +36,7 @@ function makeT(lang: LangMode): T {
     };
 }
 
-const I18nContext = createContext<T>(makeT("zh-CN"));
-
-export function I18nProvider({
-    lang,
-    children,
-}: {
-    lang: LangMode;
-    children: React.ReactNode;
-}) {
-    const t = useMemo(() => makeT(lang), [lang]);
-    return <I18nContext.Provider value={t}>{children}</I18nContext.Provider>;
-}
+export const I18nContext = createContext<T>(makeT("zh-CN"));
 
 export function useI18n(): T {
     return useContext(I18nContext);
