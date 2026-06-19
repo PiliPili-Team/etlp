@@ -16,6 +16,7 @@
 //! regex passes) is ported separately.
 
 use regex::Regex;
+use tracing::debug;
 
 use crate::dto::Item;
 use crate::prefer::version_prefer_for_playlist;
@@ -116,6 +117,15 @@ fn path_contains(item: &Item, rule: &str) -> bool {
     item.path.as_deref().is_some_and(|p| p.contains(rule))
 }
 
+/// Path comparison tolerant of platform separator differences.
+///
+/// Emby on Windows may use backslashes while the userscript sends the same
+/// path with forward slashes. Normalising before comparing avoids a silent
+/// miss that would cause `version_filter` to return all episodes unfiltered.
+fn paths_equal(a: &str, b: &str) -> bool {
+    a == b || a.replace('\\', "/") == b.replace('\\', "/")
+}
+
 /// Locate the currently playing episode by file path, falling back to the
 /// media source id (mirrors the two lookups in `version_filter`).
 fn find_current<'a>(
@@ -124,19 +134,50 @@ fn find_current<'a>(
     media_source_id: &str,
 ) -> Option<&'a Item> {
     let by_path = episodes.iter().find(|ep| {
-        ep.path.as_deref() == Some(file_path)
+        ep.path
+            .as_deref()
+            .is_some_and(|p| paths_equal(p, file_path))
             || ep
                 .media_sources
                 .first()
-                .is_some_and(|s| s.path == file_path)
+                .is_some_and(|s| paths_equal(&s.path, file_path))
     });
-    by_path.or_else(|| {
-        episodes.iter().find(|ep| {
-            ep.media_sources
-                .first()
-                .is_some_and(|s| s.id == media_source_id)
-        })
-    })
+    if let Some(found) = by_path {
+        debug!(
+            "find_current: matched by path id={:?} path={:?}",
+            found.id,
+            found.path.as_deref().unwrap_or("<none>")
+        );
+        return Some(found);
+    }
+    let by_id = episodes.iter().find(|ep| {
+        ep.media_sources
+            .first()
+            .is_some_and(|s| s.id == media_source_id)
+    });
+    match &by_id {
+        Some(found) => debug!(
+            "find_current: matched by media_source_id={:?} id={:?}",
+            media_source_id, found.id
+        ),
+        None => {
+            let sample: Vec<&str> = episodes
+                .iter()
+                .take(6)
+                .map(|e| e.path.as_deref().unwrap_or("<none>"))
+                .collect();
+            debug!(
+                "find_current: no match file_path={:?} \
+                 media_source_id={:?} ep_count={} \
+                 first_paths={:?}",
+                file_path,
+                media_source_id,
+                episodes.len(),
+                sample
+            );
+        }
+    }
+    by_id
 }
 
 /// The episodes from `ep_current` onward whose keys stay in lock-step with
@@ -150,6 +191,12 @@ fn sequence_from_current(
         return vec![ep_current.clone()];
     }
     let Some(start) = ep_data.iter().position(|e| e == ep_current) else {
+        debug!(
+            "sequence_from_current: ep_current id={:?} not found \
+             in ep_data ({} items) — returning empty",
+            ep_current.id,
+            ep_data.len()
+        );
         return Vec::new();
     };
     let tail = ep_data.get(start..).unwrap_or(&[]);
@@ -220,27 +267,117 @@ pub fn version_filter(
     episodes: &[Item],
 ) -> Vec<Item> {
     if input.playlist {
+        debug!(
+            "version_filter: playlist mode, passing all {} episodes through",
+            episodes.len()
+        );
         return episodes.to_vec();
     }
+
     let ver_re = input.version_filter_re.trim().trim_matches('|');
-    if ver_re.is_empty() {
-        return episodes.to_vec();
-    }
-    // ep_to_key for every episode; a missing index disables filtering.
+
+    // Build per-episode keys early so multi-version detection works even when
+    // ver_re is empty (needed to apply version_prefer without a regex).
     let Some(keys): Option<Vec<String>> =
         episodes.iter().map(episode_key).collect()
     else {
+        debug!(
+            "version_filter: some episodes have missing indices, \
+             returning all {} episodes unchanged",
+            episodes.len()
+        );
         return episodes.to_vec();
     };
     let seq_keys = dedup_keys(&keys);
     let ep_num = seq_keys.len();
+
     if ep_num == episodes.len() {
+        // No multi-version episodes — nothing to filter.
+        debug!(
+            "version_filter: {} episodes, no multi-version detected, \
+             returning all unchanged",
+            episodes.len()
+        );
         return episodes.to_vec();
     }
+
+    debug!(
+        "version_filter: {} raw episodes / {} unique episode keys \
+         (multi-version present); ver_re={:?}, file_path={:?}",
+        episodes.len(),
+        ep_num,
+        ver_re,
+        input.file_path
+    );
+
+    // When no regex is configured, applying the ini pass would produce garbage
+    // (an empty pattern matches everywhere).  Try version_prefer directly as
+    // the sole version selector; if that's also disabled, return all.
+    if ver_re.is_empty() {
+        let Some(ep_current) =
+            find_current(episodes, input.file_path, input.media_source_id)
+        else {
+            debug!(
+                "version_filter: no regex and cannot locate current episode \
+                 (file_path={:?}), returning all",
+                input.file_path
+            );
+            return episodes.to_vec();
+        };
+        let Some(current_key) = episode_key(ep_current) else {
+            return episodes.to_vec();
+        };
+        debug!(
+            "version_filter: no regex — trying version_prefer \
+             (enabled={}, {} rules, current_key={:?})",
+            input.version_prefer_enabled,
+            input.version_prefer.len(),
+            current_key
+        );
+        let prefer = version_prefer_for_playlist(
+            &keys,
+            episodes,
+            &[],
+            &current_key,
+            input.file_path,
+            input.version_prefer,
+            input.version_prefer_enabled,
+        );
+        return match prefer {
+            Some(ref p) => {
+                debug!(
+                    "version_filter: version_prefer selected {} episodes: {:?}",
+                    p.len(),
+                    p.iter()
+                        .map(|e| e.path.as_deref().unwrap_or("?"))
+                        .collect::<Vec<_>>()
+                );
+                p.clone()
+            }
+            None => {
+                debug!(
+                    "version_filter: version_prefer disabled/no rules, \
+                     returning all {} episodes",
+                    episodes.len()
+                );
+                episodes.to_vec()
+            }
+        };
+    }
+
+    // ── regex-based path (ver_re is non-empty) ────────────────────────────────
 
     let Some(ep_current) =
         find_current(episodes, input.file_path, input.media_source_id)
     else {
+        debug!(
+            "version_filter: cannot locate current episode \
+             (file_path={:?} media_source_id={:?}) \
+             in multi-version path — returning all {} unchanged",
+            input.file_path,
+            input.media_source_id,
+            episodes.len()
+        );
         return episodes.to_vec();
     };
     let Some(current_key) = episode_key(ep_current) else {
@@ -249,6 +386,11 @@ pub fn version_filter(
     let curr_count = keys.iter().filter(|k| **k == current_key).count();
     let curr_raw_index =
         keys.iter().position(|k| *k == current_key).unwrap_or(0);
+
+    debug!(
+        "version_filter: current_key={:?}, curr_count={}, curr_raw_index={}",
+        current_key, curr_count, curr_raw_index
+    );
 
     // Only the first episode is multi-version: collapse and we are done.
     if curr_count > 1 {
@@ -264,6 +406,11 @@ pub fn version_filter(
             }
         }
         if ep_num == trimmed.len() {
+            debug!(
+                "version_filter: single multi-version episode collapsed, \
+                 returning {} episodes",
+                trimmed.len()
+            );
             return trimmed;
         }
     }
@@ -288,6 +435,10 @@ pub fn version_filter(
             if let Some(idx) = raw.iter().position(|e| e == ep_current)
                 && raw.get(idx + 1..).is_some_and(|r| !r.is_empty())
             {
+                debug!(
+                    "version_filter: raw-name derivation rule selected {} episodes",
+                    raw.len()
+                );
                 return raw;
             }
         }
@@ -302,20 +453,39 @@ pub fn version_filter(
         &cut_keys,
         (rules.0, rules.1.clone()),
     ) {
-        Ok(full) => return full,
+        Ok(full) => {
+            debug!(
+                "version_filter: builtin pass (full match) selected {} episodes",
+                full.len()
+            );
+            return full;
+        }
         Err(seq) => seq,
     };
+
+    debug!(
+        "version_filter: builtin partial sequence len={}, proceeding to ini-regex pass",
+        builtin_res.len()
+    );
 
     // ini regex pass: derive tokens from the played path, keep episodes whose
     // path yields the same number of token matches.
     let single_line: String = ver_re.split('\n').collect();
     let Ok(outer) = Regex::new(&single_line) else {
+        debug!(
+            "version_filter: invalid ini regex {:?}, falling back",
+            ver_re
+        );
         return fallback(builtin_res, ep_current);
     };
     let ini_tokens: Vec<String> = outer
         .find_iter(input.file_path)
         .map(|m| m.as_str().to_owned())
         .collect();
+    debug!(
+        "version_filter: ini-regex {:?} extracted tokens {:?} from {:?}",
+        ver_re, ini_tokens, input.file_path
+    );
     let combined = ini_tokens.join("|");
     let Ok(inner) = Regex::new(&combined) else {
         return fallback(builtin_res, ep_current);
@@ -325,11 +495,26 @@ pub fn version_filter(
         .iter()
         .filter(|i| {
             let path = i.path.as_deref().unwrap_or("");
-            inner.find_iter(path).count() == token_count
+            let matched = inner.find_iter(path).count() == token_count;
+            debug!(
+                "version_filter: ini-regex episode {:?} matched={}",
+                path, matched
+            );
+            matched
         })
         .cloned()
         .collect();
+    debug!(
+        "version_filter: ini-regex matched {} / {} episodes (need {})",
+        ep_data.len(),
+        episodes.len(),
+        ep_num
+    );
     if ep_data.len() == ep_num {
+        debug!(
+            "version_filter: ini-regex exact match, returning {} episodes",
+            ep_data.len()
+        );
         return ep_data;
     }
 
@@ -347,6 +532,12 @@ pub fn version_filter(
         input.version_prefer_enabled,
     );
     let has_prefer = prefer.as_ref().is_some_and(|p| !p.is_empty());
+    debug!(
+        "version_filter: version_prefer has_prefer={}, ep_data={}, builtin_res={}",
+        has_prefer,
+        ep_data.len(),
+        builtin_res.len()
+    );
 
     let mut ini_res: Vec<Item> = Vec::new();
     if ep_data.is_empty() {
@@ -376,9 +567,23 @@ pub fn version_filter(
         builtin_res
     };
     if filter_res.len() <= 1 {
+        debug!(
+            "version_filter: filter_res too small, returning version_prefer \
+             result ({} episodes)",
+            prefer.len()
+        );
         return prefer;
     }
-    merge_prefer(&prefer, &filter_res, &seq_keys)
+    let merged = merge_prefer(&prefer, &filter_res, &seq_keys);
+    debug!(
+        "version_filter: merged prefer+filter -> {} episodes: {:?}",
+        merged.len(),
+        merged
+            .iter()
+            .map(|e| e.path.as_deref().unwrap_or("?"))
+            .collect::<Vec<_>>()
+    );
+    merged
 }
 
 /// Degrade safely: the best builtin sequence if any, else the current episode
@@ -401,11 +606,24 @@ fn merge_prefer(
     let first_key = filter_res.first().and_then(episode_key);
     let last_key = filter_res.last().and_then(episode_key);
     let first_index = first_key
-        .and_then(|k| seq_keys.iter().position(|s| *s == k))
+        .as_deref()
+        .and_then(|k| seq_keys.iter().position(|s| s.as_str() == k))
         .unwrap_or(0);
     let last_index = last_key
-        .and_then(|k| seq_keys.iter().position(|s| *s == k))
+        .as_deref()
+        .and_then(|k| seq_keys.iter().position(|s| s.as_str() == k))
         .unwrap_or(0);
+    debug!(
+        "merge_prefer: prefer={} filter_res={} seq_keys={} \
+         first_key={:?} last_key={:?} first_index={} last_index={}",
+        prefer.len(),
+        filter_res.len(),
+        seq_keys.len(),
+        first_key,
+        last_key,
+        first_index,
+        last_index
+    );
     let head = prefer.get(..first_index).unwrap_or(&[]);
     let tail = prefer.get(last_index + 1..).unwrap_or(&[]);
     let mut res = head.to_vec();

@@ -12,6 +12,7 @@
 
 use etlp_config::matching::{match_pair, matches};
 use etlp_core::{PlaybackData, Server};
+use tracing::debug;
 
 use crate::dto::Item;
 use crate::episodes::{
@@ -82,9 +83,34 @@ pub fn assemble_episodes(
 ) -> Vec<PlaybackData> {
     let base = ctx.base;
 
+    debug!(
+        "assemble_episodes: fetched {} raw episodes for season={:?}, \
+         file_path={:?}, media_source_id={:?}, playlist={}",
+        fetched.len(),
+        ctx.season_id,
+        base.file_path,
+        base.media_source_id,
+        ctx.playlist
+    );
+
+    for (i, item) in fetched.iter().enumerate() {
+        debug!(
+            "  raw[{}]: id={:?} S{:?}E{:?} path={:?}",
+            i,
+            item.id,
+            item.parent_index_number,
+            item.index_number,
+            item.path.as_deref().unwrap_or("<none>")
+        );
+    }
+
     let errors = scan_errors(fetched);
     if errors.any {
         if errors.index_missing {
+            debug!(
+                "assemble_episodes: broken episode with missing index, \
+                 disabling playlist (returning current only)"
+            );
             return vec![base.clone()];
         }
         if errors
@@ -92,6 +118,10 @@ pub fn assemble_episodes(
             .iter()
             .any(|id| *id == base.media_source_id)
         {
+            debug!(
+                "assemble_episodes: current media source has no path, \
+                 disabling playlist (returning current only)"
+            );
             return vec![base.clone()];
         }
     }
@@ -101,6 +131,11 @@ pub fn assemble_episodes(
         .filter(|i| i.path.is_some())
         .cloned()
         .collect();
+
+    debug!(
+        "assemble_episodes: {} episodes remain after dropping path-less items",
+        episodes.len()
+    );
 
     // strm_file_name_sync: local strm items expose their real path on the
     // first media source.
@@ -122,7 +157,28 @@ pub fn assemble_episodes(
             version_prefer: &ctx.config.version_prefer,
             version_prefer_enabled: ctx.config.version_prefer_for_playlist,
         };
+        debug!(
+            "assemble_episodes: calling version_filter \
+             (ver_re={:?}, version_prefer={:?}, prefer_enabled={})",
+            ctx.config.version_filter,
+            ctx.config.version_prefer,
+            ctx.config.version_prefer_for_playlist
+        );
         episodes = version_filter(&vf_input, &episodes);
+        debug!(
+            "assemble_episodes: version_filter returned {} episodes",
+            episodes.len()
+        );
+        for (i, ep) in episodes.iter().enumerate() {
+            debug!(
+                "  filtered[{}]: id={:?} S{:?}E{:?} path={:?}",
+                i,
+                ep.id,
+                ep.parent_index_number,
+                ep.index_number,
+                ep.path.as_deref().unwrap_or("<none>")
+            );
+        }
     }
 
     episodes.sort_by_key(|item| (item.parent_index_number, item.index_number));
@@ -184,6 +240,19 @@ pub fn assemble_episodes(
     }
 
     apply_stream_rewrites(&mut result, base, ctx.config);
+
+    debug!(
+        "assemble_episodes: final playlist has {} entries",
+        result.len()
+    );
+    for (i, ep) in result.iter().enumerate() {
+        debug!(
+            "  playlist[{}]: item_id={:?} E{:?} order={:?} \
+             media_title={:?} media_path={:?}",
+            i, ep.item_id, ep.index, ep.order, ep.media_title, ep.media_path
+        );
+    }
+
     result
 }
 
