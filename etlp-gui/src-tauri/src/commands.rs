@@ -402,7 +402,6 @@ pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
 /// (which would trigger an error dialog on most machines).
 #[tauri::command]
 pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt as _;
     let path = config_file_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -413,16 +412,21 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
+        // `app` drives the opener on other platforms; notepad needs no handle.
+        let _ = &app;
         std::process::Command::new("notepad.exe")
             .arg(&path)
             .spawn()
             .map_err(|e| format!("open notepad: {e}"))?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(target_os = "windows"))]
-    app.opener()
-        .open_path(path.to_string_lossy(), None::<&str>)
-        .map_err(|e| format!("open config file: {e}"))
+    {
+        use tauri_plugin_opener::OpenerExt as _;
+        app.opener()
+            .open_path(path.to_string_lossy(), None::<&str>)
+            .map_err(|e| format!("open config file: {e}"))
+    }
 }
 
 // ── Logs ───────────────────────────────────────────────────────────────────────
