@@ -30,6 +30,10 @@
     --red-soft: rgba(255, 59, 48, 0.12);
     --yellow: #ff9f0a;
     --yellow-soft: rgba(255, 159, 10, 0.12);
+    --purple: #9f7aea;
+    --purple-soft: rgba(159, 122, 234, 0.12);
+    --teal: #5ac8fa;
+    --teal-soft: rgba(90, 200, 250, 0.12);
     --toggle-on: #34c759;
     --toggle-off: #e5e5ea;
     --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
@@ -66,6 +70,10 @@
         --red-soft: rgba(255, 69, 58, 0.15);
         --yellow: #ffd60a;
         --yellow-soft: rgba(255, 214, 10, 0.15);
+        --purple: #bf80ff;
+        --purple-soft: rgba(191, 128, 255, 0.15);
+        --teal: #5ac8fa;
+        --teal-soft: rgba(90, 200, 250, 0.15);
         --toggle-on: #30d158;
         --toggle-off: #3a3a3c;
         --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -93,6 +101,10 @@
     --red-soft: rgba(255, 69, 58, 0.15);
     --yellow: #ffd60a;
     --yellow-soft: rgba(255, 214, 10, 0.15);
+    --purple: #bf80ff;
+    --purple-soft: rgba(191, 128, 255, 0.15);
+    --teal: #5ac8fa;
+    --teal-soft: rgba(90, 200, 250, 0.15);
     --toggle-on: #30d158;
     --toggle-off: #3a3a3c;
     --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -152,6 +164,16 @@ body.platform-macos .app {
 
 body:not(.platform-macos) .titlebar {
     display: none;
+}
+
+/* Windows: show a compact drag-region titlebar so the window corner looks
+   clean and users can drag the window.  Placed after the :not rule so the
+   higher cascade position wins at equal specificity (0-2-1 vs 0-2-1). */
+body.platform-windows .titlebar {
+    display: flex;
+    height: 38px;
+    padding: 0 12px 0 14px;
+    align-items: center;
 }
 
 .titlebar-logo {
@@ -806,13 +828,13 @@ body:not(.platform-macos) .titlebar {
     color: var(--red);
 }
 .log-badge-debug {
-    background: var(--surface-hover);
-    color: var(--text-3);
+    background: var(--purple-soft);
+    color: var(--purple);
 }
 .log-badge-trace {
-    background: var(--surface-hover);
-    color: var(--text-3);
-    opacity: 0.6;
+    background: var(--teal-soft);
+    color: var(--teal);
+    opacity: 0.8;
 }
 
 .log-content {
@@ -827,10 +849,12 @@ body:not(.platform-macos) .titlebar {
     color: var(--red);
 }
 .log-content.debug {
-    color: var(--text-2);
+    color: var(--purple);
+    opacity: 0.85;
 }
 .log-content.trace {
-    color: var(--text-3);
+    color: var(--teal);
+    opacity: 0.7;
 }
 
 /* Raw (unparseable) lines */
@@ -1217,4 +1241,40 @@ body.platform-macos .nav-item:not(.active):hover {
 [data-theme="light"] body.platform-macos .nav-item:not(.active):hover {
     background: rgba(255, 255, 255, 0.82);
     color: var(--text);
+}
+
+/* Windows dark — solid, slightly elevated backgrounds so the content area
+   reads as distinct layers rather than an undifferentiated near-black surface. */
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) body.platform-windows .app {
+        background: #141416;
+    }
+    html:not([data-theme="light"]) body.platform-windows .content {
+        background: #1a1a1c;
+    }
+    html:not([data-theme="light"]) body.platform-windows .settings-group {
+        background: #242426;
+    }
+    html:not([data-theme="light"]) body.platform-windows .overview-hero {
+        background: #242426;
+    }
+    html:not([data-theme="light"]) body.platform-windows .log-container {
+        background: #242426;
+    }
+}
+
+[data-theme="dark"] body.platform-windows .app {
+    background: #141416;
+}
+[data-theme="dark"] body.platform-windows .content {
+    background: #1a1a1c;
+}
+[data-theme="dark"] body.platform-windows .settings-group {
+    background: #242426;
+}
+[data-theme="dark"] body.platform-windows .overview-hero {
+    background: #242426;
+}
+[data-theme="dark"] body.platform-windows .log-container {
+    background: #242426;
 }
