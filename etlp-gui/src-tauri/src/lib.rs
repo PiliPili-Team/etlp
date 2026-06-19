@@ -142,9 +142,12 @@ pub fn run() {
         .unwrap_or_else(|| "info".to_owned());
 
     let masker = etlp_logging::Masker::new(false);
-    let log_handle =
-        etlp_logging::init(masker, &initial_log_level, Some(log_file.as_path()))
-            .ok();
+    let log_handle = etlp_logging::init(
+        masker,
+        &initial_log_level,
+        Some(log_file.as_path()),
+    )
+    .ok();
 
     if let Some(d) = etlp_server::platform::config_dir() {
         eprintln!("[etlp] config dir: {}", d.display());
@@ -302,7 +305,9 @@ pub fn run() {
                 // interactionType differently and breaks CSS drag regions.
                 #[cfg(target_os = "macos")]
                 {
-                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                    use window_vibrancy::{
+                        NSVisualEffectMaterial, apply_vibrancy,
+                    };
                     apply_vibrancy(
                         &window,
                         NSVisualEffectMaterial::Sidebar,

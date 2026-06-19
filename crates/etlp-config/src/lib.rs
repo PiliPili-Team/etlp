@@ -164,7 +164,7 @@ impl Default for DevSection {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct PlaylistSection {
-    /// Maximum episodes to append to the player playlist.
+    /// Maximum episodes to append to the player playlist (`0` = no limit).
     pub item_limit: u32,
     /// Regex that selects one version per episode (empty = no filter).
     pub version_filter: String,
@@ -306,6 +306,20 @@ fn candidate_names() -> [String; 4] {
         "embyToLocalPlayer.toml".to_owned(),
         "embyToLocalPlayer_config.toml".to_owned(),
     ]
+}
+
+/// The path of the first existing candidate config in `dir`, if any.
+///
+/// Mirrors [`Config::load_from_dir`]'s search order so that callers writing
+/// config changes can patch the exact file the app loaded, instead of
+/// silently creating a competing `config.toml` that would shadow the user's
+/// real config (e.g. `embyToLocalPlayer.toml`) on the next launch.
+#[must_use]
+pub fn existing_config_path(dir: &Path) -> Option<PathBuf> {
+    candidate_names()
+        .into_iter()
+        .map(|name| dir.join(name))
+        .find(|path| path.is_file())
 }
 
 impl Config {
@@ -485,6 +499,31 @@ speed_dummy = 1.5
         write_config(dir.path(), "embyToLocalPlayer.toml", &body);
         let cfg = Config::load_from_dir(dir.path()).expect("load bom");
         assert_eq!(cfg.emby.player, "mpv");
+    }
+
+    #[test]
+    fn existing_config_path_none_when_absent() {
+        let dir = tempdir().expect("tempdir");
+        assert_eq!(existing_config_path(dir.path()), None);
+    }
+
+    #[test]
+    fn existing_config_path_follows_search_order() {
+        let dir = tempdir().expect("tempdir");
+        // Only a legacy file exists: it must be resolved (not config.toml).
+        write_config(dir.path(), "embyToLocalPlayer.toml", "[emby]\n");
+        assert_eq!(
+            existing_config_path(dir.path()),
+            Some(dir.path().join("embyToLocalPlayer.toml")),
+            "legacy config must be found when it is the only one present"
+        );
+        // Once config.toml exists it takes precedence, matching load_from_dir.
+        write_config(dir.path(), "config.toml", "[emby]\n");
+        assert_eq!(
+            existing_config_path(dir.path()),
+            Some(dir.path().join("config.toml")),
+            "config.toml must win to mirror the load search order"
+        );
     }
 
     #[test]

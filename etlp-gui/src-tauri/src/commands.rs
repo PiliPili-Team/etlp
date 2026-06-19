@@ -301,7 +301,12 @@ pub async fn update_config_field(
 ) -> Result<(), String> {
     let cfg_dir = platform::config_dir()
         .ok_or_else(|| "cannot determine config directory".to_owned())?;
-    let path = cfg_dir.join("config.toml");
+    // Patch the file the app actually loaded. Falling back to a hard-coded
+    // `config.toml` would create a second file that shadows the user's real
+    // config (e.g. `embyToLocalPlayer.toml`) on the next launch, making their
+    // settings appear to reset.
+    let path = etlp_config::existing_config_path(&cfg_dir)
+        .unwrap_or_else(|| cfg_dir.join("config.toml"));
 
     // If the file does not exist yet, write the default template so toml_edit
     // has a valid document to patch into.
@@ -516,9 +521,10 @@ pub async fn get_log_paths(
         .as_ref()
         .and_then(|d| Config::load_from_dir(d).ok())
         .and_then(|c| {
-            c.dev.mpv_input_ipc_server.as_ref().and_then(|_| {
-                platform::data_dir().map(|d| d.join("mpv.log"))
-            })
+            c.dev
+                .mpv_input_ipc_server
+                .as_ref()
+                .and_then(|_| platform::data_dir().map(|d| d.join("mpv.log")))
         });
 
     Ok(serde_json::json!({
@@ -642,7 +648,10 @@ pub async fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
 fn config_file_path() -> Result<PathBuf, String> {
     let dir = platform::config_dir()
         .ok_or_else(|| "cannot determine config directory".to_owned())?;
-    Ok(dir.join("config.toml"))
+    // Resolve to the config the app loaded so "edit config" opens the file the
+    // user is actually using, not an empty shadow `config.toml`.
+    Ok(etlp_config::existing_config_path(&dir)
+        .unwrap_or_else(|| dir.join("config.toml")))
 }
 
 /// Load config, writing the default template only when no file exists at all.
@@ -706,12 +715,12 @@ pub(crate) fn load_or_default_config(
 }
 
 fn write_default_config(path: &std::path::Path) -> Result<(), String> {
-    let template = include_str!("../default_config.toml");
+    let template = default_config_template();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("create config dir: {e}"))?;
     }
-    match std::fs::write(path, template) {
+    match std::fs::write(path, &template) {
         Ok(()) => {
             info!(path = %path.display(), "default config written");
             Ok(())
@@ -721,4 +730,31 @@ fn write_default_config(path: &std::path::Path) -> Result<(), String> {
             Err(format!("write default config: {e}"))
         }
     }
+}
+
+/// Resolve the template used to seed a brand-new config.
+///
+/// Prefers a user-provided `~/Downloads/config.toml` so users can drop in a
+/// pre-filled file and have it adopted verbatim on first run; falls back to
+/// the template embedded at build time when none is present (or unreadable).
+fn default_config_template() -> String {
+    if let Some(home) = dirs::home_dir() {
+        let user_template = home.join("Downloads").join("config.toml");
+        if user_template.is_file() {
+            match std::fs::read_to_string(&user_template) {
+                Ok(contents) => {
+                    info!(
+                        path = %user_template.display(),
+                        "seeding config from user template in Downloads"
+                    );
+                    return contents;
+                }
+                Err(e) => warn!(
+                    path = %user_template.display(),
+                    "read user template failed: {e} — using embedded default"
+                ),
+            }
+        }
+    }
+    include_str!("../default_config.toml").to_owned()
 }
