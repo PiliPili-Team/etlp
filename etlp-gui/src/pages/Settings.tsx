@@ -878,14 +878,6 @@ function SystemSection({
 }) {
     const t = useI18n();
 
-    const handleOpenConfig = useCallback(async () => {
-        try {
-            await invoke("open_config_folder");
-        } catch {
-            /* ignore */
-        }
-    }, []);
-
     const dpr =
         typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
 
@@ -1058,35 +1050,6 @@ function SystemSection({
                     mono
                     onCommit={(v) => update("bangumi", "access_token", v || null)}
                 />
-            </div>
-
-            {/* Config file */}
-            <div className="settings-group-title">{t("sys_config_file")}</div>
-            <div className="settings-group">
-                <div className="row">
-                    <div className="row-label">
-                        <div>{t("sys_config_path")}</div>
-                        <div
-                            className="row-desc"
-                            style={{
-                                fontFamily: "monospace",
-                                fontSize: 11,
-                                marginTop: 4,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                            title={cfg.config_path}
-                        >
-                            {cfg.config_path || "—"}
-                        </div>
-                    </div>
-                    <div className="row-control">
-                        <button className="btn" onClick={() => void handleOpenConfig()}>
-                            {t("open_dir")}
-                        </button>
-                    </div>
-                </div>
             </div>
         </>
     );

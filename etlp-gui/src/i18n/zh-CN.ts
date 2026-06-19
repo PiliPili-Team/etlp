@@ -145,8 +145,6 @@ export const zhCN = {
     sys_bangumi_token: "访问令牌",
     sys_bangumi_token_desc: "在 bgm.tv → 设置 → 访问令牌 中生成；留空禁用",
     sys_bangumi_token_placeholder: "留空禁用 Bangumi 集成",
-    sys_config_file: "配置文件",
-    sys_config_path: "配置文件路径",
     sys_privacy: "隐私",
     sys_no_progress: "禁止上报播放进度",
     sys_no_progress_desc: "开启后不向 Emby/Jellyfin 服务器发送播放进度",

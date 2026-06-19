@@ -146,8 +146,6 @@ export const zhTW: typeof zhCN = {
     sys_bangumi_token: "存取權杖",
     sys_bangumi_token_desc: "在 bgm.tv → 設定 → 存取權杖 中產生；留空停用",
     sys_bangumi_token_placeholder: "留空停用 Bangumi 整合",
-    sys_config_file: "設定檔",
-    sys_config_path: "設定檔路徑",
     sys_privacy: "隱私",
     sys_no_progress: "停用播放進度回報",
     sys_no_progress_desc: "開啟後不向 Emby/Jellyfin 伺服器傳送播放進度",

@@ -155,8 +155,6 @@ export const en: typeof zhCN = {
     sys_bangumi_token_desc:
         "Generated in bgm.tv → Settings → Access Token — leave empty to disable",
     sys_bangumi_token_placeholder: "Leave empty to disable Bangumi",
-    sys_config_file: "Config File",
-    sys_config_path: "Config File Path",
     sys_privacy: "Privacy",
     sys_no_progress: "Disable Progress Reporting",
     sys_no_progress_desc: "Do not report playback progress to the Emby/Jellyfin server",
