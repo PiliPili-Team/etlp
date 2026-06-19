@@ -336,6 +336,7 @@ pub fn run() {
             commands::edit_config,
             commands::get_log_lines,
             commands::clear_log_position,
+            commands::open_log_folder,
             commands::get_log_paths,
             commands::pick_player_path,
             commands::path_exists,

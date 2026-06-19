@@ -176,8 +176,10 @@ export const en: typeof zhCN = {
     logs_clear: "Clear",
     logs_bottom: "↓ Bottom",
     logs_empty: "Waiting for log output…",
-    logs_no_mpv: "mpv log file not found",
+    logs_no_mpv: "No mpv log found — click “Choose mpv Log” to load one",
     logs_lines: "lines",
+    logs_open_folder: "Open Log Folder",
+    logs_pick_mpv: "Choose mpv Log",
 
     // About modal
     about_thanks: "Credits",

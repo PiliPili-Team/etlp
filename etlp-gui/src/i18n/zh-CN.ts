@@ -166,8 +166,10 @@ export const zhCN = {
     logs_clear: "清空",
     logs_bottom: "↓ 底部",
     logs_empty: "等待日志输出…",
-    logs_no_mpv: "未检测到 mpv 日志文件",
+    logs_no_mpv: "未检测到 mpv 日志，点击「选择 mpv 日志」加载",
     logs_lines: "行",
+    logs_open_folder: "打开日志文件夹",
+    logs_pick_mpv: "选择 mpv 日志",
 
     // About modal
     about_thanks: "鸣谢",
