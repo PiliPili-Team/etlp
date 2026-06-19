@@ -82,7 +82,8 @@ export const zhCN = {
     vp_sub_extract_placeholder: "例：CHS、简体",
     vp_limits: "播放列表限制",
     vp_max_eps: "单次最大集数",
-    vp_max_eps_desc: "单次播放最多加入播放列表的集数，超过此数量时截断（推荐 10–100）",
+    vp_max_eps_desc:
+        "单次播放最多加入播放列表的集数，超过此数量时截断；0 或留空表示不限制（推荐 10–100）",
     vp_last_ep: "最后一集禁用列表",
     vp_last_ep_desc: "当前集是最后一集时不添加后续集",
     vp_filter: "版本过滤正则",
@@ -135,6 +136,8 @@ export const zhCN = {
     sys_trakt_id_desc: "在 trakt.tv 创建应用后获取；留空禁用",
     sys_trakt_id_placeholder: "留空禁用 Trakt 集成",
     sys_trakt_secret: "应用密钥",
+    sys_trakt_secret_desc: "在 trakt.tv 创建应用后获取；留空禁用",
+    sys_trakt_secret_placeholder: "留空禁用 Trakt 集成",
     sys_trakt_host: "触发域名",
     sys_trakt_host_desc: "只有来自该域名的请求才会触发 Trakt 打点",
     sys_trakt_host_placeholder: "例：emby.example.com",

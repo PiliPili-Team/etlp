@@ -88,7 +88,8 @@ export const en: typeof zhCN = {
     vp_limits: "Playlist Limits",
     vp_max_eps: "Max Episodes per Session",
     vp_max_eps_desc:
-        "Episodes are truncated once this limit is reached (recommended: 10–100)",
+        "Episodes are truncated once this limit is reached; 0 or empty means " +
+        "unlimited (recommended: 10–100)",
     vp_last_ep: "Disable at Last Episode",
     vp_last_ep_desc: "Do not add subsequent episodes when current is the last",
     vp_filter: "Version Filter Regex",
@@ -143,6 +144,9 @@ export const en: typeof zhCN = {
         "Obtained after creating an app on trakt.tv — leave empty to disable",
     sys_trakt_id_placeholder: "Leave empty to disable Trakt",
     sys_trakt_secret: "Client Secret",
+    sys_trakt_secret_desc:
+        "Obtained after creating an app on trakt.tv — leave empty to disable",
+    sys_trakt_secret_placeholder: "Leave empty to disable Trakt",
     sys_trakt_host: "Enable Host",
     sys_trakt_host_desc: "Only requests from this host trigger Trakt scrobbling",
     sys_trakt_host_placeholder: "e.g. emby.example.com",
