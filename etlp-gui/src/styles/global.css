@@ -504,15 +504,24 @@ body.platform-windows .titlebar {
     font-weight: 500;
 }
 
-/* Draggable priority tags: grab cursor and a subtle lift while dragging. */
+/* Draggable priority tags: grab cursor and a subtle lift while dragging.
+   touch-action/user-select are disabled so pointer dragging isn't hijacked
+   by scrolling or text selection in the WebView. */
 .tag-draggable {
     cursor: grab;
+    user-select: none;
+    touch-action: none;
 }
 .tag-draggable:active {
     cursor: grabbing;
 }
 .tag-dragging {
     opacity: 0.45;
+}
+/* Drop target highlight while reordering. */
+.tag-over {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }
 
 .tag-remove {

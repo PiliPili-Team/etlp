@@ -250,6 +250,7 @@ function TagListRow({
     const t = useI18n();
     const [input, setInput] = useState("");
     const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const [overIndex, setOverIndex] = useState<number | null>(null);
     // Drag-to-reorder is opt-in: only ordered priority lists pass onReorder.
     const reorderable = Boolean(onReorder);
     const handleAdd = () => {
@@ -258,6 +259,37 @@ function TagListRow({
             onAdd(tag);
             setInput("");
         }
+    };
+
+    // Pointer-based reordering instead of HTML5 drag-and-drop. Tauri's WebView
+    // intercepts native drag-and-drop at the OS level (dragDropEnabled), so
+    // `dragstart`/`drop` never reach the document; pointer events are immune.
+    const indexAtPoint = (x: number, y: number): number | null => {
+        const el = document
+            .elementFromPoint(x, y)
+            ?.closest<HTMLElement>("[data-tag-index]");
+        const idx = el ? Number(el.dataset.tagIndex) : NaN;
+        return Number.isInteger(idx) ? idx : null;
+    };
+
+    const handleDragMove = (e: React.PointerEvent) => {
+        if (dragIndex === null) return;
+        setOverIndex(indexAtPoint(e.clientX, e.clientY));
+    };
+
+    const handleDragEnd = (e: React.PointerEvent) => {
+        if (dragIndex === null) return;
+        const target = indexAtPoint(e.clientX, e.clientY);
+        if (target !== null && target !== dragIndex) {
+            onReorder?.(dragIndex, target);
+        }
+        setDragIndex(null);
+        setOverIndex(null);
+    };
+
+    const cancelDrag = () => {
+        setDragIndex(null);
+        setOverIndex(null);
     };
     return (
         <div
@@ -274,30 +306,38 @@ function TagListRow({
                         {tags.map((tag, i) => (
                             <span
                                 key={tag}
+                                data-tag-index={i}
                                 className={`tag${reorderable ? " tag-draggable" : ""}${
                                     dragIndex === i ? " tag-dragging" : ""
+                                }${
+                                    overIndex === i &&
+                                    dragIndex !== null &&
+                                    dragIndex !== i
+                                        ? " tag-over"
+                                        : ""
                                 }`}
-                                draggable={reorderable}
-                                onDragStart={
-                                    reorderable ? () => setDragIndex(i) : undefined
-                                }
-                                onDragOver={
-                                    reorderable ? (e) => e.preventDefault() : undefined
-                                }
-                                onDrop={
+                                onPointerDown={
                                     reorderable
                                         ? (e) => {
+                                              // Let the remove button keep its click.
+                                              if (
+                                                  (e.target as HTMLElement).closest(
+                                                      ".tag-remove",
+                                                  )
+                                              )
+                                                  return;
                                               e.preventDefault();
-                                              if (dragIndex !== null && dragIndex !== i) {
-                                                  onReorder?.(dragIndex, i);
-                                              }
-                                              setDragIndex(null);
+                                              e.currentTarget.setPointerCapture(
+                                                  e.pointerId,
+                                              );
+                                              setDragIndex(i);
+                                              setOverIndex(i);
                                           }
                                         : undefined
                                 }
-                                onDragEnd={
-                                    reorderable ? () => setDragIndex(null) : undefined
-                                }
+                                onPointerMove={reorderable ? handleDragMove : undefined}
+                                onPointerUp={reorderable ? handleDragEnd : undefined}
+                                onPointerCancel={reorderable ? cancelDrag : undefined}
                             >
                                 {tag}
                                 <button
