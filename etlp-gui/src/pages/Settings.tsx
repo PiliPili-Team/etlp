@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { LangMode, DisplaySettings, AccentColor } from "../display";
 import { ACCENT_PALETTES } from "../display";
@@ -291,6 +291,38 @@ function TagListRow({
         setDragIndex(null);
         setOverIndex(null);
     };
+
+    // FLIP animation: when the order changes, slide each tag from its previous
+    // position to its new one so a dropped tag visibly pushes the others aside
+    // instead of snapping. Keyed by tag text since React reuses the DOM node
+    // across reorders.
+    const listRef = useRef<HTMLDivElement>(null);
+    const prevRects = useRef<Map<string, DOMRect>>(new Map());
+    useLayoutEffect(() => {
+        const list = listRef.current;
+        if (!list) return;
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const nodes = Array.from(list.querySelectorAll<HTMLElement>("[data-tag-key]"));
+        for (const node of nodes) {
+            const key = node.dataset.tagKey;
+            if (!key) continue;
+            const next = node.getBoundingClientRect();
+            const prev = prevRects.current.get(key);
+            prevRects.current.set(key, next);
+            if (reduce || !prev) continue;
+            const dx = prev.left - next.left;
+            const dy = prev.top - next.top;
+            if (dx === 0 && dy === 0) continue;
+            // Invert to the old spot, then play back to the new one next frame.
+            node.style.transition = "none";
+            node.style.transform = `translate(${dx}px, ${dy}px)`;
+            requestAnimationFrame(() => {
+                node.style.transition = "transform 0.22s cubic-bezier(0.2, 0, 0, 1)";
+                node.style.transform = "";
+            });
+        }
+    }, [tags]);
+
     return (
         <div
             className="row"
@@ -302,11 +334,12 @@ function TagListRow({
             </div>
             <div style={{ width: "100%" }}>
                 {tags.length > 0 && (
-                    <div className="tag-list">
+                    <div className="tag-list" ref={listRef}>
                         {tags.map((tag, i) => (
                             <span
                                 key={tag}
                                 data-tag-index={i}
+                                data-tag-key={tag}
                                 className={`tag${reorderable ? " tag-draggable" : ""}${
                                     dragIndex === i ? " tag-dragging" : ""
                                 }${
