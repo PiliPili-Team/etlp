@@ -12,11 +12,25 @@ interface Props {
     onAbout: () => void;
 }
 
+const UPTIME_KEY = "etlp-server-start-time";
+
 export default function Overview({ addToast, onAbout }: Props) {
     const t = useI18n();
     const [status, setStatus] = useState<ServerStatus>({ running: false, port: 58000 });
     const [busy, setBusy] = useState(false);
-    const [startTime, setStartTime] = useState<Date | null>(null);
+    const [startTime, setStartTime] = useState<Date | null>(() => {
+        const stored = localStorage.getItem(UPTIME_KEY);
+        return stored ? new Date(parseInt(stored, 10)) : null;
+    });
+
+    const persistStartTime = (d: Date | null) => {
+        if (d) {
+            localStorage.setItem(UPTIME_KEY, String(d.getTime()));
+        } else {
+            localStorage.removeItem(UPTIME_KEY);
+        }
+        setStartTime(d);
+    };
     const [elapsed, setElapsed] = useState("");
     const [prevRunning, setPrevRunning] = useState(status.running);
 
@@ -24,6 +38,12 @@ export default function Overview({ addToast, onAbout }: Props) {
         try {
             const s = await invoke<ServerStatus>("get_server_status");
             setStatus(s);
+            // If the server is not running, any persisted start time is stale
+            // (e.g. the app was fully quit and restarted without the server).
+            if (!s.running) {
+                localStorage.removeItem(UPTIME_KEY);
+                setStartTime(null);
+            }
         } catch {
             /* ignore */
         }
@@ -34,9 +54,9 @@ export default function Overview({ addToast, onAbout }: Props) {
     if (prevRunning !== status.running) {
         setPrevRunning(status.running);
         if (!status.running) {
-            setStartTime(null);
+            persistStartTime(null);
         } else if (!startTime) {
-            setStartTime(new Date());
+            persistStartTime(new Date());
         }
     }
 
@@ -70,7 +90,7 @@ export default function Overview({ addToast, onAbout }: Props) {
         try {
             const port = await invoke<number>("start_server");
             setStatus({ running: true, port });
-            setStartTime(new Date());
+            persistStartTime(new Date());
             addToast(t("toast_started", { port }));
         } catch (e) {
             addToast(String(e), true);
@@ -84,7 +104,7 @@ export default function Overview({ addToast, onAbout }: Props) {
         try {
             await invoke("stop_server");
             setStatus((s) => ({ ...s, running: false }));
-            setStartTime(null);
+            persistStartTime(null);
             addToast(t("toast_stopped"));
         } catch (e) {
             addToast(String(e), true);
@@ -98,7 +118,7 @@ export default function Overview({ addToast, onAbout }: Props) {
         try {
             const port = await invoke<number>("restart_server");
             setStatus({ running: true, port });
-            setStartTime(new Date());
+            persistStartTime(new Date());
             addToast(t("toast_restarted", { port }));
         } catch (e) {
             addToast(String(e), true);

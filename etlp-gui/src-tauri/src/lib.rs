@@ -133,8 +133,18 @@ pub fn run() {
     std::fs::create_dir_all(&data_dir).ok();
     let log_file = data_dir.join("etlp.log");
 
+    // Read the config early so we can honour dev.log_level from the very first
+    // log line.  Failures are silently ignored here — the server will re-read
+    // and report the error when it starts up.
+    let initial_log_level = etlp_server::platform::config_dir()
+        .and_then(|d| etlp_config::Config::load_from_dir(&d).ok())
+        .map(|c| c.dev.log_level.clone())
+        .unwrap_or_else(|| "info".to_owned());
+
     let masker = etlp_logging::Masker::new(false);
-    etlp_logging::init(masker, "info", Some(log_file.as_path())).ok();
+    let log_handle =
+        etlp_logging::init(masker, &initial_log_level, Some(log_file.as_path()))
+            .ok();
 
     if let Some(d) = etlp_server::platform::config_dir() {
         eprintln!("[etlp] config dir: {}", d.display());
@@ -159,6 +169,9 @@ pub fn run() {
         let s = GuiState::default();
         if let Ok(mut lf) = s.log_file.lock() {
             *lf = log_file;
+        }
+        if let Ok(mut h) = s.log_handle.lock() {
+            *h = log_handle;
         }
         s
     };

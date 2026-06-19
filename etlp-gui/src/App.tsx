@@ -308,6 +308,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     }, []);
 
     const isMac = platform === "macos";
+    const isWindows = platform === "windows";
 
     const NAV_SECTIONS = [
         {
@@ -349,11 +350,13 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 
     return (
         <div className="app">
-            {isMac && (
+            {(isMac || isWindows) && (
                 // data-tauri-drag-region activates Tauri's JS drag API
                 // (core:window:allow-start-dragging) on mousedown, bypassing
                 // any NSVisualEffectView hit-test interference with the CSS
                 // -webkit-app-region approach.
+                // On Windows this also provides the drag region that would
+                // otherwise be absent (no native title bar is rendered there).
                 <div className="titlebar" data-tauri-drag-region>
                     <img className="titlebar-logo" src="/app-icon.png" alt="" />
                     <span className="titlebar-name">{t("app_name")}</span>

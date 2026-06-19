@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use tauri::State;
 use tower::Layer;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::warn;
+use tracing::{debug, error, info, warn};
 
 use etlp_config::Config;
 use etlp_download::{
@@ -29,6 +29,7 @@ pub struct GuiState {
     pub port: AtomicU16,
     pub log_file: Mutex<PathBuf>,
     pub log_read_pos: Mutex<u64>,
+    pub log_handle: Mutex<Option<etlp_logging::LogHandle>>,
 }
 
 impl Default for GuiState {
@@ -41,6 +42,7 @@ impl Default for GuiState {
             port: AtomicU16::new(58000),
             log_file: Mutex::new(data.join("etlp.log")),
             log_read_pos: Mutex::new(0),
+            log_handle: Mutex::new(None),
         }
     }
 }
@@ -145,6 +147,17 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         .map_err(|e| format!("create data dir: {e}"))?;
 
     let config = load_or_default_config(&cfg_dir)?;
+
+    // Apply the configured log level now that we have a running config.
+    {
+        let guard = state
+            .log_handle
+            .lock()
+            .map_err(|e| format!("lock log_handle: {e}"))?;
+        if let Some(handle) = guard.as_ref() {
+            handle.set_level(&config.dev.log_level);
+        }
+    }
 
     let proxy = config.dev.proxy.clone();
     let cert_verify = !config.dev.skip_certificate_verify;
@@ -296,15 +309,49 @@ pub async fn update_config_field(
         write_default_config(&path)?;
     }
 
-    patch_field(&path, &section, &key, &value)
+    match patch_field(&path, &section, &key, &value) {
+        Ok(()) => {
+            info!(
+                path = %path.display(),
+                section = %section,
+                key = %key,
+                "config field saved"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!(
+                path = %path.display(),
+                section = %section,
+                key = %key,
+                "config field save failed: {e}"
+            );
+            Err(e)
+        }
+    }
 }
 
 /// Reload the in-memory config from disk and push to a running server.
+///
+/// Also applies any log-level change immediately so the new level takes
+/// effect without requiring a full server restart.
 #[tauri::command]
 pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     let working_dir = platform::config_dir()
         .ok_or_else(|| "cannot determine config directory".to_owned())?;
     let new_config = load_or_default_config(&working_dir)?;
+
+    // Apply log level before writing the new config so the level change is
+    // visible in the logs that follow.
+    {
+        let guard = state
+            .log_handle
+            .lock()
+            .map_err(|e| format!("lock log_handle: {e}"))?;
+        if let Some(handle) = guard.as_ref() {
+            handle.set_level(&new_config.dev.log_level);
+        }
+    }
 
     let guard = state
         .app_state
@@ -346,6 +393,10 @@ pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Open the config file in the default system text editor.
+///
+/// On Windows `.toml` has no default association, so we open it explicitly
+/// with `notepad.exe` instead of relying on the system's "open" mechanism
+/// (which would trigger an error dialog on most machines).
 #[tauri::command]
 pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt as _;
@@ -357,6 +408,15 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     if !path.exists() {
         write_default_config(&path)?;
     }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("notepad.exe")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("open notepad: {e}"))?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| format!("open config file: {e}"))
@@ -585,19 +645,64 @@ fn config_file_path() -> Result<PathBuf, String> {
     Ok(dir.join("config.toml"))
 }
 
-/// Load config, or write a default and load that.
+/// Load config, writing the default template only when no file exists at all.
+///
+/// IO errors and parse errors preserve the user's file on disk — we return
+/// an in-memory default instead of overwriting potentially recoverable data.
 pub(crate) fn load_or_default_config(
     cfg_dir: &std::path::Path,
 ) -> Result<Config, String> {
-    match Config::load_from_dir(cfg_dir) {
-        Ok(c) => Ok(c),
-        Err(_) => {
+    use etlp_config::ConfigError;
+    let result = match Config::load_from_dir(cfg_dir) {
+        Ok(c) => {
+            info!(
+                path = %c.path().display(),
+                "config loaded"
+            );
+            Ok(c)
+        }
+        Err(ConfigError::NotFound(_)) => {
             let path = cfg_dir.join("config.toml");
             write_default_config(&path)?;
-            Config::load_file(&path)
-                .map_err(|e| format!("load default config: {e}"))
+            match Config::load_file(&path) {
+                Ok(c) => {
+                    info!(
+                        path = %c.path().display(),
+                        "default config written and loaded"
+                    );
+                    Ok(c)
+                }
+                Err(e) => {
+                    error!("load default config {}: {e}", path.display());
+                    Err(format!("load default config: {e}"))
+                }
+            }
         }
+        Err(ConfigError::Io { path, source }) => {
+            error!(
+                path = %path.display(),
+                "config IO error: {source} — running with defaults"
+            );
+            Ok(Config::with_defaults(path))
+        }
+        Err(ConfigError::Parse { path, source }) => {
+            error!(
+                path = %path.display(),
+                "config parse error: {source} — running with defaults"
+            );
+            Ok(Config::with_defaults(path))
+        }
+    }?;
+
+    // Emit current config as JSON at debug level so problems can be diagnosed
+    // without grepping TOML files.
+    let dto = ConfigDto::from(&result);
+    match serde_json::to_string(&dto) {
+        Ok(json) => debug!(config_json = %json, "current config"),
+        Err(e) => warn!("config JSON serialise failed: {e}"),
     }
+
+    Ok(result)
 }
 
 fn write_default_config(path: &std::path::Path) -> Result<(), String> {
@@ -606,6 +711,14 @@ fn write_default_config(path: &std::path::Path) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("create config dir: {e}"))?;
     }
-    std::fs::write(path, template)
-        .map_err(|e| format!("write default config: {e}"))
+    match std::fs::write(path, template) {
+        Ok(()) => {
+            info!(path = %path.display(), "default config written");
+            Ok(())
+        }
+        Err(e) => {
+            error!(path = %path.display(), "write default config failed: {e}");
+            Err(format!("write default config: {e}"))
+        }
+    }
 }
