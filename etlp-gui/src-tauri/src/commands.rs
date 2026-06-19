@@ -430,17 +430,23 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
 /// Return new log lines since the last call (incremental tail).
 ///
 /// `since_bytes` is the byte offset to read from; pass `0` for the beginning.
+/// `path`, when provided, reads that file instead of the default app log —
+/// used to view the mpv log (default or a user-picked file).
 /// Returns `{ lines: [...], next_bytes: u64 }`.
 #[tauri::command]
 pub async fn get_log_lines(
     state: State<'_, GuiState>,
     since_bytes: u64,
+    path: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let log_path = state
-        .log_file
-        .lock()
-        .map_err(|e| format!("lock log_file: {e}"))?
-        .clone();
+    let log_path = match path {
+        Some(p) if !p.is_empty() => PathBuf::from(p),
+        _ => state
+            .log_file
+            .lock()
+            .map_err(|e| format!("lock log_file: {e}"))?
+            .clone(),
+    };
 
     if !log_path.exists() {
         return Ok(serde_json::json!({ "lines": [], "next_bytes": 0u64 }));
@@ -477,6 +483,27 @@ pub async fn clear_log_position(
         .map_err(|e| format!("lock log_read_pos: {e}"))?;
     *pos = 0;
     Ok(())
+}
+
+/// Open the directory containing the application log file.
+#[tauri::command]
+pub async fn open_log_folder(
+    app: tauri::AppHandle,
+    state: State<'_, GuiState>,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt as _;
+    let log_path = state
+        .log_file
+        .lock()
+        .map_err(|e| format!("lock log_file: {e}"))?
+        .clone();
+    let dir = log_path
+        .parent()
+        .ok_or_else(|| "log file has no parent directory".to_owned())?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("create log dir: {e}"))?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("open folder: {e}"))
 }
 
 // ── File picker ────────────────────────────────────────────────────────────────

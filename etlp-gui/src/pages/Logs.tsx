@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
 
 interface LogResponse {
@@ -83,17 +84,18 @@ function LogLineView({ raw }: { raw: string }) {
     );
 }
 
-export default function Logs() {
+export default function Logs({ active }: { active: boolean }) {
     const t = useI18n();
     const [lines, setLines] = useState<string[]>([]);
     const [autoScroll, setAutoScroll] = useState(true);
     const [filter, setFilter] = useState("");
     const [source, setSource] = useState<LogSource>("app");
     const [paths, setPaths] = useState<LogPaths | null>(null);
+    // A user-picked mpv log file; falls back to the config-derived default.
+    const [mpvCustomPath, setMpvCustomPath] = useState<string | null>(null);
 
     const bodyRef = useRef<HTMLDivElement>(null);
     const posRef = useRef(0);
-    const activeRef = useRef(true);
 
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
@@ -101,61 +103,86 @@ export default function Logs() {
             .catch(() => {});
     }, []);
 
-    const fetchChunk = useCallback(async (since: number): Promise<number> => {
-        try {
-            const resp = await invoke<LogResponse>("get_log_lines", {
-                sinceBytes: since,
-            });
-            if (resp.lines.length > 0) {
-                setLines((prev) => {
-                    const merged = [...prev, ...resp.lines];
-                    return merged.length > MAX_LINES ? merged.slice(-MAX_LINES) : merged;
+    // The mpv log to read: a user-picked file wins over the config default.
+    const effectiveMpvPath = mpvCustomPath ?? paths?.mpv_log ?? null;
+
+    const fetchChunk = useCallback(
+        async (since: number, path: string | null): Promise<number> => {
+            try {
+                const resp = await invoke<LogResponse>("get_log_lines", {
+                    sinceBytes: since,
+                    path,
                 });
+                if (resp.lines.length > 0) {
+                    setLines((prev) => {
+                        const merged = [...prev, ...resp.lines];
+                        return merged.length > MAX_LINES
+                            ? merged.slice(-MAX_LINES)
+                            : merged;
+                    });
+                }
+                return resp.next_bytes;
+            } catch {
+                return since;
             }
-            return resp.next_bytes;
-        } catch {
-            return since;
-        }
-    }, []);
+        },
+        [],
+    );
 
+    // Reset the buffer only when the log source itself changes — not when the
+    // tab is hidden/shown. This is what lets a hidden Logs tab keep its content
+    // and resume from where it left off instead of reloading from byte 0.
+    // Clearing happens in cleanup (allowed in effects) so the source swap drops
+    // the old file's lines before the polling effect restarts from byte 0.
     useEffect(() => {
-        activeRef.current = false;
-        posRef.current = 0;
+        return () => {
+            posRef.current = 0;
+            setLines([]);
+        };
+    }, [source, effectiveMpvPath]);
 
-        const active = { ok: true };
-        activeRef.current = true;
+    // Poll the active source. Gated on `active` so the loop pauses while the
+    // tab is hidden, then resumes from posRef.current (appending new lines
+    // only) when the tab is shown again.
+    useEffect(() => {
+        // app log reads the default file (path = null); mpv reads the chosen
+        // file. Skip polling when hidden, or when the mpv view has no file yet.
+        const logPath = source === "mpv" ? effectiveMpvPath : null;
+        if (!active || (source === "mpv" && !logPath)) {
+            return;
+        }
 
-        let pos = 0;
+        const live = { ok: true };
+        let pos = posRef.current;
 
         // Defer the initial fetch past the synchronous effect body so the rule
         // doesn't flag the async setState call chain as synchronous.
         const init = setTimeout(() => {
-            void fetchChunk(0).then((next) => {
-                if (!active.ok) return;
+            void fetchChunk(pos, logPath).then((next) => {
+                if (!live.ok) return;
                 pos = next;
                 posRef.current = next;
             });
         }, 0);
 
         const iv = setInterval(async () => {
-            if (!active.ok) {
+            if (!live.ok) {
                 clearInterval(iv);
                 return;
             }
-            const next = await fetchChunk(pos);
-            if (active.ok) {
+            const next = await fetchChunk(pos, logPath);
+            if (live.ok) {
                 pos = next;
                 posRef.current = next;
             }
         }, POLL_MS);
 
         return () => {
-            active.ok = false;
+            live.ok = false;
             clearTimeout(init);
             clearInterval(iv);
-            setLines([]);
         };
-    }, [source, fetchChunk]);
+    }, [active, source, effectiveMpvPath, fetchChunk]);
 
     useEffect(() => {
         if (autoScroll && bodyRef.current) {
@@ -173,11 +200,34 @@ export default function Logs() {
         if (s !== source) setSource(s);
     };
 
+    const handleOpenLogFolder = async () => {
+        try {
+            await invoke("open_log_folder");
+        } catch {
+            /* ignore: opening the folder is best-effort */
+        }
+    };
+
+    const handlePickMpvLog = async () => {
+        const selected = await open({
+            multiple: false,
+            directory: false,
+            filters: [{ name: "Log", extensions: ["log", "txt"] }],
+        });
+        if (typeof selected === "string") {
+            setMpvCustomPath(selected);
+            setSource("mpv");
+            setLines([]);
+            posRef.current = 0;
+        }
+    };
+
     const displayed = filter
         ? lines.filter((l) => l.toLowerCase().includes(filter.toLowerCase()))
         : lines;
 
-    const hasMpv = Boolean(paths?.mpv_log);
+    // mpv view is usable when a default log exists or the user picked a file.
+    const hasMpv = Boolean(effectiveMpvPath);
 
     return (
         <>
@@ -203,8 +253,7 @@ export default function Logs() {
                             <button
                                 className={`log-source-tab${source === "mpv" ? " active" : ""}`}
                                 onClick={() => handleSourceSwitch("mpv")}
-                                disabled={!hasMpv}
-                                title={hasMpv ? t("logs_mpv") : t("logs_no_mpv")}
+                                title={t("logs_mpv")}
                             >
                                 {t("logs_mpv")}
                             </button>
@@ -230,6 +279,23 @@ export default function Logs() {
                             flexShrink: 0,
                         }}
                     >
+                        {source === "mpv" && (
+                            <button
+                                className="btn"
+                                style={{ padding: "4px 10px", fontSize: 12 }}
+                                onClick={() => void handlePickMpvLog()}
+                                title={effectiveMpvPath ?? undefined}
+                            >
+                                {t("logs_pick_mpv")}
+                            </button>
+                        )}
+                        <button
+                            className="btn"
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            onClick={() => void handleOpenLogFolder()}
+                        >
+                            {t("logs_open_folder")}
+                        </button>
                         <input
                             className="input"
                             style={{

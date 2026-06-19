@@ -398,7 +398,11 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                             onDisplayChange={onDisplayChange}
                         />
                     )}
-                    {tab === "logs" && <Logs />}
+                    {/* Logs stays mounted so its buffer survives tab switches;
+                        polling pauses while hidden via the `active` prop. */}
+                    <div style={{ display: tab === "logs" ? "contents" : "none" }}>
+                        <Logs active={tab === "logs"} />
+                    </div>
                 </main>
             </div>
 
