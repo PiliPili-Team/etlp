@@ -16,7 +16,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use etlp_core::PlaybackData;
-use etlp_net::{HttpClient, PlaybackEvent, realtime_progress, update_progress};
+use etlp_net::{
+    HttpClient, PlaybackEvent, mark_as_played, realtime_progress,
+    update_progress,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{info, warn};
 
@@ -100,6 +103,9 @@ pub struct PlayerManager {
     /// the initial `Sessions/Playing` (Start) event. `write_progress` reads
     /// this to avoid sending a redundant Start when the loop already ran.
     realtime_started: Arc<AtomicBool>,
+    /// When `true`, skip realtime progress reports and `update_progress`; only
+    /// call `mark_as_played` when the user watched past 90 % of the runtime.
+    pub disable_progress_report: bool,
 }
 
 impl PlayerManager {
@@ -112,6 +118,7 @@ impl PlayerManager {
             stop_times: HashMap::new(),
             total_secs: HashMap::new(),
             realtime_started: Arc::new(AtomicBool::new(false)),
+            disable_progress_report: false,
         }
     }
 
@@ -167,6 +174,26 @@ impl PlayerManager {
                 continue;
             }
 
+            if self.disable_progress_report {
+                // Progress reporting disabled: only fire mark_as_played when
+                // the user watched past 90 % of the runtime.
+                if ep.total_sec > 0
+                    && stop_sec as f64 / ep.total_sec as f64 >= 0.9
+                {
+                    match mark_as_played(http, ep).await {
+                        Ok(()) => info!(
+                            "marked as played: {:?} @ {stop_sec}s",
+                            ep.basename
+                        ),
+                        Err(e) => warn!(
+                            "mark_as_played failed for {:?}: {e}",
+                            ep.basename
+                        ),
+                    }
+                }
+                continue;
+            }
+
             let update_success = self.realtime_started.load(Ordering::Acquire);
             match update_progress(http, ep, stop_sec, update_success).await {
                 Ok(()) => {
@@ -217,15 +244,18 @@ impl PlayerManager {
         let data = self.data.clone();
         let http2 = http.clone();
         let realtime_started = self.realtime_started.clone();
+        let disable_progress_report = self.disable_progress_report;
 
-        tokio::spawn(realtime_playing_feedback_loop(
-            data,
-            client.clone(),
-            http2,
-            playlist.clone(),
-            cancel_tx,
-            realtime_started,
-        ));
+        if !disable_progress_report {
+            tokio::spawn(realtime_playing_feedback_loop(
+                data,
+                client.clone(),
+                http2,
+                playlist.clone(),
+                cancel_tx,
+                realtime_started,
+            ));
+        }
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
 }
