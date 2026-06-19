@@ -374,6 +374,14 @@ impl Config {
         std::fs::write(path, DEFAULT_CONFIG_TOML)
     }
 
+    /// Return a `Config` with all fields at their defaults, pointing at `path`.
+    ///
+    /// Use this when the config file exists but cannot be parsed — the caller
+    /// gets a safe in-memory default without touching the user's file on disk.
+    pub fn with_defaults(path: PathBuf) -> Self {
+        Self::from_raw(RawConfig::default(), path)
+    }
+
     fn from_raw(raw: RawConfig, path: PathBuf) -> Self {
         Self {
             emby: raw.emby,
