@@ -100,6 +100,14 @@ pub struct Item {
     pub season_id: Option<String>,
     #[serde(rename = "SeriesName", default)]
     pub series_name: Option<String>,
+    /// Native-language title (e.g. the Japanese title for anime). Preferred
+    /// search keyword for Bangumi subject resolution.
+    #[serde(rename = "OriginalTitle", default)]
+    pub original_title: Option<String>,
+    /// Genre tags reported by the server; used to gate Bangumi title search to
+    /// anime only.
+    #[serde(rename = "Genres", default)]
+    pub genres: Vec<String>,
     #[serde(rename = "ProductionYear", default)]
     pub production_year: Option<i64>,
     #[serde(rename = "ServerId", default)]

@@ -106,6 +106,23 @@ pub struct PlaybackData {
     /// Emby/Jellyfin series ID — needed by Bangumi sync to correlate subjects.
     #[serde(default)]
     pub series_id: String,
+    /// Series display name (e.g. "Re:Zero"). Bangumi title-search keyword.
+    #[serde(default)]
+    pub series_name: String,
+    /// Native-language title (Japanese for most anime). Preferred Bangumi
+    /// search keyword when present, as it matches bgm's primary `name` field.
+    #[serde(default)]
+    pub original_title: String,
+    /// Season number (`ParentIndexNumber`); drives walking bgm's sequel chain
+    /// to the subject that represents this season.
+    #[serde(default)]
+    pub season_number: Option<i64>,
+    /// Air date (`YYYY-MM-DD`) used to disambiguate the matched bgm episode.
+    #[serde(default)]
+    pub premiere_date: Option<String>,
+    /// Genre tags; gate Bangumi title search to anime only.
+    #[serde(default)]
+    pub genres: Vec<String>,
 
     // ---- playlist-only (populated for playlist entries) ----
     /// Playlist position used for ordering (the Python `order` key).

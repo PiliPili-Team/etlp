@@ -89,3 +89,14 @@ username = ""
 # Comma-separated host keywords that enable the sync; blank disables it.
 # A single "." enables every host. Example: localhost, 192.168., emby.example.com
 enable_host = ""
+
+# Mark new collection entries as private (hidden from your public profile).
+private = true
+
+# Only series whose genres match this regex are synced (case-insensitive).
+genres = "动画|anime"
+
+# When an item has no Bangumi id, resolve the subject by searching bgm.tv by
+# title (native title / series name) and walking the sequel chain to the season
+# given by the file's season number. Disable to require an explicit Bangumi id.
+title_search_fallback = true
