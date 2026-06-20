@@ -764,8 +764,9 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        // Fails unless the request carried `User-Agent: etlp`.
-        api.request_device_code().await.unwrap();
+        // The mock only matches when the request carried `User-Agent: etlp`,
+        // so a non-error result proves the unified agent was sent.
+        assert!(api.request_device_code().await.is_ok());
     }
 
     #[tokio::test]
