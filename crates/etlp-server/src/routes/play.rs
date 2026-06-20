@@ -15,8 +15,9 @@ use tracing::{debug, info, warn};
 use etlp_core::{PlaybackData, PlayerKind};
 use etlp_media_server::{
     EmbyClient, EmbyParseConfig, ListContext, PlexParseConfig,
-    PlexReceivedData, ReceivedData, assemble_episodes,
-    parse_received_data_emby, parse_received_data_plex,
+    PlexReceivedData, ReceivedData, assemble_episodes, assemble_episodes_alt,
+    looks_like_legacy_shape, parse_received_data_emby,
+    parse_received_data_plex,
 };
 use etlp_metrics::{PlayMetrics, Span};
 use etlp_player::{
@@ -534,7 +535,8 @@ async fn build_emby_playlist(
         &data.api_key,
         &data.user_id,
     );
-    let fetched = match emby.episodes(show_id, season_id).await {
+    let use_alternate = parse_cfg.alternate_media_sources;
+    let fetched = match emby.episodes(show_id, season_id, use_alternate).await {
         Ok(list) => list,
         Err(e) => {
             warn!("fetch episodes for {show_id}: {e}");
@@ -543,7 +545,7 @@ async fn build_emby_playlist(
     };
     debug!(
         fetched_count = fetched.items.len(),
-        "build_emby_playlist: fetched from server",
+        use_alternate, "build_emby_playlist: fetched from server",
     );
     let ctx = ListContext {
         base: data,
@@ -552,7 +554,24 @@ async fn build_emby_playlist(
         playlist: !received.extra_data.playlist_info.is_empty(),
         config: parse_cfg,
     };
-    let episodes = assemble_episodes(&ctx, &fetched.items);
+    // The alternate request collapses every version of an episode into one
+    // item; an older server that does not understand the field falls back to
+    // the legacy one-item-per-version shape. Detect that and route to the
+    // matching assembler so a mismatched shape never produces a broken list.
+    let episodes = if use_alternate {
+        if looks_like_legacy_shape(&fetched.items) {
+            warn!(
+                "episode list came back in the legacy shape despite requesting \
+                 AlternateMediaSources — may be 服务器不兼容，建议关闭 \
+                 dev.alternate_media_sources 开关重试"
+            );
+            assemble_episodes(&ctx, &fetched.items)
+        } else {
+            assemble_episodes_alt(&ctx, &fetched.items)
+        }
+    } else {
+        assemble_episodes(&ctx, &fetched.items)
+    };
     debug!(
         assembled_count = episodes.len(),
         "build_emby_playlist: assembled playlist",

@@ -182,7 +182,24 @@ pub fn assemble_episodes(
     }
 
     episodes.sort_by_key(|item| (item.parent_index_number, item.index_number));
+    finalize_playlist(ctx, &episodes)
+}
 
+/// Turn one-version-per-episode items into the ordered playlist.
+///
+/// Shared tail of both assembly paths: builds the title/intro maps, the shared
+/// [`EpisodeContext`], renders each episode via [`parse_episode_item`], restores
+/// the played item's own title when the map failed, and applies the per-episode
+/// stream rewrites. Callers must pass items that already carry exactly the one
+/// media source to play (the no-alt path after `version_filter`, the alternate
+/// path after per-episode source selection), so this stage never chooses a
+/// version itself.
+#[must_use]
+pub(crate) fn finalize_playlist(
+    ctx: &ListContext,
+    episodes: &[Item],
+) -> Vec<PlaybackData> {
+    let base = ctx.base;
     let (maps, title_fail) =
         build_title_intro_maps(ctx.episodes_info, ctx.season_id, ctx.playlist);
     let extra = if base.server == Server::Emby {
@@ -242,7 +259,7 @@ pub fn assemble_episodes(
     apply_stream_rewrites(&mut result, base, ctx.config);
 
     debug!(
-        "assemble_episodes: final playlist has {} entries",
+        "finalize_playlist: final playlist has {} entries",
         result.len()
     );
     for (i, ep) in result.iter().enumerate() {

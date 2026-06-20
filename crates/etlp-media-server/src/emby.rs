@@ -57,16 +57,24 @@ impl EmbyClient {
     /// Mirrors `list_episodes`: `show_id` is the season id (falling back to the
     /// series id when the season is unknown), and `season_id` is passed as a
     /// query filter only when it is known.
+    /// When `include_alternate` is `true` the `AlternateMediaSources` field is
+    /// requested, making the server collapse every version of an episode into a
+    /// single item (parse with [`crate::alternate::assemble_episodes_alt`]).
+    /// When `false` the legacy shape (one item per version) is returned.
     pub async fn episodes(
         &self,
         show_id: &str,
         season_id: Option<&str>,
+        include_alternate: bool,
     ) -> Result<ItemList, NetError> {
         let url = self.url(&format!("Shows/{show_id}/Episodes"));
-        let mut params = vec![
-            ("Fields", "MediaSources,AlternateMediaSources,Path,ProviderIds"),
-            ("X-Emby-Token", self.api_key.as_str()),
-        ];
+        let fields = if include_alternate {
+            "MediaSources,AlternateMediaSources,Path,ProviderIds"
+        } else {
+            "MediaSources,Path,ProviderIds"
+        };
+        let mut params =
+            vec![("Fields", fields), ("X-Emby-Token", self.api_key.as_str())];
         if let Some(season_id) = season_id {
             params.push(("SeasonId", season_id));
         }

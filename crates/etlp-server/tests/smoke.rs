@@ -289,7 +289,10 @@ async fn smoke_emby_episodes_api() {
     let http = HttpClient::new().expect("http client");
     let client = EmbyClient::new(http, mock_server.uri(), "apikey", "u1");
 
-    let list = client.episodes("series-001", None).await.expect("episodes");
+    let list = client
+        .episodes("series-001", None, true)
+        .await
+        .expect("episodes");
 
     assert_eq!(list.items.len(), 2);
     let first = list.items.first().expect("first");
