@@ -104,14 +104,6 @@ pub struct DevSection {
     pub last_ep_disable_playlist: bool,
     /// Fill remaining playlist slots using `version_prefer` order.
     pub version_prefer_for_playlist: bool,
-    /// Request the season episode list with the `AlternateMediaSources` field.
-    ///
-    /// When `true` (default) the server collapses every version of an episode
-    /// into a single item whose `MediaSources` array lists them all, and etlp
-    /// uses the alternate-shape assembly. When `false` etlp requests the legacy
-    /// shape (one item per version) and uses the legacy assembly. Disable this
-    /// only when the server returns malformed data with the field present.
-    pub alternate_media_sources: bool,
     /// Bearer token required by `GET /send_media_file`; absent disables auth.
     pub http_server_token: Option<String>,
     /// Ordered keywords for cross-version subtitle fallback extraction.
@@ -159,7 +151,6 @@ impl Default for DevSection {
             pretty_title: true,
             last_ep_disable_playlist: false,
             version_prefer_for_playlist: true,
-            alternate_media_sources: true,
             http_server_token: None,
             sub_extract_priority: Vec::new(),
             media_title_translate: String::new(),
@@ -411,7 +402,6 @@ const DEFAULT_CONFIG_TOML: &str = "\
 # kill_process_at_start = true
 # pretty_title = true
 # user_agent = \"etlp\"   # custom User-Agent for normal requests; download/prefetch UAs are fixed
-# alternate_media_sources = true   # request the episode list with AlternateMediaSources; set false if the server returns malformed data with it
 ";
 
 #[cfg(test)]

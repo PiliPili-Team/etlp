@@ -535,18 +535,6 @@ async fn build_emby_playlist(
         &data.api_key,
         &data.user_id,
     );
-    let use_alternate = parse_cfg.alternate_media_sources;
-    let fetched = match emby.episodes(show_id, season_id, use_alternate).await {
-        Ok(list) => list,
-        Err(e) => {
-            warn!("fetch episodes for {show_id}: {e}");
-            return None;
-        }
-    };
-    debug!(
-        fetched_count = fetched.items.len(),
-        use_alternate, "build_emby_playlist: fetched from server",
-    );
     let ctx = ListContext {
         base: data,
         episodes_info: &received.extra_data.episodes_info,
@@ -554,23 +542,39 @@ async fn build_emby_playlist(
         playlist: !received.extra_data.playlist_info.is_empty(),
         config: parse_cfg,
     };
-    // The alternate request collapses every version of an episode into one
-    // item; an older server that does not understand the field falls back to
-    // the legacy one-item-per-version shape. Detect that and route to the
-    // matching assembler so a mismatched shape never produces a broken list.
-    let episodes = if use_alternate {
-        if looks_like_legacy_shape(&fetched.items) {
-            warn!(
-                "episode list came back in the legacy shape despite requesting \
-                 AlternateMediaSources — may be 服务器不兼容，建议关闭 \
-                 dev.alternate_media_sources 开关重试"
+    // Probe the AlternateMediaSources interface first: a server that supports
+    // it returns the collapsed shape (one item per episode, every version in
+    // MediaSources). A server that ignores the field returns the legacy
+    // one-item-per-version shape, so fall back to the plain interface and the
+    // legacy assembler. No config switch — the response shape decides.
+    let episodes = match emby.episodes(show_id, season_id, true).await {
+        Ok(list)
+            if !list.items.is_empty()
+                && !looks_like_legacy_shape(&list.items) =>
+        {
+            debug!(
+                fetched_count = list.items.len(),
+                "build_emby_playlist: using AlternateMediaSources shape",
+            );
+            assemble_episodes_alt(&ctx, &list.items)
+        }
+        probe => {
+            if let Err(e) = &probe {
+                debug!("AlternateMediaSources probe failed ({e}); using plain");
+            }
+            let fetched = match emby.episodes(show_id, season_id, false).await {
+                Ok(list) => list,
+                Err(e) => {
+                    warn!("fetch episodes for {show_id}: {e}");
+                    return None;
+                }
+            };
+            debug!(
+                fetched_count = fetched.items.len(),
+                "build_emby_playlist: using plain (legacy) shape",
             );
             assemble_episodes(&ctx, &fetched.items)
-        } else {
-            assemble_episodes_alt(&ctx, &fetched.items)
         }
-    } else {
-        assemble_episodes(&ctx, &fetched.items)
     };
     debug!(
         assembled_count = episodes.len(),

@@ -82,9 +82,6 @@ pub struct EmbyParseConfig {
     /// `dev.version_prefer_for_playlist` — fill remaining episodes by
     /// preference.
     pub version_prefer_for_playlist: bool,
-    /// `dev.alternate_media_sources` — request the episode list with the
-    /// `AlternateMediaSources` field and use the alternate-shape assembly.
-    pub alternate_media_sources: bool,
     /// `dev.sub_extract_priority` — keywords for cross-version subtitle
     /// fallback. When the selected source has no subtitle, etlp scans the
     /// other versions in `mainEpInfo.MediaSources` for a matching track.
@@ -111,7 +108,6 @@ impl EmbyParseConfig {
             last_ep_disable_playlist: config.dev.last_ep_disable_playlist,
             version_filter: config.playlist.version_filter.clone(),
             version_prefer_for_playlist: config.dev.version_prefer_for_playlist,
-            alternate_media_sources: config.dev.alternate_media_sources,
             sub_extract_priority: config.dev.sub_extract_priority.clone(),
             title_translate: parse_title_translate(
                 &config.dev.media_title_translate,
