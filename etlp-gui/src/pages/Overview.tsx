@@ -9,12 +9,11 @@ interface ServerStatus {
 
 interface Props {
     addToast: (msg: string, err?: boolean) => void;
-    onAbout: () => void;
 }
 
 const UPTIME_KEY = "etlp-server-start-time";
 
-export default function Overview({ addToast, onAbout }: Props) {
+export default function Overview({ addToast }: Props) {
     const t = useI18n();
     const [status, setStatus] = useState<ServerStatus>({ running: false, port: 58000 });
     const [busy, setBusy] = useState(false);
@@ -85,6 +84,14 @@ export default function Overview({ addToast, onAbout }: Props) {
         };
     }, [startTime]);
 
+    // Show a localized failure label plus the raw backend detail (kept for
+    // diagnosis), e.g. "Failed to start service: bind ...".
+    const failToast = useCallback(
+        (key: Parameters<typeof t>[0], e: unknown) =>
+            addToast(`${t(key)}: ${String(e)}`, true),
+        [addToast, t],
+    );
+
     const handleStart = useCallback(async () => {
         setBusy(true);
         try {
@@ -93,11 +100,11 @@ export default function Overview({ addToast, onAbout }: Props) {
             persistStartTime(new Date());
             addToast(t("toast_started", { port }));
         } catch (e) {
-            addToast(String(e), true);
+            failToast("toast_start_failed", e);
         } finally {
             setBusy(false);
         }
-    }, [addToast, t]);
+    }, [addToast, t, failToast]);
 
     const handleStop = useCallback(async () => {
         setBusy(true);
@@ -107,11 +114,11 @@ export default function Overview({ addToast, onAbout }: Props) {
             persistStartTime(null);
             addToast(t("toast_stopped"));
         } catch (e) {
-            addToast(String(e), true);
+            failToast("toast_stop_failed", e);
         } finally {
             setBusy(false);
         }
-    }, [addToast, t]);
+    }, [addToast, t, failToast]);
 
     const handleRestart = useCallback(async () => {
         setBusy(true);
@@ -121,27 +128,27 @@ export default function Overview({ addToast, onAbout }: Props) {
             persistStartTime(new Date());
             addToast(t("toast_restarted", { port }));
         } catch (e) {
-            addToast(String(e), true);
+            failToast("toast_restart_failed", e);
         } finally {
             setBusy(false);
         }
-    }, [addToast, t]);
+    }, [addToast, t, failToast]);
 
     const handleOpenFolder = useCallback(async () => {
         try {
             await invoke("open_config_folder");
         } catch (e) {
-            addToast(String(e), true);
+            failToast("toast_open_failed", e);
         }
-    }, [addToast]);
+    }, [failToast]);
 
     const handleEditConfig = useCallback(async () => {
         try {
             await invoke("edit_config");
         } catch (e) {
-            addToast(String(e), true);
+            failToast("toast_open_failed", e);
         }
-    }, [addToast]);
+    }, [failToast]);
 
     return (
         <>
@@ -228,7 +235,7 @@ export default function Overview({ addToast, onAbout }: Props) {
                         </button>
                     </div>
                 </div>
-                <div className="row">
+                <div className="row" style={{ borderBottom: "none" }}>
                     <div className="row-label">
                         <div>{t("ov_restart")}</div>
                         <div className="row-desc">{t("ov_restart_desc")}</div>
@@ -236,17 +243,6 @@ export default function Overview({ addToast, onAbout }: Props) {
                     <div className="row-control">
                         <button className="btn" onClick={handleRestart} disabled={busy}>
                             {t("ov_restart")}
-                        </button>
-                    </div>
-                </div>
-                <div className="row" style={{ borderBottom: "none" }}>
-                    <div className="row-label">
-                        <div>{t("ov_about")}</div>
-                        <div className="row-desc">{t("ov_about_desc")}</div>
-                    </div>
-                    <div className="row-control">
-                        <button className="btn" onClick={onAbout}>
-                            {t("ov_view")}
                         </button>
                     </div>
                 </div>

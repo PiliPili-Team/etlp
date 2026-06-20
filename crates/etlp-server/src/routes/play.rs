@@ -866,14 +866,28 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
 }
 
 /// Returns `true` when `netloc` matches the comma-separated `enable_host`
-/// keyword list. An empty list disables the feature (returns `false`); a list
-/// containing only `.` enables every host.
+/// keyword list. An empty list disables the feature (returns `false`).
+///
+/// A standalone `.` token is a wildcard meaning "every host", checked first so
+/// its presence anywhere in the list short-circuits to enabled regardless of
+/// the other keywords. Otherwise each non-empty keyword is matched as a
+/// substring of `netloc`.
 fn host_enabled(netloc: &str, enable_host: &str) -> bool {
-    enable_host
+    let mut keywords = enable_host
         .split(',')
         .map(str::trim)
         .filter(|k| !k.is_empty())
-        .any(|k| k == "." || netloc.contains(k))
+        .peekable();
+    // Empty list → feature disabled.
+    if keywords.peek().is_none() {
+        return false;
+    }
+    // Wildcard has priority: any standalone "." enables every host.
+    let keywords: Vec<&str> = keywords.collect();
+    if keywords.contains(&".") {
+        return true;
+    }
+    keywords.iter().any(|&k| netloc.contains(k))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -891,8 +905,13 @@ mod tests {
     fn host_enabled_matches_keywords() {
         // Empty list disables the feature.
         assert!(!super::host_enabled("emby.example.com:8096", ""));
+        assert!(!super::host_enabled("emby.example.com:8096", "  ,  "));
         // A lone dot enables everything.
         assert!(super::host_enabled("anything", "."));
+        // The dot wildcard has priority even mixed with non-matching keywords.
+        assert!(super::host_enabled("10.0.0.1:8096", "localhost, ., foo"));
+        // A keyword that merely contains a dot is NOT the wildcard.
+        assert!(!super::host_enabled("10.0.0.1:8096", "192.168."));
         // Comma-separated keywords match as substrings, ignoring whitespace.
         assert!(super::host_enabled(
             "192.168.1.10:8096",
