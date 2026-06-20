@@ -146,6 +146,13 @@ body.platform-macos .app {
     background: transparent;
 }
 
+/* Windows: the window sits inside the native frame, so square off the inner
+   corners — a rounded content edge would leave transparent gaps against the
+   straight system border. */
+body.platform-windows .app {
+    border-radius: 0;
+}
+
 /* ── Titlebar ────────────────────────────────────────────────────────── */
 /* Traffic lights sit at ~y 10-28px; content anchored to bottom so it     */
 /* appears below them, left-aligned with the sidebar nav icons.           */
@@ -162,18 +169,10 @@ body.platform-macos .app {
     gap: 9px;
 }
 
+/* Only macOS renders the custom titlebar; Windows/Linux rely on the native
+   title bar (which already shows the app icon and name). */
 body:not(.platform-macos) .titlebar {
     display: none;
-}
-
-/* Windows: show a compact drag-region titlebar so the window corner looks
-   clean and users can drag the window.  Placed after the :not rule so the
-   higher cascade position wins at equal specificity (0-2-1 vs 0-2-1). */
-body.platform-windows .titlebar {
-    display: flex;
-    height: 38px;
-    padding: 0 12px 0 14px;
-    align-items: center;
 }
 
 .titlebar-logo {
