@@ -676,11 +676,19 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         )
     };
 
+    debug!(
+        entries = entries.len(),
+        enable_host = %enable_host,
+        user_name = %user_name,
+        "trakt: sync start"
+    );
+
     // Skip early when nothing targets an enabled host.
     if !entries
         .iter()
         .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
     {
+        debug!("trakt: no entry matches enable_host, skipping");
         return;
     }
 
@@ -743,7 +751,9 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         })
         .collect();
 
+    debug!(items = items.len(), "trakt: built history items");
     if items.is_empty() {
+        debug!("trakt: no movie/episode items with provider ids, skipping");
         return;
     }
 
@@ -782,11 +792,20 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         )
     };
 
+    debug!(
+        entries = entries.len(),
+        enable_host = %enable_host,
+        username = %username,
+        private,
+        "bangumi: sync start"
+    );
+
     // Skip early when no completed entry targets an enabled host.
     if !entries
         .iter()
         .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
     {
+        debug!("bangumi: no entry matches enable_host, skipping");
         return;
     }
 
@@ -816,17 +835,24 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             continue;
         }
         let Some(subject_id_str) = data.provider_ids.get("Bangumi") else {
+            debug!(
+                item = %data.media_title,
+                "bangumi: entry has no Bangumi provider id, skipping"
+            );
             continue;
         };
         let Ok(subject_id) = subject_id_str.parse::<u64>() else {
+            warn!("bangumi: invalid subject id {subject_id_str:?}, skipping");
             continue;
         };
         let Some(ep_index) = data.index else {
+            debug!(subject_id, "bangumi: entry has no episode index, skipping");
             continue;
         };
         let Ok(sort) = u32::try_from(ep_index) else {
             continue;
         };
+        debug!(subject_id, sort, "bangumi: syncing entry");
         match sync_episode_by_bangumi_id(&api, subject_id, &[sort]).await {
             Ok(ids) => {
                 info!(
