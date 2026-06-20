@@ -303,6 +303,58 @@ async fn run_player_chain(
     let mut mgr = PlayerManager::new(handle, data.clone());
     mgr.disable_progress_report = cfg.disable_progress_report;
 
+    // Playback-latency metric (mpv family): measure how long after the stream
+    // URL is handed to mpv (spawn + IPC connected) the media is actually loaded
+    // and ready to render. `time-pos` is `null` until mpv has opened the file,
+    // so its first non-null read marks playback-ready. Runs detached so it does
+    // not delay playlist setup; logs `playback_started` with both the URL→ready
+    // latency and the overall click→playing time.
+    if let PlayerHandle::Mpv(ref h) = mgr.handle {
+        let client = h.client.clone();
+        let sid = session_id;
+        let spawn_ms = metrics.player_spawn_ms;
+        let chain_start_for_task = chain_start;
+        let spawn_done = std::time::Instant::now();
+        tokio::spawn(async move {
+            let deadline = spawn_done + std::time::Duration::from_secs(60);
+            loop {
+                if std::time::Instant::now() > deadline {
+                    debug!(
+                        session_id = sid,
+                        "playback_started: timed out waiting for first frame"
+                    );
+                    break;
+                }
+                match client.command("get_property", &[json!("time-pos")]).await
+                {
+                    // First non-null position → media loaded and ready.
+                    Ok(Some(_)) => {
+                        let url_to_ready_ms = spawn_done.elapsed().as_millis();
+                        let click_to_play_ms =
+                            chain_start_for_task.elapsed().as_millis();
+                        info!(
+                            session_id = sid,
+                            url_to_ready_ms,
+                            click_to_play_ms,
+                            player_spawn_ms = ?spawn_ms,
+                            "playback_started"
+                        );
+                        break;
+                    }
+                    // Loaded but position not yet available — keep polling.
+                    Ok(None) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            50,
+                        ))
+                        .await;
+                    }
+                    // IPC closed (player exited before playing).
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
     // For mpv / iina: verify the playlist loaded correctly then unpause.
     if play_multiple
         && kind.is_mpv_family()

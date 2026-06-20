@@ -98,9 +98,14 @@ pub struct PlayMetrics {
     pub episode_fetch_ms: Option<u128>,
     /// Time to write the M3U8 playlist file to disk.
     pub m3u8_write_ms: Option<u128>,
-    /// Time from play chain entry to the player process being spawned.
+    /// Time from play chain entry to the player process being spawned and its
+    /// control connection (mpv IPC / VLC HTTP) established.
     pub player_spawn_ms: Option<u128>,
-    /// Total time from request received to player process running.
+    /// Total time from the request landing to the play chain finishing. Because
+    /// the chain blocks on the player until it exits, this spans the whole
+    /// playback session, not just the time-to-launch. The launch latency is
+    /// `player_spawn_ms`; the time until playback actually starts is logged
+    /// separately as the `playback_started` event (`url_to_ready_ms`).
     pub total_ms: Option<u128>,
 }
 

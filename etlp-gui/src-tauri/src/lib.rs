@@ -354,6 +354,8 @@ pub fn run() {
             commands::test_trakt_auth,
             commands::test_bangumi_auth,
             commands::get_log_lines,
+            commands::tail_log,
+            commands::read_log_before,
             commands::clear_log_position,
             commands::open_log_folder,
             commands::get_log_paths,

@@ -634,48 +634,176 @@ pub async fn test_bangumi_auth() -> Result<bool, String> {
 
 // ── Logs ───────────────────────────────────────────────────────────────────────
 
-/// Return new log lines since the last call (incremental tail).
+/// Resolve the log path to read: an explicit `path`, else the default app log.
+fn resolve_log_path(
+    state: &GuiState,
+    path: Option<String>,
+) -> Result<PathBuf, String> {
+    match path {
+        Some(p) if !p.is_empty() => Ok(PathBuf::from(p)),
+        _ => Ok(state
+            .log_file
+            .lock()
+            .map_err(|e| format!("lock log_file: {e}"))?
+            .clone()),
+    }
+}
+
+/// Read up to `max_lines` whole lines ending at byte offset `end`, scanning the
+/// file backwards in fixed chunks so a multi-hundred-MB log is never fully
+/// loaded. Returns `(start_offset, lines)` where bytes `[start_offset, end)`
+/// exactly cover the returned lines (each line excludes its trailing `\n`).
+/// `start_offset == 0` means the file head was reached (no older lines remain).
+fn read_lines_before(
+    path: &std::path::Path,
+    end: u64,
+    max_lines: usize,
+) -> std::io::Result<(u64, Vec<String>)> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+
+    const CHUNK: u64 = 64 * 1024;
+    let mut file = std::fs::File::open(path)?;
+    let mut start = end;
+    let mut buf: Vec<u8> = Vec::new();
+
+    // Grow `buf` backwards until it holds more than `max_lines` newlines (so the
+    // last `max_lines` lines are fully contained) or the file head is reached.
+    while start > 0 {
+        let read = CHUNK.min(start);
+        start -= read;
+        file.seek(SeekFrom::Start(start))?;
+        let mut chunk = vec![0u8; read as usize];
+        file.read_exact(&mut chunk)?;
+        chunk.extend_from_slice(&buf);
+        buf = chunk;
+        if buf.iter().filter(|&&b| b == b'\n').count() > max_lines {
+            break;
+        }
+    }
+
+    // Split `buf` (covering [start, end)) into lines, tracking absolute offsets.
+    let mut lines: Vec<(u64, &[u8])> = Vec::new();
+    let mut line_start = 0usize;
+    for (i, &b) in buf.iter().enumerate() {
+        if b == b'\n' {
+            lines.push((start + line_start as u64, &buf[line_start..i]));
+            line_start = i + 1;
+        }
+    }
+    if line_start < buf.len() {
+        lines.push((start + line_start as u64, &buf[line_start..]));
+    }
+
+    let keep_from = lines.len().saturating_sub(max_lines);
+    let kept = lines.get(keep_from..).unwrap_or(&[]);
+    let start_offset = kept.first().map(|&(o, _)| o).unwrap_or(end);
+    let out: Vec<String> = kept
+        .iter()
+        .map(|&(_, s)| {
+            String::from_utf8_lossy(s.strip_suffix(b"\r").unwrap_or(s))
+                .into_owned()
+        })
+        .collect();
+    Ok((start_offset, out))
+}
+
+/// Return the newest `max_lines` lines of the log (the initial page).
 ///
-/// `since_bytes` is the byte offset to read from; pass `0` for the beginning.
-/// `path`, when provided, reads that file instead of the default app log —
-/// used to view the mpv log (default or a user-picked file).
-/// Returns `{ lines: [...], next_bytes: u64 }`.
+/// `path` selects the file (default app log when absent). Returns
+/// `{ lines, start_bytes, next_bytes }`:
+/// - `next_bytes`: current file length — pass to [`get_log_lines`] to live-tail.
+/// - `start_bytes`: byte offset where the returned block begins — pass to
+///   [`read_log_before`] to page in older lines (`0` ⇒ no older lines).
+#[tauri::command]
+pub async fn tail_log(
+    state: State<'_, GuiState>,
+    max_lines: usize,
+    path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let log_path = resolve_log_path(&state, path)?;
+    if !log_path.exists() {
+        return Ok(serde_json::json!({
+            "lines": [], "start_bytes": 0u64, "next_bytes": 0u64,
+        }));
+    }
+    let len = std::fs::metadata(&log_path)
+        .map_err(|e| format!("stat log file: {e}"))?
+        .len();
+    let (start_bytes, lines) = read_lines_before(&log_path, len, max_lines)
+        .map_err(|e| format!("read log file: {e}"))?;
+    Ok(serde_json::json!({
+        "lines": lines,
+        "start_bytes": start_bytes,
+        "next_bytes": len,
+    }))
+}
+
+/// Page in up to `max_lines` older lines ending just before `before_bytes`.
+///
+/// Returns `{ lines, start_bytes }` where `start_bytes` is the new oldest
+/// offset (`0` ⇒ the file head was reached).
+#[tauri::command]
+pub async fn read_log_before(
+    state: State<'_, GuiState>,
+    before_bytes: u64,
+    max_lines: usize,
+    path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let log_path = resolve_log_path(&state, path)?;
+    if !log_path.exists() || before_bytes == 0 {
+        return Ok(serde_json::json!({ "lines": [], "start_bytes": 0u64 }));
+    }
+    let (start_bytes, lines) =
+        read_lines_before(&log_path, before_bytes, max_lines)
+            .map_err(|e| format!("read log file: {e}"))?;
+    Ok(serde_json::json!({
+        "lines": lines,
+        "start_bytes": start_bytes,
+    }))
+}
+
+/// Live-tail: return only the bytes appended since `since_bytes`.
+///
+/// Seeks straight to `since_bytes` so only the new tail is read, not the whole
+/// file. Returns `{ lines: [...], next_bytes: u64 }`.
 #[tauri::command]
 pub async fn get_log_lines(
     state: State<'_, GuiState>,
     since_bytes: u64,
     path: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let log_path = match path {
-        Some(p) if !p.is_empty() => PathBuf::from(p),
-        _ => state
-            .log_file
-            .lock()
-            .map_err(|e| format!("lock log_file: {e}"))?
-            .clone(),
-    };
+    use std::io::{Read as _, Seek as _, SeekFrom};
 
+    let log_path = resolve_log_path(&state, path)?;
     if !log_path.exists() {
         return Ok(serde_json::json!({ "lines": [], "next_bytes": 0u64 }));
     }
 
-    let content =
-        std::fs::read(&log_path).map_err(|e| format!("read log file: {e}"))?;
+    let mut file = std::fs::File::open(&log_path)
+        .map_err(|e| format!("open log file: {e}"))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("stat log file: {e}"))?
+        .len();
 
-    let start = since_bytes as usize;
-    let slice = if start < content.len() {
-        &content[start..]
-    } else {
-        &[]
-    };
+    // Truncation/rotation guard: if the file shrank below our cursor, restart.
+    let from = if since_bytes > len { 0 } else { since_bytes };
+    if from >= len {
+        return Ok(serde_json::json!({ "lines": [], "next_bytes": len }));
+    }
 
-    let text = String::from_utf8_lossy(slice);
+    file.seek(SeekFrom::Start(from))
+        .map_err(|e| format!("seek log file: {e}"))?;
+    let mut buf = Vec::with_capacity((len - from) as usize);
+    file.read_to_end(&mut buf)
+        .map_err(|e| format!("read log file: {e}"))?;
+
+    let text = String::from_utf8_lossy(&buf);
     let lines: Vec<&str> = text.lines().collect();
-    let next_bytes = content.len() as u64;
 
     Ok(serde_json::json!({
         "lines": lines,
-        "next_bytes": next_bytes,
+        "next_bytes": len,
     }))
 }
 
@@ -1057,4 +1185,57 @@ fn default_config_template() -> String {
         }
     }
     include_str!("../default_config.toml").to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_lines_before;
+    use std::io::Write as _;
+
+    fn write_tmp(content: &str) -> tempfile::NamedTempFile {
+        let mut f = tempfile::NamedTempFile::new().expect("tempfile");
+        f.write_all(content.as_bytes()).expect("write");
+        f.flush().expect("flush");
+        f
+    }
+
+    #[test]
+    fn tail_returns_last_n_lines() {
+        let f = write_tmp("a\nb\nc\nd\ne\n");
+        let len = f.path().metadata().unwrap().len();
+        let (start, lines) = read_lines_before(f.path(), len, 2).unwrap();
+        assert_eq!(lines, vec!["d".to_owned(), "e".to_owned()]);
+        // "d\n" begins at byte 6 ("a\nb\nc\n" == 6 bytes).
+        assert_eq!(start, 6);
+    }
+
+    #[test]
+    fn tail_clamps_to_available_lines() {
+        let f = write_tmp("only\ntwo\n");
+        let len = f.path().metadata().unwrap().len();
+        let (start, lines) = read_lines_before(f.path(), len, 10).unwrap();
+        assert_eq!(lines, vec!["only".to_owned(), "two".to_owned()]);
+        assert_eq!(start, 0); // file head reached
+    }
+
+    #[test]
+    fn paging_before_offset_returns_older_lines() {
+        let f = write_tmp("a\nb\nc\nd\ne\n");
+        let len = f.path().metadata().unwrap().len();
+        // First page: last 2 lines, starting at byte 6.
+        let (start, _) = read_lines_before(f.path(), len, 2).unwrap();
+        // Older page ending just before byte 6.
+        let (older_start, older) =
+            read_lines_before(f.path(), start, 2).unwrap();
+        assert_eq!(older, vec!["b".to_owned(), "c".to_owned()]);
+        assert_eq!(older_start, 2); // "b\n" begins at byte 2
+    }
+
+    #[test]
+    fn crlf_endings_are_trimmed() {
+        let f = write_tmp("x\r\ny\r\n");
+        let len = f.path().metadata().unwrap().len();
+        let (_, lines) = read_lines_before(f.path(), len, 5).unwrap();
+        assert_eq!(lines, vec!["x".to_owned(), "y".to_owned()]);
+    }
 }
