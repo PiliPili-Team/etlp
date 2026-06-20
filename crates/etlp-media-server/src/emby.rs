@@ -64,7 +64,7 @@ impl EmbyClient {
     ) -> Result<ItemList, NetError> {
         let url = self.url(&format!("Shows/{show_id}/Episodes"));
         let mut params = vec![
-            ("Fields", "MediaSources,Path,ProviderIds"),
+            ("Fields", "MediaSources,AlternateMediaSources,Path,ProviderIds"),
             ("X-Emby-Token", self.api_key.as_str()),
         ];
         if let Some(season_id) = season_id {
