@@ -1,65 +1,91 @@
+# etlp configuration — TOML format
+# Converted from embyToLocalPlayer_config.ini
+#
+# Only keys that differ from their defaults are required.
+# See etlp-config/src/lib.rs for the full struct definitions and defaults.
+
+# ── Player ────────────────────────────────────────────────────────────────────
+
 [emby]
-# Name or full path of your media player executable.
-# One of: mpv, iina, vlc, mpc-hc, potplayer, dandanplay
+# Which player to launch.
 player = "mpv"
 
-# Start the player in fullscreen mode.
-# fullscreen = true
+# Full path to the player binary (overrides [emby].player for lookup).
+# Corresponds to [exe] mpv = ... in the original INI.
+# player_path is under [dev]; listed here as a comment for discoverability.
 
-# Force a subtitle track by display-title keyword (case-insensitive).
-# subtitle_priority = ["chs", "简体", "中文"]
+# Launch in full-screen mode.
+fullscreen = false
+
+# ── Developer / advanced ─────��────────────────────────────────────────────────
 
 [dev]
-# Skip TLS certificate verification for self-signed Emby servers.
-# skip_certificate_verify = false
+# Absolute path to the player binary (was [exe] mpv = ... in INI).
+player_path = ""
 
-# Override the player executable path (e.g. "/usr/local/bin/mpv").
-# player_path = ""
+# Mask sensitive tokens (API keys, hostnames) in log output.
+mix_log = true
 
-# HTTP proxy for media stream requests (e.g. "http://127.0.0.1:7890").
-# http_proxy = ""
+log_level = "debug"
 
-# Hosts whose redirects should be followed and cached.
-# redirect_check_host = []
+# Log file path; leave commented to log to stderr only.
+log_file = "./log.txt"
+kill_process_at_start = false
+
+# Prepend the Emby title to the player window title (mpv / PotPlayer only).
+pretty_title = true
+redirect_check_host = []
+
+# Disable the playlist when the current episode is the last available one.
+last_ep_disable_playlist = true
+version_prefer = ["VCB", "ADE", "拨雪寻春", "北宇治", "霜庭云花", "@LoliHouse", "&LoliHouse", "字幕组", "字幕社", "组", "Sub", "简日", "双语", "Netflix", "NF", "Crunchyroll", "简繁日", "CR", "KKTV", "AMZN", "Amazon", "friDay", "Disney", "CatchPlay", "Viu", "AppleTV", "APTV", "HMAX", "B-Global", "BiliBili", "Abema", "iTunes", "内封", "简繁内封", "LoliHouse", "简繁", "Baha"]
+
+# Use version_prefer to fill playlist slots when a perfect version match fails.
+version_prefer_for_playlist = true
+
+# Ordered subtitle selection keywords (matched against the subtitle track name).
+subtitle_priority = [
+    "中英特效", "双语特效", "简中特效", "简体特效", "特效",
+    "中上", "中英", "澄空", "诸神", "千夏", "桜都", "双语",
+    "简", "simp", "中", "chi", "ass", "srt", "sup", "und", "(",
+]
+skip_certificate_verify = true
+
+# ── Playlist ───���──────────────────────────────────���───────────────────────────
 
 [playlist]
-# Maximum playlist episodes per session. 0 or empty means no limit.
-# item_limit = 10
+item_limit = 1
 
-# Regex to select subtitle group versions when building the playlist.
-# Leave empty to disable filtering.
+# Regex that selects one version per episode for the playlist (empty = no filter).
+# Matches case-insensitively; leading/trailing | and internal whitespace are ignored.
+# Use TOML literal string (single quotes) to avoid backslash escaping.
 version_filter = "|豌豆字幕组|北宇治字幕组|云光字幕组|织梦字幕组|千夏字幕组|风之圣殿字幕组|风车字幕组|银色子弹字幕组|枫叶字幕组|诸神字幕组|SW字幕组|DAY字幕组|轻之国度字幕组|星空字幕组|冷番补完字幕组|康复中心字幕组|極彩字幕组|桜都字幕组|幻之字幕组|魔穗字幕组|白恋字幕组|动漫国字幕组|FSD字幕组|酷漫字幕组|康复重症监护室字幕组|擦枪字幕组|幻樱字幕组|咪梦字幕组|漫游字幕组|爱恋字幕社|漫猫字幕社|极影字幕社|悠哈璃羽字幕社|六道是我大鸽汉化组|MCE汉化组|猫恋汉化组|猎户发布组|DBD制作组|DBD|Amor压制组|永恒译制|MingYSub|霜庭云花Sub|离谱Sub|新Sub|SweetSub|AI-Raws|Kawaiika-Raws|Zero-Raws|Deadmau-RAWS|IrizaRaws|Beatrice-Raws|jsum|Magic-Raws|喵萌奶茶屋|熔岩动画|Xrip|AKito秋人|智械尚未危机制作|雪飘工作室|亿次研同好会|VARYG|hchcsen|Arid|Knf|sxales|异域-11番小队|DreamHD|AliPan|Kagura|hydes|niizk|氢气烤肉架|LoliHouse|VCB-Studio|7³ACG|LittleBakas|FSD粉羽社|OPFans枫雪动漫|GM-Team|澄空学园|SilverBullet|APTX4869|NEO·QSW|720p|1080p|2160p|4k|remux|hevc|h.265|h.264|h265|h264|flac|aac|sdr|hdr|dv|vision|dvrip|bdrip|mkv|mp4|Baha|Crunchyroll|B-Global|KKTV|MyVideo|AMZN|friDay|Disney\\+|LINETV|Netflix|playWEB|Viu|Amazon|AppleTV\\+|HMAX|BiliBili|Abema|YouTube|CatchPlay|iTunes|ADWeb|NTb|FLUX|简体|繁体|繁體|简繁|中英|简英|繁英|中日|简日|繁日|双语|内封|内嵌"
 
-[trakt]
-# Trakt.tv integration — leave client_id blank to disable.
-# When no token exists the OAuth authorization page opens automatically; the
-# redirect must be http://localhost:58000/trakt_auth in your Trakt app.
+# ── Path translation ───��──────────────────────────────────────────────────────
+# Each [[path_map]] entry is one src→dst pair (replaces [src]/[dst] in INI).
+# etlp strips the src prefix from the server-reported path and prepends dst.
+# Entries are matched in order; first match wins.
 
-# Comma-separated host keywords that trigger the sync; blank disables it.
-# enable_host = ""
+# Example: /mnt/disk1/movie.mkv → E:/movie.mkv
+[[path_map]]
+src = "/mnt/disk1"
+dst = "E:"
 
-# Trakt username (not the display nickname).
-# user_name = ""
+# Example: /mnt/disk2/media/series.mkv → F:\media\series.mkv
+[[path_map]]
+src = "/mnt/disk2/media"
+dst = 'F:\media'
 
-# From your Trakt app's detail page.
-# client_id = ""
-# client_secret = ""
+[gui]
+speed_limit_mb = 0
 
 [bangumi]
-# bgm.tv watch-progress sync. Leave access_token blank to disable.
+# Personal access token. Generate at https://next.bgm.tv/demo/access-token
+access_token = ""
+
+# bgm.tv username or UID (the digits in bgm.tv/user/123456).
+username = ""
 
 # Comma-separated host keywords that enable the sync; blank disables it.
 # A single "." enables every host. Example: localhost, 192.168., emby.example.com
-# enable_host = ""
-
-# bgm.tv username or UID (the digits in bgm.tv/user/123456).
-# username = ""
-
-# Personal access token. Generate at https://next.bgm.tv/demo/access-token
-# access_token = ""
-
-# Keep new collection entries private (true) or public (false).
-# private = true
-
-# Regex matched against the series genres; only matching series sync.
-# genres = "动画|anime"
+enable_host = ""
