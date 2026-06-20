@@ -88,9 +88,23 @@ package_tar() {
 
 package_zip() {
     local target="$1" asset="$2"
+    local release_dir="${REPO_ROOT}/target/${target}/release"
     _run mkdir -p "${OUT_DIR}"
     _log "Packaging" "${asset}"
-    _run_in "${REPO_ROOT}/target/${target}/release" \
-        zip -j "${OUT_DIR}/${asset}" "${BIN_NAME}.exe"
+    if command -v zip > /dev/null 2>&1; then
+        _run_in "${release_dir}" zip -j "${OUT_DIR}/${asset}" "${BIN_NAME}.exe"
+    else
+        # Git Bash on the Windows runner ships no `zip`; fall back to the
+        # PowerShell Compress-Archive cmdlet, which is built into every
+        # Windows install and needs no extra tooling. Compress-Archive wants
+        # a native Windows path, so translate the MSYS path with cygpath.
+        _log_skip "zip not found — using PowerShell Compress-Archive"
+        local dest="${OUT_DIR}/${asset}"
+        if command -v cygpath > /dev/null 2>&1; then
+            dest="$(cygpath -w "${dest}")"
+        fi
+        _run_in "${release_dir}" powershell -NoProfile -NonInteractive -Command \
+            "Compress-Archive -Path '${BIN_NAME}.exe' -DestinationPath '${dest}' -Force"
+    fi
     _log "Output" "${OUT_DIR}/${asset}"
 }
