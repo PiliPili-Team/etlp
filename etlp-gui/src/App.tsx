@@ -357,17 +357,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             ],
         },
         {
-            label: t("nav_sec_config"),
-            items: [
-                {
-                    id: "network" as TabId,
-                    icon: <IconNetwork />,
-                    label: t("nav_network"),
-                },
-                { id: "system" as TabId, icon: <IconSystem />, label: t("nav_system") },
-            ],
-        },
-        {
             label: t("nav_sec_sync"),
             items: [
                 {
@@ -381,6 +370,19 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         {
             label: t("nav_sec_debug"),
             items: [{ id: "logs" as TabId, icon: <IconLogs />, label: t("nav_logs") }],
+        },
+        // Config is intentionally last so the System tab (with destructive
+        // actions like cache clearing) stays at the bottom of the sidebar.
+        {
+            label: t("nav_sec_config"),
+            items: [
+                {
+                    id: "network" as TabId,
+                    icon: <IconNetwork />,
+                    label: t("nav_network"),
+                },
+                { id: "system" as TabId, icon: <IconSystem />, label: t("nav_system") },
+            ],
         },
     ];
 

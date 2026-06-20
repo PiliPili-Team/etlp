@@ -355,6 +355,8 @@ pub fn run() {
             commands::clear_log_position,
             commands::open_log_folder,
             commands::get_log_paths,
+            commands::get_cache_size,
+            commands::clear_cache,
             commands::pick_player_path,
             commands::path_exists,
             commands::get_app_version,

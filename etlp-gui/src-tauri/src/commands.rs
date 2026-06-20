@@ -656,6 +656,74 @@ pub fn path_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+// ── Cache ──────────────────────────────────────────────────────────────────────
+
+/// Sentinel error returned by [`clear_cache`] when the service is still running.
+/// The frontend maps this to a localized "stop the service first" message.
+pub const ERR_SERVICE_RUNNING: &str = "SERVICE_RUNNING";
+
+/// Paths whose contents count as clearable cache: the app log (`etlp.log`) and
+/// the mpv log (`mpv.log`), both written under the data directory.
+fn cache_log_paths(state: &GuiState) -> Result<Vec<PathBuf>, String> {
+    let app_log = state
+        .log_file
+        .lock()
+        .map_err(|e| format!("lock log_file: {e}"))?
+        .clone();
+    let mut paths = vec![app_log];
+    if let Some(data) = platform::data_dir() {
+        paths.push(data.join("mpv.log"));
+    }
+    Ok(paths)
+}
+
+/// Total size in bytes of the clearable cache (sum of the existing log files).
+#[tauri::command]
+pub async fn get_cache_size(state: State<'_, GuiState>) -> Result<u64, String> {
+    let total = cache_log_paths(&state)?
+        .iter()
+        .filter_map(|p| std::fs::metadata(p).ok())
+        .map(|m| m.len())
+        .sum();
+    Ok(total)
+}
+
+/// Clear the cache by truncating the log files to zero length.
+///
+/// Refuses while the service is running (returns [`ERR_SERVICE_RUNNING`]).
+/// Truncation rather than deletion is deliberate: it is race-safe against a
+/// logger that still holds the file open — the writer keeps appending past the
+/// new zero offset instead of failing, and no open handle is invalidated.
+/// Returns the number of bytes freed.
+#[tauri::command]
+pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
+    if state.running.load(Ordering::Acquire) {
+        return Err(ERR_SERVICE_RUNNING.to_owned());
+    }
+    let mut freed = 0u64;
+    let mut errors: Vec<String> = Vec::new();
+    for path in cache_log_paths(&state)? {
+        let size = match std::fs::metadata(&path) {
+            Ok(meta) => meta.len(),
+            Err(_) => continue, // missing file → nothing to clear
+        };
+        match std::fs::OpenOptions::new().write(true).open(&path) {
+            Ok(file) => match file.set_len(0) {
+                Ok(()) => freed += size,
+                Err(e) => errors.push(format!("{}: {e}", path.display())),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => errors.push(format!("{}: {e}", path.display())),
+        }
+    }
+    if errors.is_empty() {
+        info!(freed, "cache cleared");
+        Ok(freed)
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 // ── App info ───────────────────────────────────────────────────────────────────
 
 /// Return the application version string from the Cargo manifest.
