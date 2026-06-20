@@ -29,6 +29,7 @@ interface ConfigDto {
     disable_progress_report: boolean;
     trakt_client_id: string;
     trakt_client_secret: string;
+    trakt_user_name: string;
     trakt_enable_host: string;
     bangumi_access_token: string;
     bangumi_enable_host: string;
@@ -1207,6 +1208,14 @@ function SystemSection({
                     placeholder={t("sys_trakt_secret_placeholder")}
                     mono
                     onCommit={(v) => update("trakt", "client_secret", v)}
+                />
+                <InputRow
+                    label={t("sys_trakt_user")}
+                    desc={t("sys_trakt_user_desc")}
+                    value={cfg.trakt_user_name}
+                    placeholder={t("sys_trakt_user_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "user_name", v)}
                 />
                 <InputRow
                     label={t("sys_trakt_host")}

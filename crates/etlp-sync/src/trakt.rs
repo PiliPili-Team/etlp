@@ -86,6 +86,28 @@ pub struct TraktHistoryItem {
     pub watched_at: Option<String>,
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Percent-encode `s` for use in a URL query value (RFC 3986 unreserved set).
+///
+/// Dependency-free and panic-free; used to assemble the OAuth authorize URL.
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        match b {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 // ── API client ────────────────────────────────────────────────────────────────
 
 /// Trakt.tv REST API client.
@@ -131,6 +153,22 @@ impl TraktApi {
 
     fn url(&self, path: &str) -> String {
         format!("{}/{}", self.base_url.trim_end_matches('/'), path)
+    }
+
+    /// Build the Trakt OAuth authorization URL the user must open to grant
+    /// access. After approval Trakt redirects to `redirect_uri` with a `?code`
+    /// that the `/trakt_auth` callback exchanges for a token.
+    ///
+    /// Always points at the public `trakt.tv` host (not `base_url`, which may
+    /// be a test mock) because the user opens it in a real browser.
+    #[must_use]
+    pub fn authorize_url(&self, redirect_uri: &str) -> String {
+        format!(
+            "https://trakt.tv/oauth/authorize\
+             ?response_type=code&client_id={}&redirect_uri={}",
+            percent_encode(&self.client_id),
+            percent_encode(redirect_uri),
+        )
     }
 
     /// Build the standard Trakt request headers (no auth).
@@ -608,6 +646,28 @@ mod tests {
         let path = tmp.path().with_extension("nonexistent");
         let mut api = TraktApi::new("c", "s", "u", &path, "http://x").unwrap();
         assert!(!api.load_token().unwrap());
+    }
+
+    // ── authorize_url ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn authorize_url_encodes_redirect() {
+        let server = MockServer::start().await;
+        let api = make_api(&server).await;
+        let url = api.authorize_url("http://localhost:58000/trakt_auth");
+        assert!(url.starts_with("https://trakt.tv/oauth/authorize?"));
+        assert!(url.contains("response_type=code"));
+        assert!(url.contains("client_id=cid"));
+        // The redirect URI's reserved characters must be percent-encoded.
+        assert!(url.contains(
+            "redirect_uri=http%3A%2F%2Flocalhost%3A58000%2Ftrakt_auth"
+        ));
+    }
+
+    #[test]
+    fn percent_encode_preserves_unreserved() {
+        assert_eq!(percent_encode("aZ09-_.~"), "aZ09-_.~");
+        assert_eq!(percent_encode("a b/c"), "a%20b%2Fc");
     }
 
     // ── request_device_code ───────────────────────────────────────────────────

@@ -84,6 +84,7 @@ pub struct ConfigDto {
     // [trakt]
     pub trakt_client_id: String,
     pub trakt_client_secret: String,
+    pub trakt_user_name: String,
     pub trakt_enable_host: String,
     // [bangumi]
     pub bangumi_access_token: String,
@@ -121,6 +122,7 @@ impl From<&Config> for ConfigDto {
             speed_limit_mb: c.gui.speed_limit_mb,
             trakt_client_id: c.trakt.client_id.clone(),
             trakt_client_secret: c.trakt.client_secret.clone(),
+            trakt_user_name: c.trakt.user_name.clone(),
             trakt_enable_host: c.trakt.enable_host.clone(),
             bangumi_access_token: c.bangumi.access_token.clone(),
             bangumi_enable_host: c.bangumi.enable_host.clone(),

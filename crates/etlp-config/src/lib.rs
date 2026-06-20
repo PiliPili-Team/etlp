@@ -218,10 +218,12 @@ fn default_redirect_uri() -> String {
 pub struct TraktSection {
     pub client_id: String,
     pub client_secret: String,
+    /// Trakt username (not the display nickname) used for history lookups.
+    pub user_name: String,
     /// OAuth redirect URI registered with Trakt.
     #[serde(default = "default_redirect_uri")]
     pub redirect_uri: String,
-    /// Host suffix that triggers Trakt scrobble.
+    /// Comma-separated host keywords that trigger the Trakt scrobble.
     pub enable_host: String,
 }
 
@@ -230,6 +232,7 @@ impl Default for TraktSection {
         Self {
             client_id: String::new(),
             client_secret: String::new(),
+            user_name: String::new(),
             redirect_uri: default_redirect_uri(),
             enable_host: String::new(),
         }
@@ -492,6 +495,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.gui.speed_limit_mb, 0);
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
+        assert!(cfg.trakt.user_name.is_empty());
         // bangumi defaults
         assert!(cfg.bangumi.enable_host.is_empty());
         assert!(cfg.bangumi.access_token.is_empty());

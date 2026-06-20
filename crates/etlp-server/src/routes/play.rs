@@ -660,7 +660,7 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         return;
     }
 
-    let (client_id, client_secret, enable_host) = {
+    let (client_id, client_secret, user_name, redirect_uri, enable_host) = {
         let Ok(cfg) = state.config.read() else {
             return;
         };
@@ -670,31 +670,51 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         (
             cfg.trakt.client_id.clone(),
             cfg.trakt.client_secret.clone(),
+            cfg.trakt.user_name.clone(),
+            cfg.trakt.redirect_uri.clone(),
             cfg.trakt.enable_host.clone(),
         )
     };
+
+    // Skip early when nothing targets an enabled host.
+    if !entries
+        .iter()
+        .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
+    {
+        return;
+    }
 
     let token_path = state.working_dir.join("trakt_token.json");
     let Ok(mut api) = TraktApi::new(
         &client_id,
         &client_secret,
-        "",
+        &user_name,
         &token_path,
         "https://api.trakt.tv",
     ) else {
         return;
     };
 
-    if let Err(e) = api.ensure_auth().await {
-        warn!("trakt auth failed: {e}");
-        return;
+    match api.ensure_auth().await {
+        Ok(true) => {}
+        Ok(false) => {
+            // No token yet (or refresh failed): open the OAuth authorize page
+            // so the user can grant access. The /trakt_auth callback then
+            // exchanges the code; the next playback will scrobble.
+            warn!("trakt: no valid token, opening authorization page");
+            let _ =
+                crate::platform::open_url(&api.authorize_url(&redirect_uri));
+            return;
+        }
+        Err(e) => {
+            warn!("trakt auth failed: {e}");
+            return;
+        }
     }
 
     let items: Vec<TraktHistoryItem> = entries
         .iter()
-        .filter(|(_, data)| {
-            !enable_host.is_empty() && data.netloc.contains(&enable_host)
-        })
+        .filter(|(_, data)| host_enabled(&data.netloc, &enable_host))
         .filter_map(|(_, data)| {
             let kind = if data.item_type.eq_ignore_ascii_case("movie") {
                 TraktItemKind::Movie
