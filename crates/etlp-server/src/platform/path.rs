@@ -43,6 +43,31 @@ pub fn open_media_file(
     Ok(())
 }
 
+/// Open `url` in the platform's default web browser.
+///
+/// Used to surface OAuth authorization pages (Trakt) and the bgm.tv token
+/// regeneration page when a sync token is missing or expired. Failures are
+/// returned to the caller, which typically just logs them — opening a browser
+/// is best-effort.
+pub fn open_url(url: &str) -> std::io::Result<()> {
+    info!("open_url: {url:?}");
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(url).spawn()?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // `explorer <url>` hands the URL to the default browser. `cmd /C start`
+        // would also work but spawns an extra shell.
+        Command::new("explorer").arg(url).spawn()?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Command::new("xdg-open").arg(url).spawn()?;
+    }
+    Ok(())
+}
+
 /// Convert a WSL path (`/mnt/c/…`) to its Windows equivalent (`C:\…`).
 ///
 /// Returns the original string unchanged if it does not start with `/mnt/`.

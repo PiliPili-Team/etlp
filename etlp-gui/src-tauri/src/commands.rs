@@ -87,6 +87,10 @@ pub struct ConfigDto {
     pub trakt_enable_host: String,
     // [bangumi]
     pub bangumi_access_token: String,
+    pub bangumi_enable_host: String,
+    pub bangumi_username: String,
+    pub bangumi_private: bool,
+    pub bangumi_genres: String,
     // runtime (not from config file)
     pub config_path: String,
 }
@@ -118,11 +122,11 @@ impl From<&Config> for ConfigDto {
             trakt_client_id: c.trakt.client_id.clone(),
             trakt_client_secret: c.trakt.client_secret.clone(),
             trakt_enable_host: c.trakt.enable_host.clone(),
-            bangumi_access_token: c
-                .bangumi
-                .access_token
-                .clone()
-                .unwrap_or_default(),
+            bangumi_access_token: c.bangumi.access_token.clone(),
+            bangumi_enable_host: c.bangumi.enable_host.clone(),
+            bangumi_username: c.bangumi.username.clone(),
+            bangumi_private: c.bangumi.private,
+            bangumi_genres: c.bangumi.genres.clone(),
             config_path: c.path().to_string_lossy().into_owned(),
         }
     }

@@ -29,6 +29,10 @@ pub enum SyncError {
     #[error("API error HTTP {status}: {body}")]
     Api { status: u16, body: String },
 
+    /// The access token was rejected (HTTP 401/403); re-auth is required.
+    #[error("unauthorized: access token missing or expired")]
+    Unauthorized,
+
     /// Refresh token is absent or rejected; re-auth is required.
     #[error("invalid or missing refresh token")]
     InvalidRefreshToken,

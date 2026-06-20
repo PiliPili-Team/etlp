@@ -735,32 +735,66 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
 
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
-/// Reads `bangumi.access_token` from the config; silently skips when absent.
-/// Uses `provider_ids["Bangumi"]` as the subject ID and `index` as episode
-/// sort number.
+/// Reads `[bangumi]` from the config. Silently skips when `access_token` is
+/// empty or the media-server host does not match any `enable_host` keyword.
+/// Uses `provider_ids["Bangumi"]` as the subject ID and `index` as the episode
+/// sort number. When the token is rejected, the bgm.tv token page is opened so
+/// the user can regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
-    use etlp_sync::{BangumiApi, sync_episode_by_bangumi_id};
+    use etlp_sync::{BangumiApi, SyncError, sync_episode_by_bangumi_id};
 
     if entries.is_empty() {
         return;
     }
 
-    let access_token = {
+    let (username, access_token, private, enable_host) = {
         let Ok(cfg) = state.config.read() else {
             return;
         };
-        match cfg.bangumi.access_token.clone() {
-            Some(t) if !t.is_empty() => t,
-            _ => return,
+        if cfg.bangumi.access_token.is_empty() {
+            return;
         }
+        (
+            cfg.bangumi.username.clone(),
+            cfg.bangumi.access_token.clone(),
+            cfg.bangumi.private,
+            cfg.bangumi.enable_host.clone(),
+        )
     };
 
-    let Ok(api) = BangumiApi::new("", &access_token, "https://api.bgm.tv")
-    else {
+    // Skip early when no completed entry targets an enabled host.
+    if !entries
+        .iter()
+        .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
+    {
+        return;
+    }
+
+    let Ok(api) = BangumiApi::new(
+        &username,
+        &access_token,
+        private,
+        BangumiApi::DEFAULT_BASE_URL,
+    ) else {
         return;
     };
 
+    // Validate the token once. On rejection, open the regeneration page so the
+    // user can mint a fresh token instead of the sync silently failing.
+    if let Err(e) = api.verify_token().await {
+        if matches!(e, SyncError::Unauthorized) {
+            warn!("bangumi: access token rejected; opening token page");
+            let _ = crate::platform::open_url(BangumiApi::TOKEN_PAGE_URL);
+        } else {
+            warn!("bangumi: token verification failed: {e}");
+        }
+        return;
+    }
+
     for (_, data) in entries {
+        if !host_enabled(&data.netloc, &enable_host) {
+            continue;
+        }
         let Some(subject_id_str) = data.provider_ids.get("Bangumi") else {
             continue;
         };
@@ -785,6 +819,17 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
     }
 }
 
+/// Returns `true` when `netloc` matches the comma-separated `enable_host`
+/// keyword list. An empty list disables the feature (returns `false`); a list
+/// containing only `.` enables every host.
+fn host_enabled(netloc: &str, enable_host: &str) -> bool {
+    enable_host
+        .split(',')
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .any(|k| k == "." || netloc.contains(k))
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -795,6 +840,20 @@ mod tests {
 
     use crate::router::build_router;
     use crate::state::test_helpers::test_state;
+
+    #[test]
+    fn host_enabled_matches_keywords() {
+        // Empty list disables the feature.
+        assert!(!super::host_enabled("emby.example.com:8096", ""));
+        // A lone dot enables everything.
+        assert!(super::host_enabled("anything", "."));
+        // Comma-separated keywords match as substrings, ignoring whitespace.
+        assert!(super::host_enabled(
+            "192.168.1.10:8096",
+            "localhost, 192.168."
+        ));
+        assert!(!super::host_enabled("10.0.0.1:8096", "localhost, 192.168."));
+    }
 
     #[tokio::test]
     async fn emby_route_returns_200() {

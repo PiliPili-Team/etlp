@@ -266,11 +266,24 @@ async fn run_bgm_mark_played(
     let config = Config::load_from_dir(working_dir).ok();
     let token = token_override
         .or_else(|| {
-            config.as_ref().and_then(|c| c.bangumi.access_token.clone())
+            config
+                .as_ref()
+                .map(|c| c.bangumi.access_token.clone())
+                .filter(|t| !t.is_empty())
         })
         .ok_or("bangumi access_token required (--token or config)")?;
 
-    let api = BangumiApi::new("", &token, "https://api.bgm.tv")?;
+    let (username, private) = config
+        .as_ref()
+        .map(|c| (c.bangumi.username.clone(), c.bangumi.private))
+        .unwrap_or_else(|| (String::new(), true));
+
+    let api = BangumiApi::new(
+        username,
+        &token,
+        private,
+        BangumiApi::DEFAULT_BASE_URL,
+    )?;
     sync_episode_by_bangumi_id(&api, subject_id, &[ep]).await?;
     println!("bgm.tv: episode {ep} of subject {subject_id} marked as watched.");
     Ok(())

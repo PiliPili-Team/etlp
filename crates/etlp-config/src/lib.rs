@@ -236,12 +236,42 @@ impl Default for TraktSection {
     }
 }
 
+fn default_bangumi_genres() -> String {
+    "动画|anime".to_owned()
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// `[bangumi]` section — bgm.tv integration.
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct BangumiSection {
+    /// Comma-separated host keywords that enable the sync; empty disables it.
+    pub enable_host: String,
+    /// bgm.tv username or UID used to read the user's own collection.
+    pub username: String,
     /// Personal access token for the bgm.tv API.
-    pub access_token: Option<String>,
+    pub access_token: String,
+    /// Whether new collection entries are marked private. Defaults to `true`.
+    #[serde(default = "default_true")]
+    pub private: bool,
+    /// Regex matched against the series genres; only matching series sync.
+    #[serde(default = "default_bangumi_genres")]
+    pub genres: String,
+}
+
+impl Default for BangumiSection {
+    fn default() -> Self {
+        Self {
+            enable_host: String::new(),
+            username: String::new(),
+            access_token: String::new(),
+            private: true,
+            genres: default_bangumi_genres(),
+        }
+    }
 }
 
 /// A single path-translation entry (one element of `[[path_map]]`).
@@ -462,6 +492,32 @@ speed_dummy = 1.5
         assert_eq!(cfg.gui.speed_limit_mb, 0);
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
+        // bangumi defaults
+        assert!(cfg.bangumi.enable_host.is_empty());
+        assert!(cfg.bangumi.access_token.is_empty());
+        assert!(cfg.bangumi.private);
+        assert_eq!(cfg.bangumi.genres, "动画|anime");
+    }
+
+    #[test]
+    fn bangumi_section_parses_custom_values() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[bangumi]\n\
+             enable_host = \"localhost, 192.168.\"\n\
+             username = \"tester\"\n\
+             access_token = \"tok\"\n\
+             private = false\n\
+             genres = \"动画\"\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.bangumi.enable_host, "localhost, 192.168.");
+        assert_eq!(cfg.bangumi.username, "tester");
+        assert_eq!(cfg.bangumi.access_token, "tok");
+        assert!(!cfg.bangumi.private);
+        assert_eq!(cfg.bangumi.genres, "动画");
     }
 
     #[test]

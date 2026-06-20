@@ -101,18 +101,33 @@ pub struct EpCollectionState {
 pub struct BangumiApi {
     username: String,
     access_token: String,
+    private: bool,
     base_url: String,
     http: reqwest::Client,
 }
 
 impl BangumiApi {
+    /// The official bgm.tv API v0 base URL.
+    ///
+    /// The `/v0` suffix is required: without it every endpoint resolves to the
+    /// legacy API and returns 404, which is the historic cause of the sync
+    /// silently doing nothing.
+    pub const DEFAULT_BASE_URL: &'static str = "https://api.bgm.tv/v0";
+
+    /// Page shown to regenerate a personal access token when the current one is
+    /// missing or expired.
+    pub const TOKEN_PAGE_URL: &'static str =
+        "https://next.bgm.tv/demo/access-token";
+
     /// Create a new client.
     ///
-    /// `base_url` is normally `"https://api.bgm.tv/v0"`.  Pass the address of
-    /// a local mock server in tests.
+    /// `base_url` is normally [`Self::DEFAULT_BASE_URL`]. Pass the address of a
+    /// local mock server in tests. `private` controls whether new collection
+    /// entries are hidden from the user's public profile.
     pub fn new(
         username: impl Into<String>,
         access_token: impl Into<String>,
+        private: bool,
         base_url: impl Into<String>,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
@@ -122,9 +137,33 @@ impl BangumiApi {
         Ok(Self {
             username: username.into(),
             access_token: access_token.into(),
+            private,
             base_url: base_url.into(),
             http,
         })
+    }
+
+    /// Verify the access token by calling `GET /me`.
+    ///
+    /// Returns `Ok(())` when the token is accepted. A `401`/`403` response maps
+    /// to [`SyncError::Unauthorized`] so callers can prompt the user to
+    /// regenerate the token.
+    pub async fn verify_token(&self) -> Result<()> {
+        let resp = self
+            .http
+            .get(self.url("me"))
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        if resp.status().is_success() {
+            return Ok(());
+        }
+        if status == 401 || status == 403 {
+            return Err(SyncError::Unauthorized);
+        }
+        let body = resp.text().await.unwrap_or_default();
+        Err(SyncError::Api { status, body })
     }
 
     fn url(&self, path: &str) -> String {
@@ -293,7 +332,7 @@ impl BangumiApi {
     ) -> Result<()> {
         let body = serde_json::json!({
             "type":    state as u8,
-            "private": false,
+            "private": self.private,
         });
         let resp = self
             .http
@@ -505,7 +544,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn make_api(server: &MockServer) -> BangumiApi {
-        BangumiApi::new("testuser", "tok123", server.uri()).unwrap()
+        BangumiApi::new("testuser", "tok123", true, server.uri()).unwrap()
     }
 
     // ── search_subjects ───────────────────────────────────────────────────────
@@ -683,6 +722,57 @@ mod tests {
         api.add_collection_subject(42, CollectionState::Watching)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn add_collection_subject_sends_private_flag() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/42"))
+            .and(wiremock::matchers::body_partial_json(
+                serde_json::json!({ "private": true }),
+            ))
+            .respond_with(ResponseTemplate::new(202))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.add_collection_subject(42, CollectionState::Watching)
+            .await
+            .unwrap();
+    }
+
+    // ── verify_token ──────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn verify_token_ok_on_200() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "username": "testuser" }),
+                ),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.verify_token().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn verify_token_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let err = api.verify_token().await.unwrap_err();
+        assert!(matches!(err, SyncError::Unauthorized));
     }
 
     // ── mark_episodes_watched ─────────────────────────────────────────────────

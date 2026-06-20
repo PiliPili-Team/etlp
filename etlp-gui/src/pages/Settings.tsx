@@ -31,6 +31,10 @@ interface ConfigDto {
     trakt_client_secret: string;
     trakt_enable_host: string;
     bangumi_access_token: string;
+    bangumi_enable_host: string;
+    bangumi_username: string;
+    bangumi_private: boolean;
+    bangumi_genres: string;
     config_path: string;
 }
 
@@ -724,9 +728,18 @@ export default function Settings({ section, addToast, display, onDisplayChange }
         async (sec: string, key: string, value: unknown) => {
             try {
                 await patch(sec, key, value);
+                // The ConfigDto flattens some sections with a `${section}_`
+                // prefix (trakt_, bangumi_, gui_) and others without one. Set
+                // both shapes so optimistic UI (e.g. toggles bound directly to
+                // cfg) reflects immediately regardless of the field's naming.
+                const flat = key.replace(/\./g, "_");
                 setCfg((prev) =>
                     prev
-                        ? ({ ...prev, [key.replace(/\./g, "_")]: value } as ConfigDto)
+                        ? ({
+                              ...prev,
+                              [flat]: value,
+                              [`${sec}_${flat}`]: value,
+                          } as ConfigDto)
                         : prev,
                 );
             } catch (e) {
@@ -1209,12 +1222,42 @@ function SystemSection({
             <div className="settings-group-title">{t("sys_bangumi")}</div>
             <div className="settings-group">
                 <InputRow
+                    label={t("sys_bangumi_host")}
+                    desc={t("sys_bangumi_host_desc")}
+                    value={cfg.bangumi_enable_host}
+                    placeholder={t("sys_bangumi_host_placeholder")}
+                    mono
+                    onCommit={(v) => update("bangumi", "enable_host", v)}
+                />
+                <InputRow
+                    label={t("sys_bangumi_user")}
+                    desc={t("sys_bangumi_user_desc")}
+                    value={cfg.bangumi_username}
+                    placeholder={t("sys_bangumi_user_placeholder")}
+                    mono
+                    onCommit={(v) => update("bangumi", "username", v)}
+                />
+                <InputRow
                     label={t("sys_bangumi_token")}
                     desc={t("sys_bangumi_token_desc")}
                     value={cfg.bangumi_access_token}
                     placeholder={t("sys_bangumi_token_placeholder")}
                     mono
-                    onCommit={(v) => update("bangumi", "access_token", v || null)}
+                    onCommit={(v) => update("bangumi", "access_token", v)}
+                />
+                <ToggleRow
+                    label={t("sys_bangumi_private")}
+                    desc={t("sys_bangumi_private_desc")}
+                    checked={cfg.bangumi_private}
+                    onChange={(v) => update("bangumi", "private", v)}
+                />
+                <InputRow
+                    label={t("sys_bangumi_genres")}
+                    desc={t("sys_bangumi_genres_desc")}
+                    value={cfg.bangumi_genres}
+                    placeholder={t("sys_bangumi_genres_placeholder")}
+                    mono
+                    onCommit={(v) => update("bangumi", "genres", v)}
                 />
             </div>
         </>
