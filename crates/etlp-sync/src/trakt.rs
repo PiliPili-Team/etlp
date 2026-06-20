@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::{Result, SyncError};
 
@@ -428,21 +428,36 @@ impl TraktApi {
     /// must complete the Device Flow interactively.
     pub async fn ensure_auth(&mut self) -> Result<bool> {
         if self.token.is_none() {
-            self.load_token()?;
+            let loaded = self.load_token()?;
+            debug!(
+                loaded,
+                path = %self.token_path.display(),
+                "trakt: load token from disk"
+            );
         }
         match &self.token {
-            Some(tok) if tok.is_valid() => Ok(true),
+            Some(tok) if tok.is_valid() => {
+                debug!("trakt: token valid");
+                Ok(true)
+            }
             Some(_) => {
                 // Expired; try to refresh.
+                debug!("trakt: token expired, attempting refresh");
                 match self.refresh_token().await {
-                    Ok(()) => Ok(true),
+                    Ok(()) => {
+                        debug!("trakt: token refreshed");
+                        Ok(true)
+                    }
                     Err(e) => {
                         warn!("trakt: refresh failed: {e}");
                         Ok(false)
                     }
                 }
             }
-            None => Ok(false),
+            None => {
+                debug!("trakt: no token available, interactive auth required");
+                Ok(false)
+            }
         }
     }
 
@@ -474,6 +489,11 @@ impl TraktApi {
             }
         }
 
+        debug!(
+            movies = movies.len(),
+            episodes = episodes.len(),
+            "trakt: POST /sync/history"
+        );
         let payload = serde_json::json!({
             "movies":   movies,
             "episodes": episodes,
@@ -486,6 +506,10 @@ impl TraktApi {
             .json(&payload)
             .send()
             .await?;
+        debug!(
+            status = resp.status().as_u16(),
+            "trakt: /sync/history response"
+        );
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -575,6 +599,7 @@ pub async fn sync_history(
     if items.is_empty() {
         return Ok(0);
     }
+    debug!(count = items.len(), "trakt: sync_history start");
 
     // Filter out items that already have a watch entry.
     let mut to_add: Vec<TraktHistoryItem> = Vec::new();

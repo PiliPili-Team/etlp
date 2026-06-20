@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::error::{Result, SyncError};
 
@@ -152,6 +152,7 @@ impl BangumiApi {
     /// to [`SyncError::Unauthorized`] so callers can prompt the user to
     /// regenerate the token.
     pub async fn verify_token(&self) -> Result<()> {
+        debug!(user = %self.username, "bangumi: GET /me (verify token)");
         let resp = self
             .http
             .get(self.url("me"))
@@ -159,6 +160,7 @@ impl BangumiApi {
             .send()
             .await?;
         let status = resp.status().as_u16();
+        debug!(status, "bangumi: /me response");
         if resp.status().is_success() {
             return Ok(());
         }
@@ -264,6 +266,7 @@ impl BangumiApi {
         &self,
         subject_id: u64,
     ) -> Result<BangumiEpisodeList> {
+        debug!(subject_id, "bangumi: GET /episodes");
         let resp = self
             .http
             .get(self.url("episodes"))
@@ -271,6 +274,11 @@ impl BangumiApi {
             .query(&[("subject_id", subject_id), ("type", 0)])
             .send()
             .await?;
+        debug!(
+            subject_id,
+            status = resp.status().as_u16(),
+            "bangumi: /episodes response"
+        );
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
@@ -305,6 +313,11 @@ impl BangumiApi {
         &self,
         subject_id: u64,
     ) -> Result<Option<serde_json::Value>> {
+        debug!(
+            subject_id,
+            user = %self.username,
+            "bangumi: GET subject collection"
+        );
         let resp = self
             .http
             .get(self.url(&format!(
@@ -314,6 +327,11 @@ impl BangumiApi {
             .headers(self.auth_headers())
             .send()
             .await?;
+        debug!(
+            subject_id,
+            status = resp.status().as_u16(),
+            "bangumi: subject collection response"
+        );
         match resp.status().as_u16() {
             404 => Ok(None),
             200 => Ok(Some(resp.json().await?)),
@@ -333,6 +351,12 @@ impl BangumiApi {
         subject_id: u64,
         state: CollectionState,
     ) -> Result<()> {
+        debug!(
+            subject_id,
+            state = state as u8,
+            private = self.private,
+            "bangumi: POST add/update collection"
+        );
         let body = serde_json::json!({
             "type":    state as u8,
             "private": self.private,
@@ -344,6 +368,11 @@ impl BangumiApi {
             .json(&body)
             .send()
             .await?;
+        debug!(
+            subject_id,
+            status = resp.status().as_u16(),
+            "bangumi: add/update collection response"
+        );
         // 200/202/204 all count as success.
         if resp.status().is_success() || resp.status().as_u16() == 204 {
             return Ok(());
@@ -366,6 +395,11 @@ impl BangumiApi {
         if ep_ids.is_empty() {
             return Ok(());
         }
+        debug!(
+            subject_id,
+            ep_ids = ?ep_ids,
+            "bangumi: marking episodes watched"
+        );
 
         if ep_ids.len() == 1 {
             let ep_id = ep_ids
@@ -492,6 +526,11 @@ pub async fn sync_episode_by_bangumi_id(
     if ep_sorts.is_empty() {
         return Ok(Vec::new());
     }
+    debug!(
+        subject_id,
+        ep_sorts = ?ep_sorts,
+        "bangumi: sync_episode_by_bangumi_id start"
+    );
 
     // Ensure the subject is collected.
     match api.get_subject_collection(subject_id).await? {
@@ -521,6 +560,12 @@ pub async fn sync_episode_by_bangumi_id(
                 .map(|ep| ep.id)
         })
         .collect();
+    debug!(
+        subject_id,
+        total = ep_list.total,
+        resolved = ?ep_ids,
+        "bangumi: resolved episode sorts to ids"
+    );
 
     if ep_ids.is_empty() {
         info!(
