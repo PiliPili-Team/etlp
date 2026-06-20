@@ -95,6 +95,24 @@ fn augment_path() {
 #[cfg(not(target_os = "macos"))]
 fn augment_path() {}
 
+// ── Tray icon decoding ────────────────────────────────────────────────────────
+
+/// Decode the bundled tray PNG into `(rgba_bytes, width, height)`.
+///
+/// Returns an error instead of panicking so a corrupt/unsupported asset only
+/// costs the custom tray icon rather than the whole process.
+fn decode_tray_icon(
+    bytes: &[u8],
+) -> Result<(Vec<u8>, u32, u32), Box<dyn std::error::Error>> {
+    use image::ImageDecoder as _;
+    let cursor = std::io::Cursor::new(bytes);
+    let decoder = image::codecs::png::PngDecoder::new(cursor)?;
+    let (w, h) = decoder.dimensions();
+    let mut buf = vec![0u8; usize::try_from(decoder.total_bytes())?];
+    decoder.read_image(&mut buf)?;
+    Ok((buf, w, h))
+}
+
 // ── Tray menu builder ─────────────────────────────────────────────────────────
 
 fn build_tray_menu(
@@ -155,18 +173,13 @@ pub fn run() {
     eprintln!("[etlp] data   dir: {}", data_dir.display());
     eprintln!("[etlp] log    file: {}", log_file.display());
 
-    // Decode the monochrome PNG to raw RGBA at startup.
+    // Decode the monochrome PNG to raw RGBA at startup. A decode failure must
+    // not crash the app — the tray simply launches without a custom icon.
     let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon.png");
-    let tray_rgba = {
-        use image::ImageDecoder as _;
-        let cursor = std::io::Cursor::new(tray_icon_bytes);
-        let decoder = image::codecs::png::PngDecoder::new(cursor)
-            .expect("tray-icon.png is a valid PNG");
-        let (w, h) = decoder.dimensions();
-        let mut buf = vec![0u8; decoder.total_bytes() as usize];
-        decoder.read_image(&mut buf).expect("decode tray icon");
-        (buf, w, h)
-    };
+    let tray_rgba: Option<(Vec<u8>, u32, u32)> =
+        decode_tray_icon(tray_icon_bytes)
+            .map_err(|e| eprintln!("[etlp] tray icon decode failed: {e}"))
+            .ok();
 
     let gui_state = {
         let s = GuiState::default();
@@ -181,7 +194,7 @@ pub fn run() {
 
     let labels = TrayLabels::detect();
 
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -196,16 +209,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(gui_state)
         .setup(move |app| {
-            let (tray_buf, tray_w, tray_h) = tray_rgba;
-
             // ── Tray icon ──────────────────────────────────────────────────────
-            let tray_img =
-                tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
             let menu = build_tray_menu(app.handle(), &labels, false)?;
 
-            let _tray = TrayIconBuilder::new()
-                .icon(tray_img)
-                .icon_as_template(true)
+            let mut tray_builder = TrayIconBuilder::new();
+            if let Some((tray_buf, tray_w, tray_h)) = tray_rgba {
+                let tray_img =
+                    tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
+                tray_builder =
+                    tray_builder.icon(tray_img).icon_as_template(true);
+            }
+
+            let _tray = tray_builder
                 .tooltip(labels.tooltip)
                 .menu(&menu)
                 .on_menu_event(|app, event| {
@@ -353,6 +368,10 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running etlp");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = result {
+        eprintln!("[etlp] fatal: failed to run application: {e}");
+        std::process::exit(1);
+    }
 }
