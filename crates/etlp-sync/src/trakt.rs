@@ -150,9 +150,6 @@ impl TraktApi {
     /// Canonical filename for the persisted OAuth token.
     pub const TOKEN_FILE_NAME: &'static str = "trakt_token.json";
 
-    /// `User-Agent` sent on every request (kept for parity with upstream).
-    const USER_AGENT: &'static str = "embyToLocalPlayer/1.1";
-
     /// `redirect_uri` used for the refresh-token grant (out-of-band).
     const REFRESH_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
 
@@ -168,7 +165,7 @@ impl TraktApi {
         base_url: impl Into<String>,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
-            .user_agent(Self::USER_AGENT)
+            .user_agent(etlp_core::UA_ETLP)
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {
@@ -746,6 +743,29 @@ mod tests {
         assert_eq!(resp.user_code, "ABCD-1234");
         assert_eq!(resp.expires_in, 600);
         assert_eq!(resp.interval, 5);
+    }
+
+    #[tokio::test]
+    async fn requests_use_unified_user_agent() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/oauth/device/code"))
+            .and(wiremock::matchers::header("user-agent", etlp_core::UA_ETLP))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "device_code":      "d",
+                    "user_code":        "U",
+                    "verification_url": "https://trakt.tv/activate",
+                    "expires_in":       600,
+                    "interval":         5,
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        // Fails unless the request carried `User-Agent: etlp`.
+        api.request_device_code().await.unwrap();
     }
 
     #[tokio::test]

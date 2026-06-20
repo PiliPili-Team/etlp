@@ -5,11 +5,13 @@
 //! and—incrementally—the trait boundaries that upper layers depend on, so they
 //! can be mocked in tests.
 
+mod agent;
 mod error;
 mod media;
 mod playback;
 mod player;
 
+pub use agent::{UA_DOWNLOAD, UA_ETLP, UA_PREFETCH};
 pub use error::{CoreError, Result};
 pub use media::{IntroMarkers, Subtitle};
 pub use playback::PlaybackData;

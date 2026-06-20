@@ -10,6 +10,7 @@ description = "Trakt and Bangumi watch-history sync for etlp"
 workspace = true
 
 [dependencies]
+etlp-core = { path = "../etlp-core" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
