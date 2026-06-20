@@ -48,6 +48,25 @@ pub enum PlayerHandle {
 }
 
 impl PlayerHandle {
+    /// OS process id of the underlying player, when one is tracked.
+    ///
+    /// Used by the server layer to raise the player window to the foreground
+    /// after launch. Returns `None` for players launched via a detached
+    /// protocol handler (e.g. DandanPlay over HTTP on Windows) and for the
+    /// test stub.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        match self {
+            PlayerHandle::Mpv(h) => h.pid(),
+            PlayerHandle::Vlc(h) => h.pid(),
+            PlayerHandle::Mpc(h) => h.pid(),
+            PlayerHandle::Pot(h) => Some(h.pid),
+            PlayerHandle::DanDan(h) => h.pid(),
+            #[cfg(test)]
+            PlayerHandle::Stub => None,
+        }
+    }
+
     /// Block asynchronously until the player exits; return the last observed
     /// position in whole seconds, or `None` when it could not be determined.
     pub async fn stop_sec(&self) -> Option<i64> {
@@ -725,6 +744,14 @@ mod tests {
         let mut mgr = make_mgr(data);
         mgr.stop_times.insert("Anime S01E01".into(), 1800);
         assert_eq!(mgr.stop_times.get("Anime S01E01"), Some(&1800));
+    }
+
+    #[test]
+    fn stub_handle_reports_no_pid() {
+        let data = dummy_data("Anime S01E01", 0);
+        let mgr = make_mgr(data);
+        // The test stub tracks no OS process, so window activation is skipped.
+        assert_eq!(mgr.handle.pid(), None);
     }
 
     #[test]

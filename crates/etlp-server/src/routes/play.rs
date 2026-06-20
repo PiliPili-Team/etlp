@@ -293,6 +293,13 @@ async fn run_player_chain(
         }
     };
 
+    // Raise the freshly launched player window to the foreground. On Windows
+    // a process spawned from a background service often lands behind the
+    // caller or minimised; `activate_window_by_pid` is a no-op elsewhere.
+    if let Some(pid) = handle.pid() {
+        crate::platform::activate_window_by_pid(pid);
+    }
+
     let mut mgr = PlayerManager::new(handle, data.clone());
     mgr.disable_progress_report = cfg.disable_progress_report;
 

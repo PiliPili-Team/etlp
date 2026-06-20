@@ -268,6 +268,12 @@ impl MpcHandle {
         self.child.as_mut().map(|c| c.try_wait())
     }
 
+    /// OS process id of the spawned MPC-HC process, if available.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
+    }
+
     /// Add a file to the MPC-HC playlist by spawning an extra process call.
     ///
     /// MPC-HC accepts `/add <path>` as a command-line argument to a second

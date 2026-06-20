@@ -349,6 +349,15 @@ impl DanDanHandle {
         self.child.as_mut().map(|c| c.try_wait())
     }
 
+    /// OS process id of the spawned DandanPlay process, if available.
+    ///
+    /// `None` for the Windows HTTP launch path, where playback is handed to a
+    /// detached `ddplay:` protocol handler with no tracked child.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
+    }
+
     /// Poll DandanPlay status until the player exits; return the last
     /// observed position in whole seconds.
     pub async fn stop_sec(&self) -> Option<i64> {

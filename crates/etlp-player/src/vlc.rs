@@ -316,6 +316,12 @@ impl VlcHandle {
         self.child.as_mut().map(|c| c.try_wait())
     }
 
+    /// OS process id of the spawned VLC process, if available.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(Child::id)
+    }
+
     /// Poll VLC status until the process exits; return the last observed
     /// playback position in whole seconds. Polls every 500 ms.
     pub async fn stop_sec(&self) -> Option<i64> {

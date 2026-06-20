@@ -464,6 +464,14 @@ impl MpvHandle {
     ) -> Option<std::io::Result<Option<std::process::ExitStatus>>> {
         self.child.as_mut().map(std::process::Child::try_wait)
     }
+
+    /// OS process id of the spawned mpv process.
+    ///
+    /// Returns `None` for test / externally-managed handles with no child.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.child.as_ref().map(std::process::Child::id)
+    }
 }
 
 // ── High-level command helpers ────────────────────────────────────────────────
