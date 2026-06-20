@@ -3,7 +3,21 @@ name: CI Rust
 on:
   push:
     branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'clippy.toml'
+      - '.github/workflows/ci-rust.yml'
   pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'clippy.toml'
+      - '.github/workflows/ci-rust.yml'
 
 concurrency:
   group: ci-rust-${{ github.ref }}

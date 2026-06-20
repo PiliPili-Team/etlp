@@ -5,9 +5,15 @@ on:
     branches: [main]
     paths:
       - 'etlp-gui/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci-app.yml'
   pull_request:
     paths:
       - 'etlp-gui/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci-app.yml'
 
 concurrency:
   group: ci-app-${{ github.ref }}
