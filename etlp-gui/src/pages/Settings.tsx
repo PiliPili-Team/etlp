@@ -52,6 +52,7 @@ interface Props {
     addToast: (msg: string, err?: boolean) => void;
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
+    onAbout: () => void;
 }
 
 // ── Delta patch ────────────────────────────────────────────────────────────────
@@ -61,6 +62,28 @@ async function patch(section: string, key: string, value: unknown): Promise<void
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Map a backend error to a localized message.
+ *
+ * Backend commands return English strings or sentinels; known sentinels are
+ * translated, anything else falls back to the raw message (kept verbose for
+ * diagnosing unexpected failures).
+ */
+function mapBackendError(e: unknown, t: ReturnType<typeof useI18n>): string {
+    const msg = String(e);
+    if (msg.includes("NOT_CONFIGURED")) return t("sync_not_configured");
+    if (msg.includes("SERVICE_RUNNING")) return t("cache_stop_first");
+    return msg;
+}
+
+/** Split a comma-separated host keyword string into trimmed, non-empty tags. */
+function parseHostList(raw: string): string[] {
+    return raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+}
 
 /** Format a byte count as a human-readable string (B / KB / MB / GB). */
 function formatBytes(bytes: number): string {
@@ -792,7 +815,13 @@ function FontPickerRow({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function Settings({ section, addToast, display, onDisplayChange }: Props) {
+export default function Settings({
+    section,
+    addToast,
+    display,
+    onDisplayChange,
+    onAbout,
+}: Props) {
     const t = useI18n();
     const [cfg, setCfg] = useState<ConfigDto | null>(null);
     const [autostart, setAutostart] = useState(false);
@@ -808,9 +837,9 @@ export default function Settings({ section, addToast, display, onDisplayChange }
             setAutostart(a);
             loaded.current = true;
         } catch (e) {
-            addToast(String(e), true);
+            addToast(mapBackendError(e, t), true);
         }
-    }, [addToast]);
+    }, [addToast, t]);
 
     useEffect(() => {
         const init = setTimeout(loadConfig, 0);
@@ -836,10 +865,10 @@ export default function Settings({ section, addToast, display, onDisplayChange }
                         : prev,
                 );
             } catch (e) {
-                addToast(String(e), true);
+                addToast(mapBackendError(e, t), true);
             }
         },
-        [addToast],
+        [addToast, t],
     );
 
     const handleAutostart = useCallback(
@@ -849,7 +878,7 @@ export default function Settings({ section, addToast, display, onDisplayChange }
                 setAutostart(enabled);
                 addToast(enabled ? t("autostart_on") : t("autostart_off"));
             } catch (e) {
-                addToast(String(e), true);
+                addToast(mapBackendError(e, t), true);
             }
         },
         [addToast, t],
@@ -881,6 +910,7 @@ export default function Settings({ section, addToast, display, onDisplayChange }
                 display={display}
                 onDisplayChange={onDisplayChange}
                 addToast={addToast}
+                onAbout={onAbout}
             />
         );
     return null;
@@ -1146,6 +1176,7 @@ function SystemSection({
     display,
     onDisplayChange,
     addToast,
+    onAbout,
 }: {
     cfg: ConfigDto;
     update: (s: string, k: string, v: unknown) => void;
@@ -1154,6 +1185,7 @@ function SystemSection({
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
     addToast: (msg: string, err?: boolean) => void;
+    onAbout: () => void;
 }) {
     const t = useI18n();
 
@@ -1193,9 +1225,7 @@ function SystemSection({
             addToast(t("cache_cleared").replace("{size}", formatBytes(freed)));
             await refreshCacheSize();
         } catch (e) {
-            const msg = String(e);
-            // Backend sentinel → localized message.
-            addToast(msg.includes("SERVICE_RUNNING") ? t("cache_stop_first") : msg, true);
+            addToast(mapBackendError(e, t), true);
         }
     };
 
@@ -1351,6 +1381,17 @@ function SystemSection({
                 />
             </div>
 
+            {/* General — kept last in the System tab. */}
+            <div className="settings-group-title">{t("sys_general")}</div>
+            <div className="settings-group">
+                <ButtonRow
+                    label={t("sys_about")}
+                    desc={t("sys_about_desc")}
+                    button={t("ov_view")}
+                    onClick={onAbout}
+                />
+            </div>
+
             {confirmClear && (
                 <ConfirmModal
                     title={t("cache_confirm_title")}
@@ -1368,6 +1409,121 @@ function SystemSection({
 
 // ── Bangumi ────────────────────────────────────────────────────────────────────
 
+// Refresh (↻) glyph for the sync tab headers; spins via the `.spin` class.
+function IconRefresh({ spinning }: { spinning?: boolean }) {
+    return (
+        <svg
+            className={spinning ? "spin" : ""}
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width="16"
+            height="16"
+        >
+            <path d="M3 10a7 7 0 0 1 11.9-5M17 10a7 7 0 0 1-11.9 5" />
+            <polyline points="14.5 1.5 14.9 5 11.4 5.4" />
+            <polyline points="5.5 18.5 5.1 15 8.6 14.6" />
+        </svg>
+    );
+}
+
+/// Shared header + auth actions for the Bangumi / Trakt sync tabs.
+///
+/// `refreshCmd` / `testCmd` are the backend command names; the title carries a
+/// refresh button that (a) demands a running service, (b) confirms, then
+/// (c) spins while the refresh resolves. A separate "test" action probes
+/// whether authorization currently works.
+function useSyncAuth(
+    refreshCmd: string,
+    testCmd: string,
+    addToast: (msg: string, err?: boolean) => void,
+    t: ReturnType<typeof useI18n>,
+) {
+    const [busy, setBusy] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [confirmRefresh, setConfirmRefresh] = useState(false);
+
+    const onRefreshClick = async () => {
+        try {
+            const status = await invoke<{ running: boolean }>("get_server_status");
+            if (!status.running) {
+                addToast(t("sync_start_service_first"), true);
+                return;
+            }
+            setConfirmRefresh(true);
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const doRefresh = async () => {
+        setConfirmRefresh(false);
+        setBusy(true);
+        try {
+            const result = await invoke<string>(refreshCmd);
+            addToast(
+                result === "AUTH_OPENED"
+                    ? t("sync_authorize_opened")
+                    : t("sync_auth_valid"),
+            );
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const doTest = async () => {
+        setTesting(true);
+        try {
+            const ok = await invoke<boolean>(testCmd);
+            addToast(ok ? t("sync_test_ok") : t("sync_test_fail"), !ok);
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    return {
+        busy,
+        testing,
+        confirmRefresh,
+        setConfirmRefresh,
+        onRefreshClick,
+        doRefresh,
+        doTest,
+    };
+}
+
+function SyncTabHeader({
+    title,
+    busy,
+    onRefresh,
+}: {
+    title: string;
+    busy: boolean;
+    onRefresh: () => void;
+}) {
+    const t = useI18n();
+    return (
+        <div className="page-title-row">
+            <div className="page-title">{title}</div>
+            <button
+                className="icon-btn"
+                title={t("sync_refresh")}
+                onClick={onRefresh}
+                disabled={busy}
+            >
+                <IconRefresh spinning={busy} />
+            </button>
+        </div>
+    );
+}
+
 function BangumiSection({
     cfg,
     update,
@@ -1378,28 +1534,38 @@ function BangumiSection({
     addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
-
-    const authorize = useCallback(async () => {
-        try {
-            await invoke("authorize_bangumi");
-            addToast(t("sync_authorize_opened"));
-        } catch (e) {
-            addToast(String(e), true);
-        }
-    }, [addToast, t]);
+    const auth = useSyncAuth("refresh_bangumi_auth", "test_bangumi_auth", addToast, t);
 
     return (
         <>
-            <div className="page-title">{t("sys_bangumi")}</div>
+            <SyncTabHeader
+                title={t("sys_bangumi")}
+                busy={auth.busy}
+                onRefresh={() => void auth.onRefreshClick()}
+            />
 
             <div className="settings-group">
-                <InputRow
+                <TagListRow
                     label={t("sys_bangumi_host")}
                     desc={t("sys_bangumi_host_desc")}
-                    value={cfg.bangumi_enable_host}
+                    tags={parseHostList(cfg.bangumi_enable_host)}
                     placeholder={t("sys_bangumi_host_placeholder")}
-                    mono
-                    onCommit={(v) => update("bangumi", "enable_host", v)}
+                    onAdd={(tag) =>
+                        update(
+                            "bangumi",
+                            "enable_host",
+                            [...parseHostList(cfg.bangumi_enable_host), tag].join(", "),
+                        )
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "bangumi",
+                            "enable_host",
+                            parseHostList(cfg.bangumi_enable_host)
+                                .filter((_, j) => j !== i)
+                                .join(", "),
+                        )
+                    }
                 />
                 <InputRow
                     label={t("sys_bangumi_user")}
@@ -1432,12 +1598,23 @@ function BangumiSection({
                     onCommit={(v) => update("bangumi", "genres", v)}
                 />
                 <ButtonRow
-                    label={t("sync_authorize")}
-                    desc={t("sync_bangumi_authorize_desc")}
-                    button={t("sync_authorize")}
-                    onClick={authorize}
+                    label={t("sync_test")}
+                    desc={t("sync_test_desc")}
+                    button={auth.testing ? t("sync_testing") : t("sync_test")}
+                    onClick={() => void auth.doTest()}
                 />
             </div>
+
+            {auth.confirmRefresh && (
+                <ConfirmModal
+                    title={t("sync_refresh_confirm_title")}
+                    message={t("sync_refresh_confirm_message")}
+                    confirmLabel={t("sync_refresh_confirm_ok")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    onConfirm={() => void auth.doRefresh()}
+                    onCancel={() => auth.setConfirmRefresh(false)}
+                />
+            )}
         </>
     );
 }
@@ -1454,19 +1631,15 @@ function TraktSection({
     addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
-
-    const authorize = useCallback(async () => {
-        try {
-            await invoke("authorize_trakt");
-            addToast(t("sync_authorize_opened"));
-        } catch (e) {
-            addToast(String(e), true);
-        }
-    }, [addToast, t]);
+    const auth = useSyncAuth("refresh_trakt_auth", "test_trakt_auth", addToast, t);
 
     return (
         <>
-            <div className="page-title">{t("sys_trakt")}</div>
+            <SyncTabHeader
+                title={t("sys_trakt")}
+                busy={auth.busy}
+                onRefresh={() => void auth.onRefreshClick()}
+            />
 
             <div className="settings-group">
                 <InputRow
@@ -1502,12 +1675,23 @@ function TraktSection({
                     onCommit={(v) => update("trakt", "enable_host", v)}
                 />
                 <ButtonRow
-                    label={t("sync_authorize")}
-                    desc={t("sync_trakt_authorize_desc")}
-                    button={t("sync_authorize")}
-                    onClick={authorize}
+                    label={t("sync_test")}
+                    desc={t("sync_test_desc")}
+                    button={auth.testing ? t("sync_testing") : t("sync_test")}
+                    onClick={() => void auth.doTest()}
                 />
             </div>
+
+            {auth.confirmRefresh && (
+                <ConfirmModal
+                    title={t("sync_refresh_confirm_title")}
+                    message={t("sync_refresh_confirm_message")}
+                    confirmLabel={t("sync_refresh_confirm_ok")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    onConfirm={() => void auth.doRefresh()}
+                    onCancel={() => auth.setConfirmRefresh(false)}
+                />
+            )}
         </>
     );
 }

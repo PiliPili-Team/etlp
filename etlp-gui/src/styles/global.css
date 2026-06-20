@@ -315,6 +315,53 @@ body:not(.platform-macos) .titlebar {
     letter-spacing: -0.02em;
 }
 
+/* Title row with a trailing action button (sync tabs). */
+.page-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.page-title-row .page-title {
+    margin-bottom: 0;
+}
+
+/* Compact icon-only button (e.g. the auth refresh button). */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+        background 0.12s,
+        color 0.12s,
+        border-color 0.12s;
+}
+.icon-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+.icon-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.spin {
+    animation: spin 0.8s linear infinite;
+    transform-origin: center;
+}
+
 /* ── Settings card ────────────────────────────────────────────────────── */
 .settings-group {
     background: var(--surface);

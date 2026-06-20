@@ -473,48 +473,163 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
 
 // ── Third-party authorization ───────────────────────────────────────────────────
 
-/// Open the Trakt OAuth authorization page in the default browser.
-///
-/// Reads `client_id` and `redirect_uri` from the config and builds the URL with
-/// [`etlp_sync::trakt_authorize_url`]. The local `/trakt_auth` callback (served
-/// by the running etlp server) then exchanges the returned code for a token, so
-/// the user should start the service before authorizing.
-#[tauri::command]
-pub async fn authorize_trakt(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt as _;
+/// Sentinel returned when the provider has no credentials configured yet. The
+/// frontend maps it to a localized "not configured" message.
+pub const ERR_NOT_CONFIGURED: &str = "NOT_CONFIGURED";
 
+/// Refresh-result sentinel: existing credentials are already valid.
+pub const AUTH_VALID: &str = "AUTH_VALID";
+
+/// Refresh-result sentinel: an authorization page was opened for the user to
+/// complete the flow in a browser.
+pub const AUTH_OPENED: &str = "AUTH_OPENED";
+
+/// Build a [`TraktApi`] from the saved config, pointing at the data-dir token.
+///
+/// Returns `Ok(None)` when Trakt is not configured (empty `client_id`).
+fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
     let cfg_dir = platform::config_dir()
         .ok_or_else(|| "cannot determine config directory".to_owned())?;
     let config = load_or_default_config(&cfg_dir)?;
-
     if config.trakt.client_id.is_empty() {
-        warn!("authorize_trakt: client_id is empty");
-        return Err("Trakt client_id is not configured".to_owned());
+        return Ok(None);
     }
-
-    let url = etlp_sync::trakt_authorize_url(
+    let token_dir = platform::data_dir()
+        .ok_or_else(|| "cannot determine data directory".to_owned())?;
+    let token_path = token_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
+    let api = etlp_sync::TraktApi::new(
         &config.trakt.client_id,
-        &config.trakt.redirect_uri,
-    );
-    info!(redirect_uri = %config.trakt.redirect_uri, "authorize_trakt: opening authorization page");
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|e| format!("open trakt authorize page: {e}"))
+        &config.trakt.client_secret,
+        &config.trakt.user_name,
+        &token_path,
+        etlp_sync::TraktApi::DEFAULT_BASE_URL,
+    )
+    .map_err(|e| format!("init trakt client: {e}"))?;
+    Ok(Some(api))
 }
 
-/// Open the bgm.tv access-token generation page in the default browser.
+/// Build a [`BangumiApi`] from the saved config.
 ///
-/// bgm.tv uses long-lived personal tokens rather than an OAuth redirect flow,
-/// so "authorizing" simply means minting a new token and pasting it into the
-/// config.
+/// Returns `Ok(None)` when Bangumi is not configured (empty `access_token`).
+fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    let config = load_or_default_config(&cfg_dir)?;
+    if config.bangumi.access_token.is_empty() {
+        return Ok(None);
+    }
+    let api = etlp_sync::BangumiApi::new(
+        &config.bangumi.username,
+        &config.bangumi.access_token,
+        config.bangumi.private,
+        etlp_sync::BangumiApi::DEFAULT_BASE_URL,
+    )
+    .map_err(|e| format!("init bangumi client: {e}"))?;
+    Ok(Some(api))
+}
+
+/// Refresh the Trakt authorization.
+///
+/// Loads the saved token and tries to refresh it; if no valid token can be
+/// obtained, opens the OAuth authorization page (the running `/trakt_auth`
+/// callback then completes the exchange). Returns [`AUTH_VALID`] or
+/// [`AUTH_OPENED`].
 #[tauri::command]
-pub async fn authorize_bangumi(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn refresh_trakt_auth(
+    app: tauri::AppHandle,
+) -> Result<String, String> {
     use tauri_plugin_opener::OpenerExt as _;
 
-    info!("authorize_bangumi: opening token page");
-    app.opener()
-        .open_url(etlp_sync::BangumiApi::TOKEN_PAGE_URL, None::<&str>)
-        .map_err(|e| format!("open bangumi token page: {e}"))
+    let Some(mut api) = build_trakt_api()? else {
+        return Err(ERR_NOT_CONFIGURED.to_owned());
+    };
+
+    match api.ensure_auth().await {
+        Ok(true) => {
+            info!("refresh_trakt_auth: authorization valid");
+            Ok(AUTH_VALID.to_owned())
+        }
+        Ok(false) => {
+            let cfg_dir = platform::config_dir().ok_or_else(|| {
+                "cannot determine config directory".to_owned()
+            })?;
+            let config = load_or_default_config(&cfg_dir)?;
+            let url = etlp_sync::trakt_authorize_url(
+                &config.trakt.client_id,
+                &config.trakt.redirect_uri,
+            );
+            info!("refresh_trakt_auth: no valid token, opening authorize page");
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| format!("open trakt authorize page: {e}"))?;
+            Ok(AUTH_OPENED.to_owned())
+        }
+        Err(e) => Err(format!("trakt auth failed: {e}")),
+    }
+}
+
+/// Refresh the Bangumi authorization.
+///
+/// bgm.tv uses a long-lived personal token, so "refresh" means re-validating
+/// it; when invalid, the token page is opened. Returns [`AUTH_VALID`] or
+/// [`AUTH_OPENED`].
+#[tauri::command]
+pub async fn refresh_bangumi_auth(
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt as _;
+
+    let Some(api) = build_bangumi_api()? else {
+        return Err(ERR_NOT_CONFIGURED.to_owned());
+    };
+
+    match api.verify_token().await {
+        Ok(()) => {
+            info!("refresh_bangumi_auth: authorization valid");
+            Ok(AUTH_VALID.to_owned())
+        }
+        Err(etlp_sync::SyncError::Unauthorized) => {
+            info!("refresh_bangumi_auth: token invalid, opening token page");
+            app.opener()
+                .open_url(etlp_sync::BangumiApi::TOKEN_PAGE_URL, None::<&str>)
+                .map_err(|e| format!("open bangumi token page: {e}"))?;
+            Ok(AUTH_OPENED.to_owned())
+        }
+        Err(e) => Err(format!("bangumi auth check failed: {e}")),
+    }
+}
+
+/// Test whether the Trakt authorization currently works.
+///
+/// Returns `true` when a valid (or refreshable) token is present, `false` when
+/// interactive re-authorization is required.
+#[tauri::command]
+pub async fn test_trakt_auth() -> Result<bool, String> {
+    let Some(mut api) = build_trakt_api()? else {
+        return Err(ERR_NOT_CONFIGURED.to_owned());
+    };
+    let ok = api.ensure_auth().await.map_err(|e| format!("{e}"))?;
+    info!(ok, "test_trakt_auth");
+    Ok(ok)
+}
+
+/// Test whether the Bangumi access token currently works.
+#[tauri::command]
+pub async fn test_bangumi_auth() -> Result<bool, String> {
+    let Some(api) = build_bangumi_api()? else {
+        return Err(ERR_NOT_CONFIGURED.to_owned());
+    };
+    match api.verify_token().await {
+        Ok(()) => {
+            info!("test_bangumi_auth: ok");
+            Ok(true)
+        }
+        Err(etlp_sync::SyncError::Unauthorized) => {
+            info!("test_bangumi_auth: unauthorized");
+            Ok(false)
+        }
+        Err(e) => Err(format!("bangumi auth check failed: {e}")),
+    }
 }
 
 // ── Logs ───────────────────────────────────────────────────────────────────────

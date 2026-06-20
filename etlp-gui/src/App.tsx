@@ -427,12 +427,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 </nav>
 
                 <main className="content">
-                    {tab === "overview" && (
-                        <Overview
-                            addToast={addToast}
-                            onAbout={() => setShowAbout(true)}
-                        />
-                    )}
+                    {tab === "overview" && <Overview addToast={addToast} />}
                     {(tab === "player" ||
                         tab === "version-prefer" ||
                         tab === "network" ||
@@ -444,6 +439,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                             addToast={addToast}
                             display={display}
                             onDisplayChange={onDisplayChange}
+                            onAbout={() => setShowAbout(true)}
                         />
                     )}
                     {/* Logs stays mounted so its buffer survives tab switches;
