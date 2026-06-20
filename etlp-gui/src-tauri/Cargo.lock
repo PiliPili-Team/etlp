@@ -1192,6 +1192,7 @@ dependencies = [
 name = "etlp-sync"
 version = "0.0.1"
 dependencies = [
+ "etlp-core",
  "reqwest",
  "serde",
  "serde_json",

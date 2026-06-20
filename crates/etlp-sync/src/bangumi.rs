@@ -119,9 +119,6 @@ impl BangumiApi {
     pub const TOKEN_PAGE_URL: &'static str =
         "https://next.bgm.tv/demo/access-token";
 
-    /// `User-Agent` sent on every request (kept for parity with upstream).
-    const USER_AGENT: &'static str = "kjtsune/embyBangumi";
-
     /// Create a new client.
     ///
     /// `base_url` is normally [`Self::DEFAULT_BASE_URL`]. Pass the address of a
@@ -134,7 +131,7 @@ impl BangumiApi {
         base_url: impl Into<String>,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
-            .user_agent(Self::USER_AGENT)
+            .user_agent(etlp_core::UA_ETLP)
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {
@@ -806,6 +803,21 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
+        api.verify_token().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn requests_use_unified_user_agent() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .and(wiremock::matchers::header("user-agent", etlp_core::UA_ETLP))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        // Fails unless the request carried `User-Agent: etlp`.
         api.verify_token().await.unwrap();
     }
 

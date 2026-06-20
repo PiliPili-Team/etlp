@@ -16,14 +16,10 @@ pub use redirect::{RedirectCache, cache_key};
 
 use thiserror::Error;
 
-/// Default User-Agent used when the config does not override it.
-pub const UA_ETLP: &str = "etlp";
-
-/// User-Agent for prefetch background downloads (not user-configurable).
-pub const UA_PREFETCH: &str = "etlp-prefetch";
-
-/// User-Agent for active media downloads (not user-configurable).
-pub const UA_DOWNLOAD: &str = "etlp-download";
+// User-Agent constants live in `etlp-core` so the sync layer (and any other
+// crate that does not depend on `etlp-net`) can share them; re-exported here so
+// existing `etlp_net::UA_*` references keep working.
+pub use etlp_core::{UA_DOWNLOAD, UA_ETLP, UA_PREFETCH};
 
 /// `X-Emby-Client` / `X-Emby-Device-Name` header value sent with every
 /// Emby / Jellyfin progress report.
