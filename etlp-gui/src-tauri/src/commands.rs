@@ -395,11 +395,43 @@ pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("open folder: {e}"))
 }
 
-/// Open the config file in the default system text editor.
+/// Launch the editor the user has associated with `.toml` files on Windows.
 ///
-/// On Windows `.toml` has no default association, so we open it explicitly
-/// with `notepad.exe` instead of relying on the system's "open" mechanism
-/// (which would trigger an error dialog on most machines).
+/// Uses the shell "open" verb, exactly as double-clicking the file in Explorer
+/// would, so a user-configured association is honoured. Returns `false` when no
+/// application is associated with the extension (`SE_ERR_NOASSOC`), letting the
+/// caller fall back to a built-in editor.
+#[cfg(target_os = "windows")]
+fn open_with_association(path: &std::path::Path) -> bool {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{PCWSTR, w};
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+    // SAFETY: `wide` is a valid null-terminated UTF-16 buffer that lives for
+    // the duration of the call; the verb literal and null params are constant.
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            PCWSTR(wide.as_ptr()),
+            PCWSTR::null(),
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // ShellExecuteW returns a value greater than 32 on success; values <= 32
+    // are error codes such as SE_ERR_NOASSOC (no associated application).
+    result.0.addr() > 32
+}
+
+/// Open the config file in the user's editor of choice.
+///
+/// On Windows we first honour the file association via the shell "open" verb
+/// and only fall back to `notepad.exe` when `.toml` has no associated app, so a
+/// user who set their own editor gets it instead of always landing in Notepad.
 #[tauri::command]
 pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     let path = config_file_path()?;
@@ -412,8 +444,12 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        // `app` drives the opener on other platforms; notepad needs no handle.
+        // `app` drives the opener on other platforms; the shell verb and the
+        // Notepad fallback need no handle.
         let _ = &app;
+        if open_with_association(&path) {
+            return Ok(());
+        }
         std::process::Command::new("notepad.exe")
             .arg(&path)
             .spawn()

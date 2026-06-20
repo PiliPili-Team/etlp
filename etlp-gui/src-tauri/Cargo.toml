@@ -50,6 +50,7 @@ etlp-server  = { path = "../../crates/etlp-server" }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
 ] }
 
 [dev-dependencies]
