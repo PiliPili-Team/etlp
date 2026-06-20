@@ -60,6 +60,61 @@ async function patch(section: string, key: string, value: unknown): Promise<void
     await invoke("update_config_field", { section, key, value });
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Format a byte count as a human-readable string (B / KB / MB / GB). */
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let value = bytes / 1024;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+    }
+    return `${value.toFixed(value < 10 ? 2 : 1)} ${units[i]}`;
+}
+
+// ── Confirm modal (theme-aware) ──────────────────────────────────────────────────
+
+function ConfirmModal({
+    title,
+    message,
+    confirmLabel,
+    cancelLabel,
+    danger,
+    onConfirm,
+    onCancel,
+}: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel: string;
+    danger?: boolean;
+    onConfirm: () => void;
+    onCancel: () => void;
+}) {
+    return (
+        <div className="modal-overlay" onClick={onCancel}>
+            <div className="modal-card confirm-card" onClick={(e) => e.stopPropagation()}>
+                <div className="confirm-title">{title}</div>
+                <div className="confirm-message">{message}</div>
+                <div className="confirm-actions">
+                    <button className="btn" onClick={onCancel}>
+                        {cancelLabel}
+                    </button>
+                    <button
+                        className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
+                        onClick={onConfirm}
+                    >
+                        {confirmLabel}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Row components ─────────────────────────────────────────────────────────────
 
 function ToggleRow({
@@ -99,11 +154,13 @@ function ButtonRow({
     label,
     desc,
     button,
+    danger,
     onClick,
 }: {
     label: string;
     desc?: string;
     button: string;
+    danger?: boolean;
     onClick: () => void;
 }) {
     return (
@@ -113,7 +170,10 @@ function ButtonRow({
                 {desc && <div className="row-desc">{desc}</div>}
             </div>
             <div className="row-control">
-                <button className="btn btn-primary" onClick={onClick}>
+                <button
+                    className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
+                    onClick={onClick}
+                >
                     {button}
                 </button>
             </div>
@@ -820,6 +880,7 @@ export default function Settings({ section, addToast, display, onDisplayChange }
                 onAutostart={handleAutostart}
                 display={display}
                 onDisplayChange={onDisplayChange}
+                addToast={addToast}
             />
         );
     return null;
@@ -1084,6 +1145,7 @@ function SystemSection({
     onAutostart,
     display,
     onDisplayChange,
+    addToast,
 }: {
     cfg: ConfigDto;
     update: (s: string, k: string, v: unknown) => void;
@@ -1091,11 +1153,51 @@ function SystemSection({
     onAutostart: (v: boolean) => void;
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
+    addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
 
     const dpr =
         typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
+
+    // ── Cache ────────────────────────────────────────────────────────────────
+    const [cacheSize, setCacheSize] = useState<number | null>(null);
+    const [confirmClear, setConfirmClear] = useState(false);
+
+    const refreshCacheSize = useCallback(async () => {
+        try {
+            const size = await invoke<number>("get_cache_size");
+            setCacheSize(size);
+        } catch {
+            setCacheSize(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        // Defer to a macrotask so the setState in refreshCacheSize does not run
+        // synchronously inside the effect body (avoids cascading renders).
+        const id = setTimeout(() => void refreshCacheSize(), 0);
+        return () => clearTimeout(id);
+    }, [refreshCacheSize]);
+
+    const doClearCache = async () => {
+        setConfirmClear(false);
+        try {
+            // Guard: clearing is only safe while the service is stopped.
+            const status = await invoke<{ running: boolean }>("get_server_status");
+            if (status.running) {
+                addToast(t("cache_stop_first"), true);
+                return;
+            }
+            const freed = await invoke<number>("clear_cache");
+            addToast(t("cache_cleared").replace("{size}", formatBytes(freed)));
+            await refreshCacheSize();
+        } catch (e) {
+            const msg = String(e);
+            // Backend sentinel → localized message.
+            addToast(msg.includes("SERVICE_RUNNING") ? t("cache_stop_first") : msg, true);
+        }
+    };
 
     const LANG_OPTIONS = [
         { value: "system", label: t("sys_lang_system") },
@@ -1225,6 +1327,41 @@ function SystemSection({
                     onCommit={(v) => update("gui", "speed_limit_mb", v)}
                 />
             </div>
+
+            {/* Cache */}
+            <div className="settings-group-title">{t("sys_cache")}</div>
+            <div className="settings-group">
+                <div className="row">
+                    <div className="row-label">
+                        <div>{t("sys_cache_size")}</div>
+                        <div className="row-desc">{t("sys_cache_size_desc")}</div>
+                    </div>
+                    <div className="row-control">
+                        <span className="cache-size">
+                            {cacheSize === null ? "—" : formatBytes(cacheSize)}
+                        </span>
+                    </div>
+                </div>
+                <ButtonRow
+                    label={t("sys_cache_clear")}
+                    desc={t("sys_cache_clear_desc")}
+                    button={t("sys_cache_clear")}
+                    danger
+                    onClick={() => setConfirmClear(true)}
+                />
+            </div>
+
+            {confirmClear && (
+                <ConfirmModal
+                    title={t("cache_confirm_title")}
+                    message={t("cache_confirm_message")}
+                    confirmLabel={t("cache_confirm_ok")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    danger
+                    onConfirm={() => void doClearCache()}
+                    onCancel={() => setConfirmClear(false)}
+                />
+            )}
         </>
     );
 }

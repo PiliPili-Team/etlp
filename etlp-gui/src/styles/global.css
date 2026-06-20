@@ -9,6 +9,10 @@
 
 /* ── Design tokens (light) ──────────────────────────────────────────── */
 :root {
+    /* Drives native control rendering (number-input spinners, scrollbars) so
+       they match the active theme; overridden to `dark` in the dark blocks. */
+    color-scheme: light;
+
     --sidebar-w: 188px;
     --titlebar-h: 68px;
 
@@ -52,6 +56,7 @@
 /* ── Dark theme (system preference) ────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
+        color-scheme: dark;
         --bg: #0d0d0f;
         --sidebar-bg: rgba(28, 28, 30, 0.88);
         --surface: #1c1c1e;
@@ -83,6 +88,7 @@
 
 /* ── Dark theme (explicit override) ────────────────────────────────── */
 :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0d0d0f;
     --sidebar-bg: rgba(28, 28, 30, 0.88);
     --surface: #1c1c1e;
@@ -1001,6 +1007,39 @@ body:not(.platform-macos) .titlebar {
 .modal-close:hover {
     background: var(--surface-hover);
     color: var(--text);
+}
+
+/* ── Confirm modal ─────────────────────────────────────────────────────── */
+.confirm-card {
+    width: 380px;
+    padding: 26px 26px 22px;
+    align-items: stretch;
+    text-align: left;
+    gap: 0;
+}
+.confirm-title {
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--text);
+    margin-bottom: 10px;
+}
+.confirm-message {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-2);
+    margin-bottom: 22px;
+}
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.cache-size {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
 }
 
 .about-icon {
