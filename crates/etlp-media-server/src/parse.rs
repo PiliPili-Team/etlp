@@ -82,6 +82,9 @@ pub struct EmbyParseConfig {
     /// `dev.version_prefer_for_playlist` — fill remaining episodes by
     /// preference.
     pub version_prefer_for_playlist: bool,
+    /// `dev.alternate_media_sources` — request the episode list with the
+    /// `AlternateMediaSources` field and use the alternate-shape assembly.
+    pub alternate_media_sources: bool,
     /// `dev.sub_extract_priority` — keywords for cross-version subtitle
     /// fallback. When the selected source has no subtitle, etlp scans the
     /// other versions in `mainEpInfo.MediaSources` for a matching track.
@@ -108,6 +111,7 @@ impl EmbyParseConfig {
             last_ep_disable_playlist: config.dev.last_ep_disable_playlist,
             version_filter: config.playlist.version_filter.clone(),
             version_prefer_for_playlist: config.dev.version_prefer_for_playlist,
+            alternate_media_sources: config.dev.alternate_media_sources,
             sub_extract_priority: config.dev.sub_extract_priority.clone(),
             title_translate: parse_title_translate(
                 &config.dev.media_title_translate,
@@ -316,6 +320,21 @@ fn pick_source<'a>(
     Ok((source, source.id.clone()))
 }
 
+/// The item id to address when streaming `source`.
+///
+/// Multi-version Emby returns alternate versions as media sources carrying
+/// their own `ItemId`. The stream/subtitle URLs must target that id, not the
+/// item the user clicked: addressing the clicked item with a cross-item
+/// `MediaSourceId` makes Emby fall back to that item's primary version — the
+/// "picked version A but played version B" bug. Falls back to `path_item_id`
+/// when the source carries no `ItemId` (single-version or older payloads).
+fn stream_item_id(path_item_id: &str, source: &MediaSource) -> String {
+    match source.item_id.as_deref() {
+        Some(id) if !id.is_empty() => id.to_owned(),
+        _ => path_item_id.to_owned(),
+    }
+}
+
 /// Correct the file path for a multi-version http strm, where the source path
 /// alone does not identify the chosen version. Mirrors the
 /// `episodes_info`-based remap in `parse_received_data_emby`.
@@ -417,6 +436,10 @@ pub async fn parse_received_data_emby(
         is_emby,
         &config.version_prefer,
     )?;
+    // Retarget the stream to the chosen version's own item when it differs
+    // from the clicked item (multi-version). Keeps the played version in sync
+    // with the user's selection.
+    let item_id = stream_item_id(&item_id, source);
 
     let source_path = source.path.clone();
     let main_ep = &received.extra_data.main_ep_info;
@@ -762,6 +785,73 @@ mod tests {
         assert!(data.sub.external.is_none());
         // Two episodes, current is the first -> playlist stays enabled.
         assert!(data.is_multiple_episodes);
+    }
+
+    #[test]
+    fn stream_item_id_prefers_source_item_id() {
+        // A multi-version source carries its own ItemId -> stream targets it.
+        let source = MediaSource {
+            id: "mediasource_29909".to_owned(),
+            item_id: Some("29909".to_owned()),
+            ..MediaSource::default()
+        };
+        assert_eq!(stream_item_id("29907", &source), "29909");
+    }
+
+    #[test]
+    fn stream_item_id_falls_back_to_path_item() {
+        // No ItemId (single-version / older payload) -> keep the clicked item.
+        let source = MediaSource {
+            id: "src1".to_owned(),
+            item_id: None,
+            ..MediaSource::default()
+        };
+        assert_eq!(stream_item_id("29907", &source), "29907");
+        // Empty ItemId is treated as absent.
+        let empty = MediaSource {
+            item_id: Some(String::new()),
+            ..MediaSource::default()
+        };
+        assert_eq!(stream_item_id("29907", &empty), "29907");
+    }
+
+    #[test]
+    fn selected_alternate_version_retargets_stream_item() {
+        // The user picked version 29909 (a different item than the clicked
+        // 29907). The stream URL and stored item_id must follow the selection,
+        // otherwise Emby serves 29907's primary version (picked A, played B).
+        let payload = r#"{
+            "mountDiskEnable": "false",
+            "playbackUrl": "https://h:8096/emby/Items/29907/PlaybackInfo?X-Emby-Token=KEY&X-Emby-Device-Id=DEV&UserId=U1&MediaSourceId=mediasource_29909",
+            "ApiClient": {"_serverAddress": "https://h:8096", "_serverVersion": "4.9.5.0"},
+            "request": {"headers": {}},
+            "playbackData": {
+                "PlaySessionId": "ps-1",
+                "MediaSources": [
+                    {"Id": "mediasource_29907", "ItemId": "29907", "Name": "Baha",
+                     "Path": "/m/a.mkv", "RunTimeTicks": 12000000000},
+                    {"Id": "mediasource_29909", "ItemId": "29909", "Name": "LINETV",
+                     "Path": "/m/b.mkv", "RunTimeTicks": 12000000000}
+                ]
+            },
+            "extraData": {
+                "mainEpInfo": {"Id": "29907", "Name": "Ep1", "Path": "/m/a.mkv",
+                    "Type": "Episode", "SeasonId": "s1", "IndexNumber": 1,
+                    "ParentIndexNumber": 1},
+                "episodesInfo": [{"Id": "29907", "IndexNumber": 1}],
+                "playlistInfo": []
+            }
+        }"#;
+        let received: ReceivedData =
+            serde_json::from_str(payload).expect("payload");
+        let data = parse_sample(&received);
+        assert_eq!(data.media_source_id, "mediasource_29909");
+        assert_eq!(data.item_id, "29909");
+        assert!(
+            data.stream_url.contains("/emby/videos/29909/"),
+            "stream url must target the selected version's item: {}",
+            data.stream_url
+        );
     }
 
     #[test]
