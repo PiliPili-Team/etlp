@@ -58,10 +58,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ua_constants_are_correct() {
-        assert_eq!(UA_ETLP, "etlp");
-        assert_eq!(UA_PREFETCH, "etlp-prefetch");
-        assert_eq!(UA_DOWNLOAD, "etlp-download");
+    fn ua_constants_reexported_with_version() {
+        // Re-exported from etlp-core in `Product/Version` form.
+        assert!(UA_ETLP.starts_with("etlp/"));
+        assert!(UA_PREFETCH.starts_with("etlp-prefetch/"));
+        assert!(UA_DOWNLOAD.starts_with("etlp-download/"));
     }
 
     #[test]

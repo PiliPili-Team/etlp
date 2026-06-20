@@ -9,23 +9,29 @@
 //! distinguish that traffic.
 
 /// Default `User-Agent` for all normal requests, including third-party sync
-/// (Trakt / Bangumi). Used unless the user overrides it in `dev.user_agent`.
-pub const UA_ETLP: &str = "etlp";
+/// (Trakt / Bangumi). Follows the standard `Product/Version` form, e.g.
+/// `etlp/0.0.1`. Used unless the user overrides it in `dev.user_agent`.
+pub const UA_ETLP: &str = concat!("etlp/", env!("CARGO_PKG_VERSION"));
 
 /// `User-Agent` for prefetch background downloads (not user-configurable).
-pub const UA_PREFETCH: &str = "etlp-prefetch";
+pub const UA_PREFETCH: &str =
+    concat!("etlp-prefetch/", env!("CARGO_PKG_VERSION"));
 
 /// `User-Agent` for active media downloads (not user-configurable).
-pub const UA_DOWNLOAD: &str = "etlp-download";
+pub const UA_DOWNLOAD: &str =
+    concat!("etlp-download/", env!("CARGO_PKG_VERSION"));
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn agent_strings_are_stable() {
-        assert_eq!(UA_ETLP, "etlp");
-        assert_eq!(UA_PREFETCH, "etlp-prefetch");
-        assert_eq!(UA_DOWNLOAD, "etlp-download");
+    fn agents_follow_product_version_form() {
+        // `Product/Version`, e.g. "etlp/0.0.1".
+        let version = env!("CARGO_PKG_VERSION");
+        assert_eq!(UA_ETLP, format!("etlp/{version}"));
+        assert_eq!(UA_PREFETCH, format!("etlp-prefetch/{version}"));
+        assert_eq!(UA_DOWNLOAD, format!("etlp-download/{version}"));
+        assert!(UA_ETLP.starts_with("etlp/"));
     }
 }
