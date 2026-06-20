@@ -147,6 +147,9 @@ export const en: typeof zhCN = {
     sys_trakt_secret_desc:
         "Obtained after creating an app on trakt.tv — leave empty to disable",
     sys_trakt_secret_placeholder: "Leave empty to disable Trakt",
+    sys_trakt_user: "Username",
+    sys_trakt_user_desc: "Your Trakt username (not the display nickname)",
+    sys_trakt_user_placeholder: "e.g. your_trakt_user",
     sys_trakt_host: "Enable Host",
     sys_trakt_host_desc: "Only requests from this host trigger Trakt scrobbling",
     sys_trakt_host_placeholder: "e.g. emby.example.com",
