@@ -276,6 +276,11 @@ pub fn parse_episode_item(
         item_type: item.item_type.clone().unwrap_or_default(),
         provider_ids: item.provider_ids.clone(),
         series_id: item.series_id.clone().unwrap_or_default(),
+        series_name: item.series_name.clone().unwrap_or_default(),
+        original_title: item.original_title.clone().unwrap_or_default(),
+        season_number: item.parent_index_number,
+        premiere_date: item.premiere_date.clone(),
+        genres: item.genres.clone(),
         ..base.clone()
     })
 }
@@ -485,6 +490,35 @@ mod tests {
         assert_eq!(data.media_title, "Show S1:E2 - Two  |  s01e02.mkv");
         // Not the current episode -> position resets to 0.
         assert_eq!(data.start_sec, 0);
+    }
+
+    #[test]
+    fn parse_item_carries_bangumi_metadata() {
+        // The season/series/original-title/premiere fields must flow from the
+        // Emby item into PlaybackData so the Bangumi title-search fallback can
+        // resolve a subject when ProviderIds.Bangumi is missing.
+        let maps = TitleIntroMaps::default();
+        let context = ctx(&maps);
+        let base = PlaybackData::default();
+        let mut item =
+            ep_with_source("210", 2, "/m/s04e02.mkv", 12_000_000_000);
+        item.series_name = Some("Re:Zero".to_owned());
+        item.original_title = Some("Re:ゼロから始める異世界生活".to_owned());
+        item.parent_index_number = Some(4);
+        item.premiere_date = Some("2024-10-09T00:00:00.0000000Z".to_owned());
+        item.genres = vec!["动画".to_owned(), "奇幻".to_owned()];
+        let data =
+            parse_episode_item(&context, &base, &item, 0).expect("entry");
+
+        assert_eq!(data.series_name, "Re:Zero");
+        assert_eq!(data.original_title, "Re:ゼロから始める異世界生活");
+        assert_eq!(data.season_number, Some(4));
+        assert_eq!(
+            data.premiere_date.as_deref(),
+            Some("2024-10-09T00:00:00.0000000Z")
+        );
+        assert_eq!(data.genres, vec!["动画".to_owned(), "奇幻".to_owned()]);
+        assert_eq!(data.index, Some(2));
     }
 
     #[test]

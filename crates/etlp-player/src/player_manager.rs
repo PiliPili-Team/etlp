@@ -729,6 +729,11 @@ mod tests {
             item_type: String::new(),
             provider_ids: BTreeMap::new(),
             series_id: String::new(),
+            series_name: String::new(),
+            original_title: String::new(),
+            season_number: None,
+            premiere_date: None,
+            genres: Vec::new(),
         }
     }
 

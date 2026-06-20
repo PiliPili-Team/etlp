@@ -649,9 +649,15 @@ pub async fn parse_received_data_emby(
                 .then_some(selection.sub_inner_idx),
         },
         intro,
+        index: main_ep.index_number,
         item_type: main_ep.item_type.clone().unwrap_or_default(),
         provider_ids: main_ep.provider_ids.clone(),
         series_id: main_ep.series_id.clone().unwrap_or_default(),
+        series_name: main_ep.series_name.clone().unwrap_or_default(),
+        original_title: main_ep.original_title.clone().unwrap_or_default(),
+        season_number: main_ep.parent_index_number,
+        premiere_date: main_ep.premiere_date.clone(),
+        genres: main_ep.genres.clone(),
         ..PlaybackData::default()
     })
 }

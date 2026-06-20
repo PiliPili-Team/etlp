@@ -16,7 +16,10 @@ pub mod bangumi;
 pub mod error;
 pub mod trakt;
 
-pub use bangumi::{BangumiApi, CollectionState, sync_episode_by_bangumi_id};
+pub use bangumi::{
+    BangumiApi, CollectionState, SubjectCache, sync_episode_by_bangumi_id,
+    sync_episodes,
+};
 pub use error::{Result, SyncError};
 pub use trakt::{
     DeviceCodeResponse, TraktApi, TraktHistoryItem, TraktIds, TraktItemKind,

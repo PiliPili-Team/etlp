@@ -263,6 +263,11 @@ pub struct BangumiSection {
     /// Regex matched against the series genres; only matching series sync.
     #[serde(default = "default_bangumi_genres")]
     pub genres: String,
+    /// When an item lacks a `ProviderIds.Bangumi`, resolve the subject by
+    /// searching bgm by title (native title / series name) and walking the
+    /// sequel chain to the right season. Defaults to enabled.
+    #[serde(default = "default_true")]
+    pub title_search_fallback: bool,
 }
 
 impl Default for BangumiSection {
@@ -273,6 +278,7 @@ impl Default for BangumiSection {
             access_token: String::new(),
             private: true,
             genres: default_bangumi_genres(),
+            title_search_fallback: true,
         }
     }
 }

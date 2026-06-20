@@ -819,17 +819,20 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
 ///
 /// Reads `[bangumi]` from the config. Silently skips when `access_token` is
 /// empty or the media-server host does not match any `enable_host` keyword.
-/// Uses `provider_ids["Bangumi"]` as the subject ID and `index` as the episode
-/// sort number. When the token is rejected, the bgm.tv token page is opened so
-/// the user can regenerate it.
+/// The subject ID comes from `provider_ids["Bangumi"]`; when that is absent and
+/// `title_search_fallback` is enabled, it is resolved by searching bgm by title
+/// and walking the sequel chain to the season given by `season_number`. The
+/// episode is matched by air date (`premiere_date`) with `index` as fallback.
+/// When the token is rejected, the bgm.tv token page is opened so the user can
+/// regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
-    use etlp_sync::{BangumiApi, SyncError, sync_episode_by_bangumi_id};
+    use etlp_sync::{BangumiApi, SubjectCache, SyncError, sync_episodes};
 
     if entries.is_empty() {
         return;
     }
 
-    let (username, access_token, private, enable_host) = {
+    let (username, access_token, private, enable_host, genres, title_fallback) = {
         let Ok(cfg) = state.config.read() else {
             return;
         };
@@ -841,6 +844,8 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             cfg.bangumi.access_token.clone(),
             cfg.bangumi.private,
             cfg.bangumi.enable_host.clone(),
+            cfg.bangumi.genres.clone(),
+            cfg.bangumi.title_search_fallback,
         )
     };
 
@@ -849,6 +854,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         enable_host = %enable_host,
         username = %username,
         private,
+        title_fallback,
         "bangumi: sync start"
     );
 
@@ -882,30 +888,38 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         return;
     }
 
+    let cache_path = state.working_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
+    let mut cache = SubjectCache::load(&cache_path);
+
     for (_, data) in entries {
         if !host_enabled(&data.netloc, &enable_host) {
             continue;
         }
-        let Some(subject_id_str) = data.provider_ids.get("Bangumi") else {
-            debug!(
-                item = %data.media_title,
-                "bangumi: entry has no Bangumi provider id, skipping"
-            );
-            continue;
-        };
-        let Ok(subject_id) = subject_id_str.parse::<u64>() else {
-            warn!("bangumi: invalid subject id {subject_id_str:?}, skipping");
-            continue;
-        };
+        // The episode index is required by both paths to address an episode.
         let Some(ep_index) = data.index else {
-            debug!(subject_id, "bangumi: entry has no episode index, skipping");
+            debug!(item = %data.media_title, "bangumi: no episode index, skip");
             continue;
         };
         let Ok(sort) = u32::try_from(ep_index) else {
             continue;
         };
+
+        let Some(subject_id) = resolve_bangumi_subject(
+            &api,
+            data,
+            title_fallback,
+            &genres,
+            &mut cache,
+            &cache_path,
+        )
+        .await
+        else {
+            continue;
+        };
+
         debug!(subject_id, sort, "bangumi: syncing entry");
-        match sync_episode_by_bangumi_id(&api, subject_id, &[sort]).await {
+        let eps = vec![(sort, data.premiere_date.clone())];
+        match sync_episodes(&api, subject_id, &eps).await {
             Ok(ids) => {
                 info!(
                     "bangumi: marked {} episode(s) for subject {subject_id}",
@@ -915,6 +929,116 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             Err(e) => warn!("bangumi sync error for subject {subject_id}: {e}"),
         }
     }
+}
+
+/// Resolve the Bangumi subject ID for one entry.
+///
+/// Prefers `provider_ids["Bangumi"]`. When absent and `title_fallback` is on,
+/// resolves via cache → title search (gated to anime by `genres`) and persists
+/// any newly resolved `series:season → subject` mapping. Returns `None` when
+/// the subject cannot be determined.
+async fn resolve_bangumi_subject(
+    api: &etlp_sync::BangumiApi,
+    data: &PlaybackData,
+    title_fallback: bool,
+    genres: &str,
+    cache: &mut etlp_sync::SubjectCache,
+    cache_path: &std::path::Path,
+) -> Option<u64> {
+    if let Some(id_str) = data.provider_ids.get("Bangumi") {
+        match id_str.parse::<u64>() {
+            Ok(id) => return Some(id),
+            Err(_) => {
+                warn!("bangumi: invalid subject id {id_str:?}, skipping");
+                return None;
+            }
+        }
+    }
+
+    if !title_fallback {
+        debug!(item = %data.media_title, "bangumi: no provider id, fallback off");
+        return None;
+    }
+    // Only anime should reach title search; bgm's keyword index is anime-only.
+    if !genres_match(&data.genres, genres) {
+        debug!(item = %data.media_title, "bangumi: genres gate, skip fallback");
+        return None;
+    }
+
+    let season = data.season_number.unwrap_or(1);
+    if !data.series_id.is_empty()
+        && let Some(id) = cache.get(&data.series_id, season)
+    {
+        debug!(id, "bangumi: subject from cache");
+        return Some(id);
+    }
+
+    let keywords: Vec<&str> =
+        [data.original_title.as_str(), data.series_name.as_str()]
+            .into_iter()
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+    if keywords.is_empty() {
+        debug!("bangumi: no title keywords for fallback, skip");
+        return None;
+    }
+    let target_season = u32::try_from(season.max(1)).unwrap_or(1);
+
+    match api
+        .resolve_subject_id(&keywords, target_season, BANGUMI_TITLE_MIN_SCORE)
+        .await
+    {
+        Ok(Some(id)) => {
+            info!(
+                subject_id = id,
+                series = %data.series_name,
+                season,
+                "bangumi: resolved subject via title search"
+            );
+            if !data.series_id.is_empty()
+                && let Err(e) =
+                    cache.insert(&data.series_id, season, id, cache_path)
+            {
+                warn!("bangumi: subject cache write failed: {e}");
+            }
+            Some(id)
+        }
+        Ok(None) => {
+            warn!(
+                series = %data.series_name,
+                season,
+                "bangumi: title search found no subject"
+            );
+            None
+        }
+        Err(e) => {
+            warn!("bangumi: title search failed: {e}");
+            None
+        }
+    }
+}
+
+/// Minimum title-similarity score for accepting a Bangumi search candidate.
+const BANGUMI_TITLE_MIN_SCORE: f64 = 0.6;
+
+/// Whether any of `item_genres` matches the `|`-separated `pattern`.
+///
+/// Matching is case-insensitive substring on each alternative. An empty pattern
+/// allows everything; an item with no genres is allowed (the genre data is
+/// simply unavailable, not a negative signal).
+fn genres_match(item_genres: &[String], pattern: &str) -> bool {
+    let alternatives: Vec<String> = pattern
+        .split('|')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if alternatives.is_empty() || item_genres.is_empty() {
+        return true;
+    }
+    item_genres.iter().any(|g| {
+        let g = g.to_lowercase();
+        alternatives.iter().any(|a| g.contains(a))
+    })
 }
 
 /// Returns `true` when `netloc` matches the comma-separated `enable_host`
@@ -970,6 +1094,22 @@ mod tests {
             "localhost, 192.168."
         ));
         assert!(!super::host_enabled("10.0.0.1:8096", "localhost, 192.168."));
+    }
+
+    #[test]
+    fn genres_match_gates_title_fallback() {
+        let anime = vec!["动画".to_owned(), "奇幻".to_owned()];
+        let live = vec!["剧情".to_owned(), "犯罪".to_owned()];
+        // Default anime pattern matches an anime item.
+        assert!(super::genres_match(&anime, "动画|anime"));
+        // Case-insensitive substring on each alternative.
+        assert!(super::genres_match(&["Anime".to_owned()], "动画|anime"));
+        // Non-anime genres are rejected.
+        assert!(!super::genres_match(&live, "动画|anime"));
+        // Empty pattern allows everything.
+        assert!(super::genres_match(&live, ""));
+        // Missing genre data is not a negative signal -> allowed.
+        assert!(super::genres_match(&[], "动画|anime"));
     }
 
     #[tokio::test]
