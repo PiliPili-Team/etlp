@@ -471,6 +471,52 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+// ── Third-party authorization ───────────────────────────────────────────────────
+
+/// Open the Trakt OAuth authorization page in the default browser.
+///
+/// Reads `client_id` and `redirect_uri` from the config and builds the URL with
+/// [`etlp_sync::trakt_authorize_url`]. The local `/trakt_auth` callback (served
+/// by the running etlp server) then exchanges the returned code for a token, so
+/// the user should start the service before authorizing.
+#[tauri::command]
+pub async fn authorize_trakt(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt as _;
+
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    let config = load_or_default_config(&cfg_dir)?;
+
+    if config.trakt.client_id.is_empty() {
+        warn!("authorize_trakt: client_id is empty");
+        return Err("Trakt client_id is not configured".to_owned());
+    }
+
+    let url = etlp_sync::trakt_authorize_url(
+        &config.trakt.client_id,
+        &config.trakt.redirect_uri,
+    );
+    info!(redirect_uri = %config.trakt.redirect_uri, "authorize_trakt: opening authorization page");
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("open trakt authorize page: {e}"))
+}
+
+/// Open the bgm.tv access-token generation page in the default browser.
+///
+/// bgm.tv uses long-lived personal tokens rather than an OAuth redirect flow,
+/// so "authorizing" simply means minting a new token and pasting it into the
+/// config.
+#[tauri::command]
+pub async fn authorize_bangumi(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt as _;
+
+    info!("authorize_bangumi: opening token page");
+    app.opener()
+        .open_url(etlp_sync::BangumiApi::TOKEN_PAGE_URL, None::<&str>)
+        .map_err(|e| format!("open bangumi token page: {e}"))
+}
+
 // ── Logs ───────────────────────────────────────────────────────────────────────
 
 /// Return new log lines since the last call (incremental tail).

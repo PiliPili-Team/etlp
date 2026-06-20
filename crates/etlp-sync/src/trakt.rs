@@ -88,6 +88,22 @@ pub struct TraktHistoryItem {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// Build the Trakt OAuth authorization URL the user opens to grant access.
+///
+/// Free function (no client instance needed) so the GUI can construct the URL
+/// straight from the configured `client_id` and `redirect_uri`. After approval
+/// Trakt redirects to `redirect_uri` with a `?code` that `/trakt_auth` exchanges
+/// for a token.
+#[must_use]
+pub fn trakt_authorize_url(client_id: &str, redirect_uri: &str) -> String {
+    format!(
+        "{}?response_type=code&client_id={}&redirect_uri={}",
+        TraktApi::AUTHORIZE_URL,
+        percent_encode(client_id),
+        percent_encode(redirect_uri),
+    )
+}
+
 /// Percent-encode `s` for use in a URL query value (RFC 3986 unreserved set).
 ///
 /// Dependency-free and panic-free; used to assemble the OAuth authorize URL.
@@ -178,12 +194,7 @@ impl TraktApi {
     /// be a test mock) because the user opens it in a real browser.
     #[must_use]
     pub fn authorize_url(&self, redirect_uri: &str) -> String {
-        format!(
-            "{}?response_type=code&client_id={}&redirect_uri={}",
-            Self::AUTHORIZE_URL,
-            percent_encode(&self.client_id),
-            percent_encode(redirect_uri),
-        )
+        trakt_authorize_url(&self.client_id, redirect_uri)
     }
 
     /// Build the standard Trakt request headers (no auth).

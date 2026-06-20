@@ -1081,6 +1081,7 @@ dependencies = [
  "etlp-logging",
  "etlp-net",
  "etlp-server",
+ "etlp-sync",
  "image",
  "reqwest",
  "serde",

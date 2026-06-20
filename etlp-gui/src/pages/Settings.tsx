@@ -39,7 +39,13 @@ interface ConfigDto {
     config_path: string;
 }
 
-type SectionTab = "player" | "version-prefer" | "network" | "system";
+type SectionTab =
+    | "player"
+    | "version-prefer"
+    | "network"
+    | "system"
+    | "bangumi"
+    | "trakt";
 
 interface Props {
     section: SectionTab;
@@ -84,6 +90,32 @@ function ToggleRow({
                         <span className="toggle-thumb" />
                     </span>
                 </label>
+            </div>
+        </div>
+    );
+}
+
+function ButtonRow({
+    label,
+    desc,
+    button,
+    onClick,
+}: {
+    label: string;
+    desc?: string;
+    button: string;
+    onClick: () => void;
+}) {
+    return (
+        <div className="row">
+            <div className="row-label">
+                <div>{label}</div>
+                {desc && <div className="row-desc">{desc}</div>}
+            </div>
+            <div className="row-control">
+                <button className="btn btn-primary" onClick={onClick}>
+                    {button}
+                </button>
             </div>
         </div>
     );
@@ -775,6 +807,10 @@ export default function Settings({ section, addToast, display, onDisplayChange }
     if (section === "version-prefer")
         return <VersionPreferSection cfg={cfg} update={update} />;
     if (section === "network") return <NetworkSection cfg={cfg} update={update} />;
+    if (section === "bangumi")
+        return <BangumiSection cfg={cfg} update={update} addToast={addToast} />;
+    if (section === "trakt")
+        return <TraktSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "system")
         return (
             <SystemSection
@@ -1189,46 +1225,36 @@ function SystemSection({
                     onCommit={(v) => update("gui", "speed_limit_mb", v)}
                 />
             </div>
+        </>
+    );
+}
 
-            {/* Trakt */}
-            <div className="settings-group-title">{t("sys_trakt")}</div>
-            <div className="settings-group">
-                <InputRow
-                    label={t("sys_trakt_id")}
-                    desc={t("sys_trakt_id_desc")}
-                    value={cfg.trakt_client_id}
-                    placeholder={t("sys_trakt_id_placeholder")}
-                    mono
-                    onCommit={(v) => update("trakt", "client_id", v)}
-                />
-                <InputRow
-                    label={t("sys_trakt_secret")}
-                    desc={t("sys_trakt_secret_desc")}
-                    value={cfg.trakt_client_secret}
-                    placeholder={t("sys_trakt_secret_placeholder")}
-                    mono
-                    onCommit={(v) => update("trakt", "client_secret", v)}
-                />
-                <InputRow
-                    label={t("sys_trakt_user")}
-                    desc={t("sys_trakt_user_desc")}
-                    value={cfg.trakt_user_name}
-                    placeholder={t("sys_trakt_user_placeholder")}
-                    mono
-                    onCommit={(v) => update("trakt", "user_name", v)}
-                />
-                <InputRow
-                    label={t("sys_trakt_host")}
-                    desc={t("sys_trakt_host_desc")}
-                    value={cfg.trakt_enable_host}
-                    placeholder={t("sys_trakt_host_placeholder")}
-                    mono
-                    onCommit={(v) => update("trakt", "enable_host", v)}
-                />
-            </div>
+// ── Bangumi ────────────────────────────────────────────────────────────────────
 
-            {/* Bangumi */}
-            <div className="settings-group-title">{t("sys_bangumi")}</div>
+function BangumiSection({
+    cfg,
+    update,
+    addToast,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+
+    const authorize = useCallback(async () => {
+        try {
+            await invoke("authorize_bangumi");
+            addToast(t("sync_authorize_opened"));
+        } catch (e) {
+            addToast(String(e), true);
+        }
+    }, [addToast, t]);
+
+    return (
+        <>
+            <div className="page-title">{t("sys_bangumi")}</div>
+
             <div className="settings-group">
                 <InputRow
                     label={t("sys_bangumi_host")}
@@ -1267,6 +1293,82 @@ function SystemSection({
                     placeholder={t("sys_bangumi_genres_placeholder")}
                     mono
                     onCommit={(v) => update("bangumi", "genres", v)}
+                />
+                <ButtonRow
+                    label={t("sync_authorize")}
+                    desc={t("sync_bangumi_authorize_desc")}
+                    button={t("sync_authorize")}
+                    onClick={authorize}
+                />
+            </div>
+        </>
+    );
+}
+
+// ── Trakt ──────────────────────────────────────────────────────────────────────
+
+function TraktSection({
+    cfg,
+    update,
+    addToast,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+
+    const authorize = useCallback(async () => {
+        try {
+            await invoke("authorize_trakt");
+            addToast(t("sync_authorize_opened"));
+        } catch (e) {
+            addToast(String(e), true);
+        }
+    }, [addToast, t]);
+
+    return (
+        <>
+            <div className="page-title">{t("sys_trakt")}</div>
+
+            <div className="settings-group">
+                <InputRow
+                    label={t("sys_trakt_id")}
+                    desc={t("sys_trakt_id_desc")}
+                    value={cfg.trakt_client_id}
+                    placeholder={t("sys_trakt_id_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "client_id", v)}
+                />
+                <InputRow
+                    label={t("sys_trakt_secret")}
+                    desc={t("sys_trakt_secret_desc")}
+                    value={cfg.trakt_client_secret}
+                    placeholder={t("sys_trakt_secret_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "client_secret", v)}
+                />
+                <InputRow
+                    label={t("sys_trakt_user")}
+                    desc={t("sys_trakt_user_desc")}
+                    value={cfg.trakt_user_name}
+                    placeholder={t("sys_trakt_user_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "user_name", v)}
+                />
+                <InputRow
+                    label={t("sys_trakt_host")}
+                    desc={t("sys_trakt_host_desc")}
+                    value={cfg.trakt_enable_host}
+                    placeholder={t("sys_trakt_host_placeholder")}
+                    mono
+                    onCommit={(v) => update("trakt", "enable_host", v)}
+                />
+                <ButtonRow
+                    label={t("sync_authorize")}
+                    desc={t("sync_trakt_authorize_desc")}
+                    button={t("sync_authorize")}
+                    onClick={authorize}
                 />
             </div>
         </>
