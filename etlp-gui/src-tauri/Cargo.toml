@@ -45,6 +45,7 @@ etlp-logging = { path = "../../crates/etlp-logging" }
 etlp-net     = { path = "../../crates/etlp-net" }
 etlp-download = { path = "../../crates/etlp-download" }
 etlp-server  = { path = "../../crates/etlp-server" }
+etlp-sync    = { path = "../../crates/etlp-sync" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", features = [

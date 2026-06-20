@@ -15,6 +15,9 @@ export const zhTW: typeof zhCN = {
     nav_logs: "日誌",
     nav_sec_play: "播放",
     nav_sec_config: "設定",
+    nav_sec_sync: "同步",
+    nav_bangumi: "Bangumi",
+    nav_trakt: "Trakt",
     nav_sec_debug: "除錯",
 
     // Common
@@ -160,6 +163,11 @@ export const zhTW: typeof zhCN = {
     sys_bangumi_genres: "風格過濾",
     sys_bangumi_genres_desc: "對劇集風格做正規表示式比對；僅相符的劇集會同步",
     sys_bangumi_genres_placeholder: "动画|anime",
+    sync_authorize: "手動授權",
+    sync_authorize_opened: "已開啟授權頁面，請在瀏覽器中完成授權",
+    sync_bangumi_authorize_desc: "開啟 bgm.tv 權杖產生頁面，產生後填入上方存取權杖",
+    sync_trakt_authorize_desc:
+        "開啟 Trakt 授權頁面；授權後本機服務會自動接收並儲存權杖（需先啟動服務）",
     sys_privacy: "隱私",
     sys_no_progress: "停用播放進度回報",
     sys_no_progress_desc: "開啟後不向 Emby/Jellyfin 伺服器傳送播放進度",

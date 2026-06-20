@@ -20,5 +20,5 @@ pub use bangumi::{BangumiApi, CollectionState, sync_episode_by_bangumi_id};
 pub use error::{Result, SyncError};
 pub use trakt::{
     DeviceCodeResponse, TraktApi, TraktHistoryItem, TraktIds, TraktItemKind,
-    TraktToken, sync_history,
+    TraktToken, sync_history, trakt_authorize_url,
 };

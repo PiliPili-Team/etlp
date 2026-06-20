@@ -334,6 +334,8 @@ pub fn run() {
             commands::reload_config,
             commands::open_config_folder,
             commands::edit_config,
+            commands::authorize_trakt,
+            commands::authorize_bangumi,
             commands::get_log_lines,
             commands::clear_log_position,
             commands::open_log_folder,

@@ -15,6 +15,9 @@ export const en: typeof zhCN = {
     nav_logs: "Logs",
     nav_sec_play: "Playback",
     nav_sec_config: "Settings",
+    nav_sec_sync: "Sync",
+    nav_bangumi: "Bangumi",
+    nav_trakt: "Trakt",
     nav_sec_debug: "Debug",
 
     // Common
@@ -171,6 +174,12 @@ export const en: typeof zhCN = {
     sys_bangumi_genres_desc:
         "Regex matched against series genres; only matching series sync",
     sys_bangumi_genres_placeholder: "动画|anime",
+    sync_authorize: "Authorize",
+    sync_authorize_opened: "Authorization page opened — finish it in your browser",
+    sync_bangumi_authorize_desc:
+        "Open the bgm.tv token page, then paste the generated token above",
+    sync_trakt_authorize_desc:
+        "Open the Trakt authorization page; the local service receives and saves the token automatically (start the service first)",
     sys_privacy: "Privacy",
     sys_no_progress: "Disable Progress Reporting",
     sys_no_progress_desc: "Do not report playback progress to the Emby/Jellyfin server",

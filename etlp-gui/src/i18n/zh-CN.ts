@@ -11,6 +11,9 @@ export const zhCN = {
     nav_logs: "日志",
     nav_sec_play: "播放",
     nav_sec_config: "配置",
+    nav_sec_sync: "同步",
+    nav_bangumi: "Bangumi",
+    nav_trakt: "Trakt",
     nav_sec_debug: "调试",
 
     // Common
@@ -159,6 +162,11 @@ export const zhCN = {
     sys_bangumi_genres: "风格过滤",
     sys_bangumi_genres_desc: "对剧集风格做正则匹配；仅匹配的剧集会同步",
     sys_bangumi_genres_placeholder: "动画|anime",
+    sync_authorize: "手动授权",
+    sync_authorize_opened: "已打开授权页面，请在浏览器中完成授权",
+    sync_bangumi_authorize_desc: "打开 bgm.tv 令牌生成页面，生成后填入上方访问令牌",
+    sync_trakt_authorize_desc:
+        "打开 Trakt 授权页面；授权后本地服务会自动接收并保存令牌（需先启动服务）",
     sys_privacy: "隐私",
     sys_no_progress: "禁止上报播放进度",
     sys_no_progress_desc: "开启后不向 Emby/Jellyfin 服务器发送播放进度",
