@@ -40,9 +40,7 @@ pub fn patch_field(
         .ok_or_else(|| format!("[{section}] is not a table"))?;
 
     match json_to_toml_item(value) {
-        Ok(Some(item)) => {
-            tbl.insert(key, item);
-        }
+        Ok(Some(item)) => set_value_preserving_decor(tbl, key, item)?,
         Ok(None) => {
             tbl.remove(key);
         }
@@ -57,6 +55,41 @@ pub fn patch_field(
 
     std::fs::write(path, doc.to_string())
         .map_err(|e| format!("write config: {e}"))
+}
+
+/// Set `key` to `item` while preserving any existing formatting.
+///
+/// `toml_edit::Table::insert` replaces the whole entry, discarding the key's
+/// leading comment and the value's inline trailing comment. To keep a
+/// hand-edited file intact we instead overwrite only the leaf value when the
+/// key already exists, copying the previous value's decoration (whitespace and
+/// inline comments) onto the new one. The key node itself is untouched, so its
+/// own leading comment survives. Brand-new keys are appended normally.
+fn set_value_preserving_decor(
+    tbl: &mut toml_edit::Table,
+    key: &str,
+    item: toml_edit::Item,
+) -> Result<(), String> {
+    let Some(existing) = tbl.get_mut(key) else {
+        tbl.insert(key, item);
+        return Ok(());
+    };
+
+    let new_value = item
+        .into_value()
+        .map_err(|_| format!("value for `{key}` is not a scalar or array"))?;
+
+    if let Some(old_value) = existing.as_value_mut() {
+        let mut new_value = new_value;
+        // Carry over the original spacing and inline comment.
+        *new_value.decor_mut() = old_value.decor().clone();
+        *old_value = new_value;
+    } else {
+        // The previous entry was a table / array-of-tables, not a leaf value;
+        // there is no inline decoration to preserve, so replace it outright.
+        *existing = toml_edit::Item::Value(new_value);
+    }
+    Ok(())
 }
 
 fn json_to_toml_item(
@@ -143,6 +176,56 @@ mod tests {
             .expect("patch null");
         let content = std::fs::read_to_string(&path).expect("read");
         assert!(!content.contains("fullscreen"), "null should remove key");
+    }
+
+    #[test]
+    fn patch_preserves_comments_and_order() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+
+        let original = "\
+# Top-of-file note kept by the user.
+[emby]
+# which player to launch
+player = \"mpv\"  # trailing note
+fullscreen = false
+
+# A whole-section comment.
+[dev]
+log_level = \"info\"
+";
+        std::fs::write(&path, original).expect("write");
+
+        // Update two existing values.
+        patch_field(
+            &path,
+            "emby",
+            "player",
+            &serde_json::Value::String("iina".to_owned()),
+        )
+        .expect("patch player");
+        patch_field(
+            &path,
+            "emby",
+            "fullscreen",
+            &serde_json::Value::Bool(true),
+        )
+        .expect("patch fullscreen");
+
+        let content = std::fs::read_to_string(&path).expect("read");
+
+        // Values changed.
+        assert!(content.contains("player = \"iina\""));
+        assert!(content.contains("fullscreen = true"));
+        // Comments survived, both leading and inline.
+        assert!(content.contains("# Top-of-file note kept by the user."));
+        assert!(content.contains("# which player to launch"));
+        assert!(content.contains("# trailing note"));
+        assert!(content.contains("# A whole-section comment."));
+        // Section order is unchanged: [emby] still precedes [dev].
+        let emby_at = content.find("[emby]").expect("emby present");
+        let dev_at = content.find("[dev]").expect("dev present");
+        assert!(emby_at < dev_at, "section order changed");
     }
 
     #[test]
