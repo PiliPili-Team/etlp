@@ -119,6 +119,9 @@ impl BangumiApi {
     pub const TOKEN_PAGE_URL: &'static str =
         "https://next.bgm.tv/demo/access-token";
 
+    /// `User-Agent` sent on every request (kept for parity with upstream).
+    const USER_AGENT: &'static str = "kjtsune/embyBangumi";
+
     /// Create a new client.
     ///
     /// `base_url` is normally [`Self::DEFAULT_BASE_URL`]. Pass the address of a
@@ -131,7 +134,7 @@ impl BangumiApi {
         base_url: impl Into<String>,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
-            .user_agent("kjtsune/embyBangumi")
+            .user_agent(Self::USER_AGENT)
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {

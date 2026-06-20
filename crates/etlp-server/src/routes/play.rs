@@ -684,13 +684,13 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         return;
     }
 
-    let token_path = state.working_dir.join("trakt_token.json");
+    let token_path = state.working_dir.join(TraktApi::TOKEN_FILE_NAME);
     let Ok(mut api) = TraktApi::new(
         &client_id,
         &client_secret,
         &user_name,
         &token_path,
-        "https://api.trakt.tv",
+        TraktApi::DEFAULT_BASE_URL,
     ) else {
         return;
     };

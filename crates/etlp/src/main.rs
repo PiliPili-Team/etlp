@@ -227,13 +227,13 @@ async fn run_trakt_auth(
     // Prefer data_dir for the token file; fall back to working_dir.
     let token_dir =
         platform::data_dir().unwrap_or_else(|| working_dir.to_path_buf());
-    let token_path = token_dir.join("trakt_token.json");
+    let token_path = token_dir.join(TraktApi::TOKEN_FILE_NAME);
     let mut api = TraktApi::new(
         &client_id,
         &client_secret,
         "",
         &token_path,
-        "https://api.trakt.tv",
+        TraktApi::DEFAULT_BASE_URL,
     )?;
 
     let code_resp = api.request_device_code().await?;

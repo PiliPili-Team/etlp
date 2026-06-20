@@ -125,9 +125,24 @@ pub struct TraktApi {
 }
 
 impl TraktApi {
+    /// The official Trakt.tv REST API base URL.
+    pub const DEFAULT_BASE_URL: &'static str = "https://api.trakt.tv";
+
+    /// Base URL of the OAuth authorization page the user opens in a browser.
+    pub const AUTHORIZE_URL: &'static str = "https://trakt.tv/oauth/authorize";
+
+    /// Canonical filename for the persisted OAuth token.
+    pub const TOKEN_FILE_NAME: &'static str = "trakt_token.json";
+
+    /// `User-Agent` sent on every request (kept for parity with upstream).
+    const USER_AGENT: &'static str = "embyToLocalPlayer/1.1";
+
+    /// `redirect_uri` used for the refresh-token grant (out-of-band).
+    const REFRESH_REDIRECT_URI: &'static str = "urn:ietf:wg:oauth:2.0:oob";
+
     /// Create a new client.
     ///
-    /// `base_url` is normally `"https://api.trakt.tv"`.  Pass the address of a
+    /// `base_url` is normally [`Self::DEFAULT_BASE_URL`]. Pass the address of a
     /// local mock server in tests.
     pub fn new(
         client_id: impl Into<String>,
@@ -137,7 +152,7 @@ impl TraktApi {
         base_url: impl Into<String>,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
-            .user_agent("embyToLocalPlayer/1.1")
+            .user_agent(Self::USER_AGENT)
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {
@@ -164,8 +179,8 @@ impl TraktApi {
     #[must_use]
     pub fn authorize_url(&self, redirect_uri: &str) -> String {
         format!(
-            "https://trakt.tv/oauth/authorize\
-             ?response_type=code&client_id={}&redirect_uri={}",
+            "{}?response_type=code&client_id={}&redirect_uri={}",
+            Self::AUTHORIZE_URL,
             percent_encode(&self.client_id),
             percent_encode(redirect_uri),
         )
@@ -372,7 +387,7 @@ impl TraktApi {
             "refresh_token": refresh,
             "client_id":     self.client_id,
             "client_secret": self.client_secret,
-            "redirect_uri":  "urn:ietf:wg:oauth:2.0:oob",
+            "redirect_uri":  Self::REFRESH_REDIRECT_URI,
             "grant_type":    "refresh_token",
         });
 

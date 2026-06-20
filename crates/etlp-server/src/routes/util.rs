@@ -107,7 +107,7 @@ pub async fn trakt_auth(
         let id = cfg.trakt.client_id.clone();
         let secret = cfg.trakt.client_secret.clone();
         let uri = cfg.trakt.redirect_uri.clone();
-        let path = state.working_dir.join("trakt_token.json");
+        let path = state.working_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
         (id, secret, uri, path)
     };
 
@@ -126,7 +126,7 @@ pub async fn trakt_auth(
         &client_secret,
         "",
         &token_path,
-        "https://api.trakt.tv",
+        etlp_sync::TraktApi::DEFAULT_BASE_URL,
     ) {
         Ok(mut api) => match api.exchange_code(&code, &redirect_uri).await {
             Ok(_) => {
