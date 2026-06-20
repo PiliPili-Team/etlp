@@ -868,6 +868,15 @@ body:not(.platform-macos) .titlebar {
     word-break: break-all;
 }
 
+/* Older-page hint shown at the top of the log body while paginating. */
+.log-older-hint {
+    text-align: center;
+    color: var(--text-3);
+    font-size: 12px;
+    padding: 4px 0 8px;
+    user-select: none;
+}
+
 /* Structured log line layout */
 .log-line {
     display: flex;

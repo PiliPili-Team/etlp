@@ -1411,21 +1411,17 @@ function SystemSection({
 
 // Refresh (↻) glyph for the sync tab headers; spins via the `.spin` class.
 function IconRefresh({ spinning }: { spinning?: boolean }) {
+    // Single circular-arrow glyph (centered in its 1024 viewBox); the `.spin`
+    // class rotates it about its own center.
     return (
         <svg
             className={spinning ? "spin" : ""}
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            viewBox="0 0 1024 1024"
+            fill="currentColor"
             width="16"
             height="16"
         >
-            <path d="M3 10a7 7 0 0 1 11.9-5M17 10a7 7 0 0 1-11.9 5" />
-            <polyline points="14.5 1.5 14.9 5 11.4 5.4" />
-            <polyline points="5.5 18.5 5.1 15 8.6 14.6" />
+            <path d="M512 176a336 336 0 1 0 237.568 573.568 48 48 0 0 1 67.904 67.904 432 432 0 1 1 0-610.944c8.512 8.512 19.2 19.712 30.528 31.872V170.688a48 48 0 0 1 96 0v192a48 48 0 0 1-48 48h-192a48 48 0 0 1 0-96h83.84a1558.016 1558.016 0 0 0-38.272-40.32A334.784 334.784 0 0 0 512 176z" />
         </svg>
     );
 }
@@ -1642,6 +1638,28 @@ function TraktSection({
             />
 
             <div className="settings-group">
+                <TagListRow
+                    label={t("sys_trakt_host")}
+                    desc={t("sys_trakt_host_desc")}
+                    tags={parseHostList(cfg.trakt_enable_host)}
+                    placeholder={t("sys_trakt_host_placeholder")}
+                    onAdd={(tag) =>
+                        update(
+                            "trakt",
+                            "enable_host",
+                            [...parseHostList(cfg.trakt_enable_host), tag].join(", "),
+                        )
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "trakt",
+                            "enable_host",
+                            parseHostList(cfg.trakt_enable_host)
+                                .filter((_, j) => j !== i)
+                                .join(", "),
+                        )
+                    }
+                />
                 <InputRow
                     label={t("sys_trakt_id")}
                     desc={t("sys_trakt_id_desc")}
@@ -1665,14 +1683,6 @@ function TraktSection({
                     placeholder={t("sys_trakt_user_placeholder")}
                     mono
                     onCommit={(v) => update("trakt", "user_name", v)}
-                />
-                <InputRow
-                    label={t("sys_trakt_host")}
-                    desc={t("sys_trakt_host_desc")}
-                    value={cfg.trakt_enable_host}
-                    placeholder={t("sys_trakt_host_placeholder")}
-                    mono
-                    onCommit={(v) => update("trakt", "enable_host", v)}
                 />
                 <ButtonRow
                     label={t("sync_test")}

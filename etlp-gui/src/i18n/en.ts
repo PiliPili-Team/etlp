@@ -174,8 +174,9 @@ export const en: typeof zhCN = {
     sys_trakt_user_desc: "Your Trakt username (not the display nickname)",
     sys_trakt_user_placeholder: "e.g. your_trakt_user",
     sys_trakt_host: "Enable Host",
-    sys_trakt_host_desc: "Only requests from this host trigger Trakt scrobbling",
-    sys_trakt_host_placeholder: "e.g. emby.example.com",
+    sys_trakt_host_desc:
+        "Comma-separated host keywords; leave empty to disable, a single dot enables all",
+    sys_trakt_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
@@ -230,6 +231,8 @@ export const en: typeof zhCN = {
     logs_empty: "Waiting for log output…",
     logs_no_mpv: "No mpv log found — click “Choose mpv Log” to load one",
     logs_lines: "lines",
+    logs_loading_older: "Loading older logs…",
+    logs_scroll_older: "Scroll up to load older logs",
     logs_open_folder: "Open Log Folder",
     logs_pick_mpv: "Choose mpv Log",
 

@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+    useState,
+    useEffect,
+    useRef,
+    useCallback,
+    useDeferredValue,
+    useMemo,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
@@ -7,6 +14,15 @@ interface LogResponse {
     lines: string[];
     next_bytes: number;
 }
+interface TailResponse {
+    lines: string[];
+    start_bytes: number;
+    next_bytes: number;
+}
+interface BeforeResponse {
+    lines: string[];
+    start_bytes: number;
+}
 interface LogPaths {
     app_log: string;
     mpv_log: string | null;
@@ -14,7 +30,11 @@ interface LogPaths {
 type LogSource = "app" | "mpv";
 
 const POLL_MS = 800;
-const MAX_LINES = 2000;
+// One page = newest 200 lines; older pages are fetched on scroll-up.
+const PAGE_SIZE = 200;
+// Hard cap on rendered lines so the DOM stays bounded even after live tailing
+// and several older pages; trimming only happens at the bottom (live append).
+const MAX_LINES = 3000;
 
 // Parse a tracing/log4rs formatted line.
 // Expected formats:
@@ -91,11 +111,18 @@ export default function Logs({ active }: { active: boolean }) {
     const [filter, setFilter] = useState("");
     const [source, setSource] = useState<LogSource>("app");
     const [paths, setPaths] = useState<LogPaths | null>(null);
+    const [loadingOlder, setLoadingOlder] = useState(false);
+    const [hasOlder, setHasOlder] = useState(false);
     // A user-picked mpv log file; falls back to the config-derived default.
     const [mpvCustomPath, setMpvCustomPath] = useState<string | null>(null);
 
     const bodyRef = useRef<HTMLDivElement>(null);
+    // Live-tail cursor: byte offset up to which we have appended new lines.
     const posRef = useRef(0);
+    // Oldest loaded byte offset (where the next older page ends); 0 = at head.
+    const oldestRef = useRef(0);
+    // True until the very first tail page has been loaded for this source.
+    const initializedRef = useRef(false);
 
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
@@ -106,7 +133,9 @@ export default function Logs({ active }: { active: boolean }) {
     // The mpv log to read: a user-picked file wins over the config default.
     const effectiveMpvPath = mpvCustomPath ?? paths?.mpv_log ?? null;
 
-    const fetchChunk = useCallback(
+    // Append newly-written lines (live tail). Trims from the top only while the
+    // user is at the bottom, so scrolling up to read older pages is not undone.
+    const fetchTail = useCallback(
         async (since: number, path: string | null): Promise<number> => {
             try {
                 const resp = await invoke<LogResponse>("get_log_lines", {
@@ -129,52 +158,119 @@ export default function Logs({ active }: { active: boolean }) {
         [],
     );
 
-    // Reset the buffer only when the log source itself changes — not when the
-    // tab is hidden/shown. This is what lets a hidden Logs tab keep its content
-    // and resume from where it left off instead of reloading from byte 0.
-    // Clearing happens in cleanup (allowed in effects) so the source swap drops
-    // the old file's lines before the polling effect restarts from byte 0.
+    // Load an older page (scroll-up), preserving the visual scroll position by
+    // restoring the distance from the bottom after the prepend.
+    const loadOlder = useCallback(async (path: string | null) => {
+        if (oldestRef.current <= 0) {
+            setHasOlder(false);
+            return;
+        }
+        setLoadingOlder(true);
+        const el = bodyRef.current;
+        const prevHeight = el?.scrollHeight ?? 0;
+        const prevTop = el?.scrollTop ?? 0;
+        try {
+            const resp = await invoke<BeforeResponse>("read_log_before", {
+                beforeBytes: oldestRef.current,
+                maxLines: PAGE_SIZE,
+                path,
+            });
+            if (resp.lines.length > 0) {
+                oldestRef.current = resp.start_bytes;
+                setHasOlder(resp.start_bytes > 0);
+                setLines((prev) => [...resp.lines, ...prev]);
+                // Restore scroll so the viewport stays on the same lines.
+                requestAnimationFrame(() => {
+                    const node = bodyRef.current;
+                    if (node) {
+                        node.scrollTop = node.scrollHeight - prevHeight + prevTop;
+                    }
+                });
+            } else {
+                setHasOlder(false);
+            }
+        } catch {
+            /* ignore: paging is best-effort */
+        } finally {
+            setLoadingOlder(false);
+        }
+    }, []);
+
+    // Reset the view to the newest page (used by the Clear button). Avoids
+    // re-reading the whole file from byte 0.
+    const reloadTail = useCallback(async () => {
+        const logPath = source === "mpv" ? effectiveMpvPath : null;
+        if (source === "mpv" && !logPath) {
+            setLines([]);
+            return;
+        }
+        try {
+            const resp = await invoke<TailResponse>("tail_log", {
+                maxLines: PAGE_SIZE,
+                path: logPath,
+            });
+            setLines(resp.lines);
+            posRef.current = resp.next_bytes;
+            oldestRef.current = resp.start_bytes;
+            setHasOlder(resp.start_bytes > 0);
+            initializedRef.current = true;
+            setAutoScroll(true);
+        } catch {
+            /* ignore: reload is best-effort */
+        }
+    }, [source, effectiveMpvPath]);
+
+    // Reset the buffer when the log source changes (cleanup runs before the
+    // polling effect restarts), so a source swap drops the old file's lines.
     useEffect(() => {
         return () => {
             posRef.current = 0;
+            oldestRef.current = 0;
+            initializedRef.current = false;
             setLines([]);
+            setHasOlder(false);
         };
     }, [source, effectiveMpvPath]);
 
-    // Poll the active source. Gated on `active` so the loop pauses while the
-    // tab is hidden, then resumes from posRef.current (appending new lines
-    // only) when the tab is shown again.
+    // Initialize with the newest page, then live-poll for appended lines. Gated
+    // on `active` so the loop pauses while the tab is hidden.
     useEffect(() => {
-        // app log reads the default file (path = null); mpv reads the chosen
-        // file. Skip polling when hidden, or when the mpv view has no file yet.
         const logPath = source === "mpv" ? effectiveMpvPath : null;
         if (!active || (source === "mpv" && !logPath)) {
             return;
         }
 
         const live = { ok: true };
-        let pos = posRef.current;
 
-        // Defer the initial fetch past the synchronous effect body so the rule
-        // doesn't flag the async setState call chain as synchronous.
         const init = setTimeout(() => {
-            void fetchChunk(pos, logPath).then((next) => {
-                if (!live.ok) return;
-                pos = next;
-                posRef.current = next;
-            });
+            void (async () => {
+                // First activation for this source: load the tail page.
+                if (!initializedRef.current) {
+                    try {
+                        const resp = await invoke<TailResponse>("tail_log", {
+                            maxLines: PAGE_SIZE,
+                            path: logPath,
+                        });
+                        if (!live.ok) return;
+                        setLines(resp.lines);
+                        posRef.current = resp.next_bytes;
+                        oldestRef.current = resp.start_bytes;
+                        setHasOlder(resp.start_bytes > 0);
+                        initializedRef.current = true;
+                    } catch {
+                        return;
+                    }
+                }
+                // Catch up on anything written since the cursor.
+                const next = await fetchTail(posRef.current, logPath);
+                if (live.ok) posRef.current = next;
+            })();
         }, 0);
 
         const iv = setInterval(async () => {
-            if (!live.ok) {
-                clearInterval(iv);
-                return;
-            }
-            const next = await fetchChunk(pos, logPath);
-            if (live.ok) {
-                pos = next;
-                posRef.current = next;
-            }
+            if (!live.ok || !initializedRef.current) return;
+            const next = await fetchTail(posRef.current, logPath);
+            if (live.ok) posRef.current = next;
         }, POLL_MS);
 
         return () => {
@@ -182,7 +278,7 @@ export default function Logs({ active }: { active: boolean }) {
             clearTimeout(init);
             clearInterval(iv);
         };
-    }, [active, source, effectiveMpvPath, fetchChunk]);
+    }, [active, source, effectiveMpvPath, fetchTail]);
 
     useEffect(() => {
         if (autoScroll && bodyRef.current) {
@@ -194,6 +290,11 @@ export default function Logs({ active }: { active: boolean }) {
         const el = bodyRef.current;
         if (!el) return;
         setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+        // Near the top → page in older lines.
+        if (el.scrollTop < 60 && hasOlder && !loadingOlder) {
+            const logPath = source === "mpv" ? effectiveMpvPath : null;
+            void loadOlder(logPath);
+        }
     };
 
     const handleSourceSwitch = (s: LogSource) => {
@@ -219,12 +320,20 @@ export default function Logs({ active }: { active: boolean }) {
             setSource("mpv");
             setLines([]);
             posRef.current = 0;
+            oldestRef.current = 0;
+            initializedRef.current = false;
+            setHasOlder(false);
         }
     };
 
-    const displayed = filter
-        ? lines.filter((l) => l.toLowerCase().includes(filter.toLowerCase()))
-        : lines;
+    // Defer the filter so typing stays responsive on large buffers; the
+    // expensive filtering runs at lower priority and is memoized.
+    const deferredFilter = useDeferredValue(filter);
+    const displayed = useMemo(() => {
+        if (!deferredFilter) return lines;
+        const needle = deferredFilter.toLowerCase();
+        return lines.filter((l) => l.toLowerCase().includes(needle));
+    }, [lines, deferredFilter]);
 
     // mpv view is usable when a default log exists or the user picked a file.
     const hasMpv = Boolean(effectiveMpvPath);
@@ -311,10 +420,7 @@ export default function Logs({ active }: { active: boolean }) {
                         <button
                             className="btn"
                             style={{ padding: "4px 10px", fontSize: 12 }}
-                            onClick={() => {
-                                setLines([]);
-                                posRef.current = 0;
-                            }}
+                            onClick={() => void reloadTail()}
                         >
                             {t("logs_clear")}
                         </button>
@@ -343,7 +449,18 @@ export default function Logs({ active }: { active: boolean }) {
                                 : t("logs_empty")}
                         </span>
                     ) : (
-                        displayed.map((line, i) => <LogLineView key={i} raw={line} />)
+                        <>
+                            {(loadingOlder || hasOlder) && (
+                                <div className="log-older-hint">
+                                    {loadingOlder
+                                        ? t("logs_loading_older")
+                                        : t("logs_scroll_older")}
+                                </div>
+                            )}
+                            {displayed.map((line, i) => (
+                                <LogLineView key={i} raw={line} />
+                            ))}
+                        </>
                     )}
                 </div>
             </div>
