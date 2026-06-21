@@ -157,7 +157,9 @@ export const zhCN = {
     sys_about_desc: "版本信息与开源鸣谢",
     sys_download: "下载",
     sys_speed_limit: "下载速度限制 (MiB/s)",
-    sys_speed_limit_desc: "0 表示不限速",
+    sys_speed_limit_desc: "限制下载与预加载缓存占用的带宽（MiB/s）；0 表示不限速",
+    sys_download_note:
+        "预加载与下载模式由浏览器油猴脚本的指令触发，不在此处开关：脚本发起「边播边缓存」即为预加载，发起「仅下载」即为下载模式；其中下载模式还要求你的 Emby 账号本身具备资源下载权限。",
     sys_trakt: "Trakt.tv 播放记录同步",
     sys_trakt_setup_title: "配置步骤",
     sys_trakt_setup_step1: "1. 在 Trakt 创建应用：",

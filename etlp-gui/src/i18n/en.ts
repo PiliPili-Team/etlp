@@ -165,7 +165,10 @@ export const en: typeof zhCN = {
     sys_about_desc: "Version info and open-source credits",
     sys_download: "Downloads",
     sys_speed_limit: "Speed Limit (MiB/s)",
-    sys_speed_limit_desc: "0 = unlimited",
+    sys_speed_limit_desc:
+        "Caps the bandwidth used by downloads and preload caching (MiB/s); 0 = unlimited",
+    sys_download_note:
+        'Preload and download mode are triggered by the browser userscript\'s commands, not toggled here: the script\'s "cache while playing" is preload, and "download only" is download mode; download mode also requires your Emby account to permit resource downloads.',
     sys_trakt: "Trakt.tv Scrobbling",
     sys_trakt_setup_title: "Setup",
     sys_trakt_setup_step1: "1. Create an app on Trakt: ",

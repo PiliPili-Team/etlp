@@ -1775,6 +1775,7 @@ function SystemSection({
                     min={0}
                     onCommit={(v) => update("gui", "speed_limit_mb", v)}
                 />
+                <div className="settings-note">{t("sys_download_note")}</div>
             </div>
 
             {/* Cache */}
