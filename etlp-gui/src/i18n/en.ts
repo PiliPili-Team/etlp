@@ -138,7 +138,7 @@ export const en: typeof zhCN = {
     sys_font_default: "Default (system-ui)",
     sys_startup: "Startup",
     sys_autostart: "Launch at Login",
-    sys_autostart_desc: "Automatically start etlp after logging in",
+    sys_autostart_desc: "Automatically start the app after logging in",
     sys_silent_start: "Silent Start",
     sys_silent_start_desc:
         "Start hidden in the tray without showing the main window (quieter with launch-at-login)",
