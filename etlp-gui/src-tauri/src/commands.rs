@@ -27,6 +27,12 @@ pub struct GuiState {
     pub app_state: Mutex<Option<SharedState>>,
     pub shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     pub port: AtomicU16,
+    /// Monotonic instant the service last started, or `None` while stopped.
+    /// Lives in the backend so uptime survives window reloads but resets on a
+    /// process restart (the in-process server dies with the app), keeping the
+    /// reported uptime tied to the service's real lifecycle rather than a
+    /// client-persisted timestamp.
+    pub started_at: Mutex<Option<std::time::Instant>>,
     pub log_file: Mutex<PathBuf>,
     pub log_read_pos: Mutex<u64>,
     pub log_handle: Mutex<Option<etlp_logging::LogHandle>>,
@@ -40,6 +46,7 @@ impl Default for GuiState {
             app_state: Mutex::new(None),
             shutdown_tx: Mutex::new(None),
             port: AtomicU16::new(58000),
+            started_at: Mutex::new(None),
             log_file: Mutex::new(platform::log_dir_in(&data).join("etlp.log")),
             log_read_pos: Mutex::new(0),
             log_handle: Mutex::new(None),
@@ -227,6 +234,9 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     }
 
     state.port.store(port, Ordering::Release);
+    if let Ok(mut started) = state.started_at.lock() {
+        *started = Some(std::time::Instant::now());
+    }
     state.running.store(true, Ordering::Release);
 
     // NormalizePathLayer strips trailing slashes before routing, so
@@ -272,14 +282,31 @@ pub async fn stop_server(state: State<'_, GuiState>) -> Result<(), String> {
     }
 
     state.running.store(false, Ordering::Release);
+    if let Ok(mut started) = state.started_at.lock() {
+        *started = None;
+    }
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_server_status(state: State<'_, GuiState>) -> serde_json::Value {
+    let running = state.running.load(Ordering::Acquire);
+    // Authoritative uptime: elapsed since the service started, or null while
+    // stopped. Computed from a monotonic clock so it is correct across window
+    // reloads and immune to wall-clock adjustments.
+    let uptime_secs = running
+        .then(|| {
+            state
+                .started_at
+                .lock()
+                .ok()
+                .and_then(|g| g.map(|t| t.elapsed().as_secs()))
+        })
+        .flatten();
     serde_json::json!({
-        "running": state.running.load(Ordering::Acquire),
-        "port":    state.port.load(Ordering::Acquire),
+        "running":     running,
+        "port":        state.port.load(Ordering::Acquire),
+        "uptime_secs": uptime_secs,
     })
 }
 

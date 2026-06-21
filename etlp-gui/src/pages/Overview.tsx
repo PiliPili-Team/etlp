@@ -7,6 +7,8 @@ import type { UpdateInfo } from "../App";
 interface ServerStatus {
     running: boolean;
     port: number;
+    /** Seconds since the service started, or null while stopped. */
+    uptime_secs: number | null;
 }
 
 interface Props {
@@ -16,57 +18,54 @@ interface Props {
     onDismissUpdate: () => void;
 }
 
-const UPTIME_KEY = "etlp-server-start-time";
+// Re-anchor the local uptime clock to the backend only when it drifts beyond
+// this, so the per-second ticker stays smooth between 5s status polls while
+// still self-correcting against wall-clock changes or a service restart.
+const UPTIME_RESYNC_MS = 2000;
 
 export default function Overview({ addToast, update, onDismissUpdate }: Props) {
     const t = useI18n();
-    const [status, setStatus] = useState<ServerStatus>({ running: false, port: 58000 });
-    const [busy, setBusy] = useState(false);
-    const [startTime, setStartTime] = useState<Date | null>(() => {
-        const stored = localStorage.getItem(UPTIME_KEY);
-        return stored ? new Date(parseInt(stored, 10)) : null;
+    const [status, setStatus] = useState<ServerStatus>({
+        running: false,
+        port: 58000,
+        uptime_secs: null,
     });
-
-    const persistStartTime = (d: Date | null) => {
-        if (d) {
-            localStorage.setItem(UPTIME_KEY, String(d.getTime()));
-        } else {
-            localStorage.removeItem(UPTIME_KEY);
-        }
-        setStartTime(d);
-    };
+    const [busy, setBusy] = useState(false);
+    // Local anchor for the per-second display, derived from the backend's
+    // authoritative uptime. Never persisted: the in-process service dies with
+    // the app, so a fresh launch must start from the real (possibly zero)
+    // uptime, not a stale client timestamp.
+    const [startTime, setStartTime] = useState<Date | null>(null);
     const [elapsed, setElapsed] = useState("");
-    const [prevRunning, setPrevRunning] = useState(status.running);
 
     const openUpdate = () => {
         if (update) void openUrl(update.url);
     };
 
+    // Anchor `startTime` to `now - uptime`, keeping the existing anchor when it
+    // is already within tolerance so the local ticker does not jump each poll.
+    const syncUptime = useCallback((s: ServerStatus) => {
+        if (s.running && s.uptime_secs != null) {
+            const anchor = Date.now() - s.uptime_secs * 1000;
+            setStartTime((prev) =>
+                prev && Math.abs(prev.getTime() - anchor) < UPTIME_RESYNC_MS
+                    ? prev
+                    : new Date(anchor),
+            );
+        } else {
+            setStartTime(null);
+        }
+    }, []);
+
     const refreshStatus = useCallback(async () => {
         try {
             const s = await invoke<ServerStatus>("get_server_status");
             setStatus(s);
-            // If the server is not running, any persisted start time is stale
-            // (e.g. the app was fully quit and restarted without the server).
-            if (!s.running) {
-                localStorage.removeItem(UPTIME_KEY);
-                setStartTime(null);
-            }
+            syncUptime(s);
         } catch {
             /* ignore */
         }
-    }, []);
-
-    // Render-phase derived state: sync startTime with status.running transitions
-    // so we avoid calling setState synchronously inside a useEffect body.
-    if (prevRunning !== status.running) {
-        setPrevRunning(status.running);
-        if (!status.running) {
-            persistStartTime(null);
-        } else if (!startTime) {
-            persistStartTime(new Date());
-        }
-    }
+    }, [syncUptime]);
 
     useEffect(() => {
         // Defer the initial fetch past the synchronous effect body.
@@ -105,8 +104,8 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
         setBusy(true);
         try {
             const port = await invoke<number>("start_server");
-            setStatus({ running: true, port });
-            persistStartTime(new Date());
+            setStatus({ running: true, port, uptime_secs: 0 });
+            setStartTime(new Date());
             addToast(t("toast_started", { port }));
         } catch (e) {
             failToast("toast_start_failed", e);
@@ -119,8 +118,8 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
         setBusy(true);
         try {
             await invoke("stop_server");
-            setStatus((s) => ({ ...s, running: false }));
-            persistStartTime(null);
+            setStatus((s) => ({ ...s, running: false, uptime_secs: null }));
+            setStartTime(null);
             addToast(t("toast_stopped"));
         } catch (e) {
             failToast("toast_stop_failed", e);
