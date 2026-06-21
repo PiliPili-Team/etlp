@@ -72,7 +72,7 @@ export const zhTW: typeof zhCN = {
     pl_pretty_title: "美化標題",
     pl_pretty_title_desc: "將伺服器名稱附加到播放器視窗標題",
     pl_kill_start: "啟動時清理程序",
-    pl_kill_start_desc: "etlp 啟動時關閉已有的同名播放器程序",
+    pl_kill_start_desc: "啟動時關閉已有的同名播放器程序",
     pl_path: "播放器路徑",
     pl_path_desc: "可選；留空使用系統 PATH 中的播放器",
     pl_browse: "瀏覽…",

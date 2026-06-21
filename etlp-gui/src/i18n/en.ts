@@ -72,7 +72,7 @@ export const en: typeof zhCN = {
     pl_pretty_title: "Pretty Title",
     pl_pretty_title_desc: "Prepend server name to the player window title",
     pl_kill_start: "Kill on Startup",
-    pl_kill_start_desc: "Kill existing player processes when etlp starts",
+    pl_kill_start_desc: "Kill existing player processes on startup",
     pl_path: "Player Path",
     pl_path_desc: "Optional — leave empty to use the player from system PATH",
     pl_browse: "Browse…",

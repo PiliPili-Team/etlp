@@ -68,7 +68,7 @@ export const zhCN = {
     pl_pretty_title: "美化标题",
     pl_pretty_title_desc: "将服务器名称拼接到播放器窗口标题",
     pl_kill_start: "启动时清理进程",
-    pl_kill_start_desc: "etlp 启动时关闭已有的同名播放器进程",
+    pl_kill_start_desc: "启动时关闭已有的同名播放器进程",
     pl_path: "播放器路径",
     pl_path_desc: "可选；留空使用系统 PATH 中的播放器",
     pl_browse: "浏览…",
