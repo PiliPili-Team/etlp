@@ -134,7 +134,7 @@ export const zhTW: typeof zhCN = {
     sys_font_default: "預設 (system-ui)",
     sys_startup: "啟動",
     sys_autostart: "開機自動啟動",
-    sys_autostart_desc: "登入後自動啟動 etlp 應用",
+    sys_autostart_desc: "登入後自動啟動應用",
     sys_silent_start: "靜默啟動",
     sys_silent_start_desc: "啟動時不彈出主視窗，僅在系統匣執行（搭配開機自動啟動更安靜）",
     sys_logs_title: "日誌",

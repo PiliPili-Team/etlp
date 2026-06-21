@@ -131,7 +131,7 @@ export const zhCN = {
     sys_font_default: "默认 (system-ui)",
     sys_startup: "启动",
     sys_autostart: "开机自启动",
-    sys_autostart_desc: "登录后自动启动 etlp 应用",
+    sys_autostart_desc: "登录后自动启动应用",
     sys_silent_start: "静默启动",
     sys_silent_start_desc: "启动时不弹出主窗口，仅在托盘运行（配合开机自启更安静）",
     sys_logs_title: "日志",
