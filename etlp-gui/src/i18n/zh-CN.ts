@@ -138,7 +138,7 @@ export const zhCN = {
     sys_log_level: "日志级别",
     sys_log_level_desc: "调试时可设置为「调试」获取更多信息",
     sys_log_mask: "日志脱敏",
-    sys_log_mask_desc: "将日志中的敏感 Token 替换为占位符",
+    sys_log_mask_desc: "将日志中的敏感文案替换为占位符",
     sys_cache: "缓存",
     sys_cache_size: "当前缓存大小",
     sys_cache_size_desc: "日志等运行缓存占用的磁盘空间",
