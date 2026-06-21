@@ -581,6 +581,49 @@ impl TraktApi {
         }
         Ok(resp.json().await?)
     }
+
+    /// Resolve the numeric Trakt id for a movie/episode from its external
+    /// provider ids, returning `None` when none of them resolve.
+    ///
+    /// Tries `tvdb` → `tmdb` → `imdb` in turn (tvdb matches episodes most
+    /// reliably). The resolved id lets [`sync_history`] de-duplicate the item
+    /// against the user's existing watch history before re-adding it.
+    pub async fn resolve_trakt_id(
+        &self,
+        kind: TraktItemKind,
+        ids: &TraktIds,
+    ) -> Option<u64> {
+        let type_str = match kind {
+            TraktItemKind::Movie => "movie",
+            TraktItemKind::Episode => "episode",
+        };
+        let lookups = [
+            ("tvdb", ids.tvdb.map(|v| v.to_string())),
+            ("tmdb", ids.tmdb.map(|v| v.to_string())),
+            ("imdb", ids.imdb.clone()),
+        ];
+        for (provider, id) in lookups {
+            let Some(id) = id else {
+                continue;
+            };
+            let Ok(results) =
+                self.id_lookup(provider, &id, Some(type_str)).await
+            else {
+                continue;
+            };
+            for r in &results {
+                if let Some(t) = r
+                    .get(type_str)
+                    .and_then(|o| o.get("ids"))
+                    .and_then(|i| i.get("trakt"))
+                    .and_then(serde_json::Value::as_u64)
+                {
+                    return Some(t);
+                }
+            }
+        }
+        None
+    }
 }
 
 // ── Sync orchestration ────────────────────────────────────────────────────────
@@ -957,6 +1000,46 @@ mod tests {
         let res = api.id_lookup("imdb", "tt0000001", None).await.unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res.first().and_then(|v| v["type"].as_str()), Some("movie"));
+    }
+
+    // ── resolve_trakt_id ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resolve_trakt_id_extracts_episode_id_from_tvdb() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search/tvdb/555"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "type": "episode",
+                      "episode": { "season": 1, "number": 3,
+                                   "ids": { "trakt": 42, "tvdb": 555 } },
+                      "show": { "ids": { "trakt": 7 } } }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let ids = TraktIds {
+            tvdb: Some(555),
+            ..Default::default()
+        };
+        let resolved = api.resolve_trakt_id(TraktItemKind::Episode, &ids).await;
+        // The episode's own Trakt id is returned, not the show's.
+        assert_eq!(resolved, Some(42));
+    }
+
+    #[tokio::test]
+    async fn resolve_trakt_id_returns_none_without_ids() {
+        let server = MockServer::start().await;
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let resolved = api
+            .resolve_trakt_id(TraktItemKind::Episode, &TraktIds::default())
+            .await;
+        assert_eq!(resolved, None);
     }
 
     // ── sync_history ──────────────────────────────────────────────────────────

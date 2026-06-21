@@ -819,7 +819,14 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         return;
     }
 
-    let (client_id, client_secret, user_name, redirect_uri, enable_host) = {
+    let (
+        client_id,
+        client_secret,
+        user_name,
+        redirect_uri,
+        enable_host,
+        allow_duplicate,
+    ) = {
         let Ok(cfg) = state.config.read() else {
             return;
         };
@@ -832,6 +839,7 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             cfg.trakt.user_name.clone(),
             cfg.trakt.redirect_uri.clone(),
             cfg.trakt.enable_host.clone(),
+            cfg.trakt.allow_duplicate,
         )
     };
 
@@ -885,8 +893,12 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             continue;
         }
         if data.item_type.eq_ignore_ascii_case("movie") {
+            // The just-watched movie. With duplicate marking off, throttle
+            // repeats; with it on, bypass the throttle so every completion
+            // adds another play. No Trakt id is resolved, so `sync_history`
+            // adds it unconditionally (single-item marking).
             let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-            if state.sync_recently_done(&key) {
+            if !allow_duplicate && state.sync_recently_done(&key) {
                 debug!(item = %data.media_title, "trakt: throttled, skip");
                 continue;
             }
@@ -897,28 +909,37 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             }
         } else if data.item_type.eq_ignore_ascii_case("episode") {
             let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-            if state.sync_recently_done(&key) {
+            if !allow_duplicate && state.sync_recently_done(&key) {
                 debug!(item = %data.media_title, "trakt: throttled, skip");
                 continue;
             }
-            // Backfill earlier episodes the user already watched in the client.
-            let backfill = emby_played_backfill(state, data).await;
-            if backfill.is_empty() {
-                if let Some(item) = trakt_item_from_ids(
+            // The just-watched episode: added without a resolved Trakt id so
+            // `sync_history` adds it unconditionally (single-episode marking,
+            // governed by the duplicate toggle / throttle above).
+            if let Some(item) =
+                trakt_item_from_ids(TraktItemKind::Episode, &data.provider_ids)
+            {
+                items.push(item);
+            }
+            // Backfill earlier episodes already watched in the client. These
+            // are always de-duplicated against the existing Trakt history by
+            // resolving each one's Trakt id first, so finishing later episodes
+            // never re-marks the ones already synced.
+            let cur_index = data.index.unwrap_or_default();
+            for ep in &emby_played_backfill(state, data).await {
+                if ep.index == cur_index {
+                    continue;
+                }
+                let Some(mut item) = trakt_item_from_ids(
                     TraktItemKind::Episode,
-                    &data.provider_ids,
-                ) {
-                    items.push(item);
-                }
-            } else {
-                for ep in &backfill {
-                    if let Some(item) = trakt_item_from_ids(
-                        TraktItemKind::Episode,
-                        &ep.provider_ids,
-                    ) {
-                        items.push(item);
-                    }
-                }
+                    &ep.provider_ids,
+                ) else {
+                    continue;
+                };
+                item.ids.trakt = api
+                    .resolve_trakt_id(TraktItemKind::Episode, &item.ids)
+                    .await;
+                items.push(item);
             }
         }
     }

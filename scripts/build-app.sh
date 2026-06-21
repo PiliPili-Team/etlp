@@ -90,7 +90,9 @@ install_frontend_deps() {
 }
 
 build_tauri_app() {
-    local target="$1"
+    local target="$1"; shift
     _log "Building" "${APP_NAME} → ${target}"
-    _run_in "${GUI_DIR}" npx tauri build --target "${target}"
+    # Any extra arguments are forwarded to `tauri build` (e.g. a per-arch
+    # `--config` icon override).
+    _run_in "${GUI_DIR}" npx tauri build --target "${target}" "$@"
 }

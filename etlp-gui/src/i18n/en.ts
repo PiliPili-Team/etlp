@@ -166,6 +166,13 @@ export const en: typeof zhCN = {
     sys_speed_limit: "Speed Limit (MiB/s)",
     sys_speed_limit_desc: "0 = unlimited",
     sys_trakt: "Trakt.tv Scrobbling",
+    sys_trakt_setup_title: "Setup",
+    sys_trakt_setup_step1: "1. Create an app on Trakt: ",
+    sys_trakt_setup_link: "trakt.tv/oauth/applications",
+    sys_trakt_setup_step2: '2. Set the app\'s "Redirect uri" to the address below:',
+    sys_trakt_setup_copy: "Copy",
+    sys_trakt_setup_copied: "Redirect URI copied",
+    sys_trakt_setup_copy_failed: "Copy failed — please select and copy manually",
     sys_trakt_id: "Client ID",
     sys_trakt_id_desc:
         "Obtained after creating an app on trakt.tv — leave empty to disable",
@@ -181,6 +188,9 @@ export const en: typeof zhCN = {
     sys_trakt_host_desc:
         "Comma-separated host keywords; leave empty to disable, a single dot enables all",
     sys_trakt_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
+    sys_trakt_dup: "Allow Duplicate Marking",
+    sys_trakt_dup_desc:
+        "When on, every completion re-marks the same episode/movie; when off, repeats are throttled (back-filled earlier episodes are always de-duplicated)",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:

@@ -95,6 +95,7 @@ pub struct ConfigDto {
     pub trakt_client_secret: String,
     pub trakt_user_name: String,
     pub trakt_enable_host: String,
+    pub trakt_allow_duplicate: bool,
     // [bangumi]
     pub bangumi_access_token: String,
     pub bangumi_enable_host: String,
@@ -135,6 +136,7 @@ impl From<&Config> for ConfigDto {
             trakt_client_secret: c.trakt.client_secret.clone(),
             trakt_user_name: c.trakt.user_name.clone(),
             trakt_enable_host: c.trakt.enable_host.clone(),
+            trakt_allow_duplicate: c.trakt.allow_duplicate,
             bangumi_access_token: c.bangumi.access_token.clone(),
             bangumi_enable_host: c.bangumi.enable_host.clone(),
             bangumi_username: c.bangumi.username.clone(),

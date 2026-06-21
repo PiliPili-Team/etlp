@@ -241,6 +241,12 @@ pub struct TraktSection {
     pub redirect_uri: String,
     /// Comma-separated host keywords that trigger the Trakt scrobble.
     pub enable_host: String,
+    /// Allow re-marking the same episode/movie on every completion instead of
+    /// throttling repeats. When `true`, the just-watched item bypasses the
+    /// in-process throttle so finishing it again immediately adds another play
+    /// to the Trakt history. Backfill of earlier episodes is always
+    /// de-duplicated against the existing history regardless of this flag.
+    pub allow_duplicate: bool,
 }
 
 impl Default for TraktSection {
@@ -251,6 +257,7 @@ impl Default for TraktSection {
             user_name: String::new(),
             redirect_uri: default_redirect_uri(),
             enable_host: String::new(),
+            allow_duplicate: false,
         }
     }
 }

@@ -98,6 +98,24 @@ fn augment_path() {}
 
 // ── Tray icon decoding ────────────────────────────────────────────────────────
 
+/// The tray icon asset and whether it should render as a monochrome template.
+///
+/// macOS menu-bar icons are template images that the system recolours to match
+/// the light/dark menu bar, so a black silhouette is correct there. Windows and
+/// Linux tray areas have no template support: a black silhouette renders nearly
+/// invisible on the (commonly dark) taskbar, so they use the full-colour app
+/// logo instead.
+fn tray_icon_asset() -> (&'static [u8], bool) {
+    #[cfg(target_os = "macos")]
+    {
+        (include_bytes!("../icons/tray-icon.png"), true)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        (include_bytes!("../icons/32x32.png"), false)
+    }
+}
+
 /// Decode the bundled tray PNG into `(rgba_bytes, width, height)`.
 ///
 /// Returns an error instead of panicking so a corrupt/unsupported asset only
@@ -177,6 +195,10 @@ fn set_dock_visible(_app: &tauri::AppHandle, _visible: bool) {}
 fn show_main_window(app: &tauri::AppHandle) {
     set_dock_visible(app, true);
     if let Some(w) = app.get_webview_window("main") {
+        // Restore from a minimised state first: `show()` only un-hides a
+        // hidden window and is a no-op while the window is minimised, so a
+        // tray click would otherwise fail to bring a minimised window back.
+        let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
     }
@@ -232,9 +254,10 @@ pub fn run() {
     eprintln!("[etlp] data   dir: {}", data_dir.display());
     eprintln!("[etlp] log    file: {}", log_file.display());
 
-    // Decode the monochrome PNG to raw RGBA at startup. A decode failure must
-    // not crash the app — the tray simply launches without a custom icon.
-    let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon.png");
+    // Decode the tray PNG to raw RGBA at startup. A decode failure must not
+    // crash the app — the tray simply launches without a custom icon. macOS
+    // uses a monochrome template; Windows/Linux use the colour app logo.
+    let (tray_icon_bytes, tray_is_template) = tray_icon_asset();
     let tray_rgba: Option<(Vec<u8>, u32, u32)> =
         decode_tray_icon(tray_icon_bytes)
             .map_err(|e| eprintln!("[etlp] tray icon decode failed: {e}"))
@@ -273,8 +296,9 @@ pub fn run() {
             if let Some((tray_buf, tray_w, tray_h)) = tray_rgba {
                 let tray_img =
                     tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
-                tray_builder =
-                    tray_builder.icon(tray_img).icon_as_template(true);
+                tray_builder = tray_builder
+                    .icon(tray_img)
+                    .icon_as_template(tray_is_template);
             }
 
             let _tray = tray_builder

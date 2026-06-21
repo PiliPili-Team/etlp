@@ -35,6 +35,7 @@ interface ConfigDto {
     trakt_client_secret: string;
     trakt_user_name: string;
     trakt_enable_host: string;
+    trakt_allow_duplicate: boolean;
     bangumi_access_token: string;
     bangumi_enable_host: string;
     bangumi_username: string;
@@ -901,8 +902,7 @@ export default function Settings({
     if (section === "version-prefer")
         return <VersionPreferSection cfg={cfg} update={update} />;
     if (section === "network") return <NetworkSection cfg={cfg} update={update} />;
-    if (section === "config")
-        return <ConfigSection cfg={cfg} update={update} addToast={addToast} />;
+    if (section === "config") return <ConfigSection addToast={addToast} />;
     if (section === "bangumi")
         return <BangumiSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "trakt")
@@ -1191,18 +1191,9 @@ interface UpdateInfo {
     url: string;
 }
 
-function ConfigSection({
-    cfg,
-    update,
-    addToast,
-}: {
-    cfg: ConfigDto;
-    update: (s: string, k: string, v: unknown) => void;
-    addToast: (msg: string, err?: boolean) => void;
-}) {
+function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) => void }) {
     const t = useI18n();
     const [busy, setBusy] = useState(false);
-    const [checking, setChecking] = useState(false);
     const [backups, setBackups] = useState<BackupEntry[]>([]);
     const [expanded, setExpanded] = useState(false);
     // Pending destructive actions awaiting confirmation.
@@ -1324,23 +1315,6 @@ function ConfigSection({
             addToast(mapBackendError(e, t), true);
         } finally {
             setBusy(false);
-        }
-    };
-
-    const doCheckUpdate = async () => {
-        setChecking(true);
-        try {
-            const info = await invoke<UpdateInfo>("check_update");
-            if (info.has_update) {
-                addToast(t("cfg_update_available", { version: info.latest }));
-                await openUrl(info.url);
-            } else {
-                addToast(t("cfg_update_latest", { version: info.current }));
-            }
-        } catch (e) {
-            addToast(mapBackendError(e, t), true);
-        } finally {
-            setChecking(false);
         }
     };
 
@@ -1487,23 +1461,6 @@ function ConfigSection({
                 />
             </div>
 
-            {/* Update */}
-            <div className="settings-group-title">{t("cfg_update_title")}</div>
-            <div className="settings-group">
-                <ToggleRow
-                    label={t("cfg_update_auto")}
-                    desc={t("cfg_update_auto_desc")}
-                    checked={cfg.check_update}
-                    onChange={(v) => update("gui", "check_update", v)}
-                />
-                <ButtonRow
-                    label={t("cfg_update_check")}
-                    desc={t("cfg_update_check_desc")}
-                    button={checking ? t("cfg_update_checking") : t("cfg_update_check")}
-                    onClick={() => void doCheckUpdate()}
-                />
-            </div>
-
             {/* Reset */}
             <div className="settings-group-title">{t("cfg_reset_title")}</div>
             <div className="settings-group">
@@ -1642,6 +1599,26 @@ function SystemSection({
         }
     };
 
+    // ── Update ─────────────────────────────────────────────────────────────────
+    const [checking, setChecking] = useState(false);
+
+    const doCheckUpdate = async () => {
+        setChecking(true);
+        try {
+            const info = await invoke<UpdateInfo>("check_update");
+            if (info.has_update) {
+                addToast(t("cfg_update_available", { version: info.latest }));
+                await openUrl(info.url);
+            } else {
+                addToast(t("cfg_update_latest", { version: info.current }));
+            }
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setChecking(false);
+        }
+    };
+
     const LANG_OPTIONS = [
         { value: "system", label: t("sys_lang_system") },
         { value: "zh-CN", label: "简体中文" },
@@ -1739,6 +1716,23 @@ function SystemSection({
                     desc={t("sys_silent_start_desc")}
                     checked={cfg.silent_start}
                     onChange={(v) => update("gui", "silent_start", v)}
+                />
+            </div>
+
+            {/* Update */}
+            <div className="settings-group-title">{t("cfg_update_title")}</div>
+            <div className="settings-group">
+                <ToggleRow
+                    label={t("cfg_update_auto")}
+                    desc={t("cfg_update_auto_desc")}
+                    checked={cfg.check_update}
+                    onChange={(v) => update("gui", "check_update", v)}
+                />
+                <ButtonRow
+                    label={t("cfg_update_check")}
+                    desc={t("cfg_update_check_desc")}
+                    button={checking ? t("cfg_update_checking") : t("cfg_update_check")}
+                    onClick={() => void doCheckUpdate()}
                 />
             </div>
 
@@ -2067,6 +2061,54 @@ function BangumiSection({
 
 // ── Trakt ──────────────────────────────────────────────────────────────────────
 
+/** Redirect URI the user must register on their Trakt application. Must match
+ *  the `/trakt_auth` callback the local server serves on the default port. */
+const TRAKT_REDIRECT_URI = "http://localhost:58000/trakt_auth";
+const TRAKT_APPS_URL = "https://trakt.tv/oauth/applications";
+
+/** Inline setup instructions for creating a Trakt application: a link to the
+ *  Trakt apps page and the redirect URI to register, with a copy button. */
+function TraktSetupGuide({
+    addToast,
+}: {
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+    const copyRedirect = async () => {
+        try {
+            await navigator.clipboard.writeText(TRAKT_REDIRECT_URI);
+            addToast(t("sys_trakt_setup_copied"));
+        } catch {
+            addToast(t("sys_trakt_setup_copy_failed"), true);
+        }
+    };
+    return (
+        <div className="settings-note">
+            <ol>
+                <li>
+                    {t("sys_trakt_setup_step1")}
+                    <a
+                        href={TRAKT_APPS_URL}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            void openUrl(TRAKT_APPS_URL);
+                        }}
+                    >
+                        {t("sys_trakt_setup_link")}
+                    </a>
+                </li>
+                <li>{t("sys_trakt_setup_step2")}</li>
+            </ol>
+            <div className="settings-note-copy">
+                <code>{TRAKT_REDIRECT_URI}</code>
+                <button className="btn" onClick={() => void copyRedirect()}>
+                    {t("sys_trakt_setup_copy")}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function TraktSection({
     cfg,
     update,
@@ -2097,6 +2139,13 @@ function TraktSection({
                 busy={auth.busy}
                 onRefresh={() => void auth.onRefreshClick()}
             />
+
+            <div className="settings-group-title" style={{ marginTop: 0 }}>
+                {t("sys_trakt_setup_title")}
+            </div>
+            <div className="settings-group">
+                <TraktSetupGuide addToast={addToast} />
+            </div>
 
             <div className="settings-group">
                 <TagListRow
@@ -2144,6 +2193,12 @@ function TraktSection({
                     placeholder={t("sys_trakt_user_placeholder")}
                     mono
                     onCommit={(v) => update("trakt", "user_name", v)}
+                />
+                <ToggleRow
+                    label={t("sys_trakt_dup")}
+                    desc={t("sys_trakt_dup_desc")}
+                    checked={cfg.trakt_allow_duplicate}
+                    onChange={(v) => update("trakt", "allow_duplicate", v)}
                 />
                 <ButtonRow
                     label={t("sync_test")}

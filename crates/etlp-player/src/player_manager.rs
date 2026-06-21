@@ -11,8 +11,8 @@
 //! them silently.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use etlp_core::PlaybackData;
@@ -118,6 +118,12 @@ pub struct PlayerManager {
     pub stop_times: HashMap<String, i64>,
     /// Per-episode total durations reported by the player (mpv only for now).
     pub total_secs: HashMap<String, i64>,
+    /// Latest playback position of every episode seen while an mpv playlist
+    /// advanced, keyed by media-title. Populated live by
+    /// [`playlist_completion_loop`]; merged into `stop_times` once the player
+    /// exits so continuously-played later episodes are written back and synced,
+    /// not only the episode the user opened.
+    playlist_stops: Arc<Mutex<HashMap<String, i64>>>,
     /// Set to `true` by the realtime feedback loop when it successfully sends
     /// the initial `Sessions/Playing` (Start) event. `write_progress` reads
     /// this to avoid sending a redundant Start when the loop already ran.
@@ -136,6 +142,7 @@ impl PlayerManager {
             playlist: HashMap::new(),
             stop_times: HashMap::new(),
             total_secs: HashMap::new(),
+            playlist_stops: Arc::new(Mutex::new(HashMap::new())),
             realtime_started: Arc::new(AtomicBool::new(false)),
             disable_progress_report: false,
         }
@@ -149,15 +156,53 @@ impl PlayerManager {
         self.playlist.insert(key, ep);
     }
 
-    /// Wait for the player to exit, collecting the stop time for the primary
-    /// episode.
+    /// Fraction of an episode's runtime a viewer must reach for a *later*
+    /// playlist episode to count as watched (and thus be written back / synced).
+    /// Matches the `mark_as_played` threshold so a skipped-over episode is not
+    /// marked, while one played to the end is.
+    const COMPLETION_RATIO: f64 = 0.9;
+
+    /// Wait for the player to exit, then collect every watched episode's stop
+    /// time.
     ///
-    /// For multi-episode playlists, per-episode times are populated by the
-    /// individual player backends (stage 3.6). This method stores the result
-    /// under the primary episode's `media_title` key.
+    /// For mpv playlists, [`playlist_completion_loop`] records each episode's
+    /// last position live; this method merges those: the opened (primary)
+    /// episode is always included, and any *later* episode is included only when
+    /// watched past [`Self::COMPLETION_RATIO`] so skipped entries are ignored.
+    /// For single-file playback (no playlist loop) it falls back to the precise
+    /// final position reported by the player backend, keyed by the primary
+    /// episode's `media_title`.
     pub async fn collect_stop_times(&mut self) {
-        let stop_sec = self.handle.stop_sec().await;
-        if let Some(sec) = stop_sec {
+        // Blocks until the player exits.
+        let final_stop = self.handle.stop_sec().await;
+
+        // Merge per-episode positions captured while the playlist advanced.
+        let captured: Vec<(String, i64)> = self
+            .playlist_stops
+            .lock()
+            .map(|m| m.iter().map(|(k, &v)| (k.clone(), v)).collect())
+            .unwrap_or_default();
+
+        let have_playlist_data = !captured.is_empty();
+        for (title, pos) in captured {
+            let is_primary = title == self.data.media_title;
+            let completed = self
+                .playlist
+                .get(&title)
+                .map(|ep| {
+                    ep.total_sec > 0
+                        && pos as f64 / ep.total_sec as f64
+                            >= Self::COMPLETION_RATIO
+                })
+                .unwrap_or(false);
+            if is_primary || completed {
+                self.stop_times.insert(title, pos);
+            }
+        }
+
+        // Single-file playback: no playlist loop ran, so use the precise final
+        // position for the opened episode.
+        if !have_playlist_data && let Some(sec) = final_stop {
             self.stop_times.insert(self.data.media_title.clone(), sec);
         }
     }
@@ -276,7 +321,62 @@ impl PlayerManager {
             ));
         }
         tokio::spawn(force_playlist_title_loop(client.clone()));
+        // Always track per-episode stop positions so continuously-played later
+        // episodes are written back / synced, independent of progress reporting.
+        tokio::spawn(playlist_completion_loop(
+            client.clone(),
+            self.playlist.clone(),
+            self.playlist_stops.clone(),
+        ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
+    }
+}
+
+/// Record the latest playback position of every episode an mpv playlist visits,
+/// keyed by media-title, into `stops`.
+///
+/// Runs for multi-episode playlists only and polls until mpv's IPC disconnects.
+/// Unlike [`realtime_playing_feedback_loop`] it sends nothing to the media
+/// server, so it runs even when progress reporting is disabled. The captured
+/// positions are merged into `stop_times` by [`PlayerManager::collect_stop_times`]
+/// after the player exits.
+pub async fn playlist_completion_loop(
+    client: MpvClient,
+    playlist: HashMap<String, PlaybackData>,
+    stops: Arc<Mutex<HashMap<String, i64>>>,
+) {
+    use serde_json::json;
+
+    if playlist.len() <= 1 {
+        return;
+    }
+
+    loop {
+        let title = match client
+            .command("get_property", &[json!("media-title")])
+            .await
+        {
+            Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
+            Ok(None) => String::new(),
+            Err(_) => break,
+        };
+        let pos_sec: i64 =
+            match client.command("get_property", &[json!("time-pos")]).await {
+                Ok(Some(v)) => v.as_f64().unwrap_or(0.0) as i64,
+                Ok(None) => 0,
+                Err(_) => break,
+            };
+
+        // Only record titles that map to a known playlist entry; ignore the
+        // brief window before mpv reports a matching title.
+        if pos_sec > 0
+            && playlist.contains_key(&title)
+            && let Ok(mut map) = stops.lock()
+        {
+            map.insert(title, pos_sec);
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
@@ -821,6 +921,44 @@ mod tests {
         let mut mgr = make_mgr(data);
         mgr.register_playlist("Anime S01E02".into(), ep2);
         assert!(mgr.playlist.contains_key("Anime S01E02"));
+    }
+
+    // ── collect_stop_times playlist merge ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn collect_merges_completed_playlist_episodes() {
+        // total_sec is 3600 for dummy episodes; 90 % = 3240 s.
+        let mut mgr = make_mgr(dummy_data("Anime S01E01", 0));
+        mgr.register_playlist(
+            "Anime S01E01".into(),
+            dummy_data("Anime S01E01", 0),
+        );
+        mgr.register_playlist(
+            "Anime S01E02".into(),
+            dummy_data("Anime S01E02", 0),
+        );
+        mgr.register_playlist(
+            "Anime S01E03".into(),
+            dummy_data("Anime S01E03", 0),
+        );
+
+        {
+            let mut stops = mgr.playlist_stops.lock().unwrap();
+            stops.insert("Anime S01E01".into(), 1000); // primary: kept regardless
+            stops.insert("Anime S01E02".into(), 3300); // ≥ 90 %: completed, kept
+            stops.insert("Anime S01E03".into(), 600); // < 90 %: skipped, dropped
+        }
+
+        // The Stub handle returns None from stop_sec(), so only the merged
+        // playlist data drives the result.
+        mgr.collect_stop_times().await;
+
+        assert_eq!(mgr.stop_times.get("Anime S01E01"), Some(&1000));
+        assert_eq!(mgr.stop_times.get("Anime S01E02"), Some(&3300));
+        assert!(
+            !mgr.stop_times.contains_key("Anime S01E03"),
+            "a later episode watched < 90 % must not be marked"
+        );
     }
 
     // ── write_progress skip logic ─────────────────────────────────────────────

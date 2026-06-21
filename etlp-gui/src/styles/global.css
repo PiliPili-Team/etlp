@@ -391,6 +391,41 @@ html[data-center-nav="true"] .sidebar {
     margin-top: 0;
 }
 
+/* ── Setup note (instructional block inside a settings group) ───────────── */
+.settings-note {
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-2);
+}
+.settings-note ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.settings-note-copy {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+.settings-note-copy code {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: var(--surface-alt);
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    font-size: 12px;
+    color: var(--text);
+    user-select: all;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.settings-note-copy .btn {
+    flex-shrink: 0;
+}
+
 /* ── Setting row ─────────────────────────────────────────────────────── */
 .row {
     display: flex;
