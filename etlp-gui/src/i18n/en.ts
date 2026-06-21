@@ -100,7 +100,8 @@ export const en: typeof zhCN = {
         "Episodes are truncated once this limit is reached; 0 or empty means " +
         "unlimited (recommended: 10–100)",
     vp_last_ep: "Disable at Last Episode",
-    vp_last_ep_desc: "Do not add subsequent episodes when current is the last",
+    vp_last_ep_desc:
+        "On: when playing the season's last episode, build no playlist and open only that episode (nothing follows it); Off: always build the playlist (current + later episodes)",
     vp_filter: "Version Filter Regex",
     vp_filter_desc:
         "Only versions matching this regex are added to the playlist (empty = no filter)",
@@ -190,7 +191,7 @@ export const en: typeof zhCN = {
     sys_trakt_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Allow Duplicate Marking",
     sys_trakt_dup_desc:
-        "When on, every completion re-marks the same episode/movie; when off, repeats are throttled (back-filled earlier episodes are always de-duplicated)",
+        "When on, every completion re-marks the same episode/movie; when off, throttled de-duplication applies: the same item finished again within 10 minutes is marked only once (back-filled earlier episodes are always de-duplicated regardless)",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
