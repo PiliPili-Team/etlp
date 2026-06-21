@@ -146,7 +146,7 @@ export const en: typeof zhCN = {
     sys_log_level: "Log Level",
     sys_log_level_desc: "Set to Debug for more verbose output when troubleshooting",
     sys_log_mask: "Mask Sensitive Tokens",
-    sys_log_mask_desc: "Replace sensitive tokens in logs with placeholders",
+    sys_log_mask_desc: "Replace sensitive text in logs with placeholders",
     sys_cache: "Cache",
     sys_cache_size: "Current Cache Size",
     sys_cache_size_desc: "Disk space used by logs and other runtime cache",

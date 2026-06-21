@@ -141,7 +141,7 @@ export const zhTW: typeof zhCN = {
     sys_log_level: "日誌級別",
     sys_log_level_desc: "除錯時可設定為「除錯」取得更多資訊",
     sys_log_mask: "日誌去識別化",
-    sys_log_mask_desc: "將日誌中的敏感 Token 替換為占位符",
+    sys_log_mask_desc: "將日誌中的敏感文案替換為占位符",
     sys_cache: "快取",
     sys_cache_size: "目前快取大小",
     sys_cache_size_desc: "日誌等執行快取佔用的磁碟空間",
