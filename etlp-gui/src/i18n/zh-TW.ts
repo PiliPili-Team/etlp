@@ -160,7 +160,9 @@ export const zhTW: typeof zhCN = {
     sys_about_desc: "版本資訊與開源致謝",
     sys_download: "下載",
     sys_speed_limit: "下載速度限制 (MiB/s)",
-    sys_speed_limit_desc: "0 表示不限速",
+    sys_speed_limit_desc: "限制下載與預先載入快取佔用的頻寬（MiB/s）；0 表示不限速",
+    sys_download_note:
+        "預先載入與下載模式由瀏覽器油猴腳本的指令觸發，不在此處開關：腳本發起「邊播邊快取」即為預先載入，發起「僅下載」即為下載模式；其中下載模式還要求你的 Emby 帳號本身具備資源下載權限。",
     sys_trakt: "Trakt.tv 播放記錄同步",
     sys_trakt_setup_title: "設定步驟",
     sys_trakt_setup_step1: "1. 在 Trakt 建立應用程式：",
