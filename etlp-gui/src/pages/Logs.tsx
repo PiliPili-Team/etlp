@@ -196,28 +196,24 @@ export default function Logs({ active }: { active: boolean }) {
         }
     }, []);
 
-    // Reset the view to the newest page (used by the Clear button). Avoids
-    // re-reading the whole file from byte 0.
-    const reloadTail = useCallback(async () => {
+    // Empty the active log file on disk, then reset the view to match. The live
+    // poll keeps running and will pick up anything written afterwards.
+    const clearLog = useCallback(async () => {
         const logPath = source === "mpv" ? effectiveMpvPath : null;
         if (source === "mpv" && !logPath) {
             setLines([]);
             return;
         }
         try {
-            const resp = await invoke<TailResponse>("tail_log", {
-                maxLines: PAGE_SIZE,
-                path: logPath,
-            });
-            setLines(resp.lines);
-            posRef.current = resp.next_bytes;
-            oldestRef.current = resp.start_bytes;
-            setHasOlder(resp.start_bytes > 0);
-            initializedRef.current = true;
-            setAutoScroll(true);
+            await invoke("clear_log_file", { path: logPath });
         } catch {
-            /* ignore: reload is best-effort */
+            /* ignore: clearing is best-effort */
         }
+        setLines([]);
+        posRef.current = 0;
+        oldestRef.current = 0;
+        setHasOlder(false);
+        setAutoScroll(true);
     }, [source, effectiveMpvPath]);
 
     // Reset the buffer when the log source changes (cleanup runs before the
@@ -420,7 +416,7 @@ export default function Logs({ active }: { active: boolean }) {
                         <button
                             className="btn"
                             style={{ padding: "4px 10px", fontSize: 12 }}
-                            onClick={() => void reloadTail()}
+                            onClick={() => void clearLog()}
                         >
                             {t("logs_clear")}
                         </button>

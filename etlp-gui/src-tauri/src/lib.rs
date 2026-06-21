@@ -154,6 +154,34 @@ fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
+/// Show or hide the macOS dock icon by switching the activation policy.
+///
+/// `Regular` shows the dock icon; `Accessory` hides it so the app keeps running
+/// in the menu-bar tray with no dock presence. No-op on non-macOS platforms.
+#[cfg(target_os = "macos")]
+fn set_dock_visible(app: &tauri::AppHandle, visible: bool) {
+    let policy = if visible {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    };
+    let _ = app.set_activation_policy(policy);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_dock_visible(_app: &tauri::AppHandle, _visible: bool) {}
+
+/// Reveal the main window and restore the dock icon together, keeping the dock
+/// state in sync with window visibility. Used by every code path that brings the
+/// window back from the tray.
+fn show_main_window(app: &tauri::AppHandle) {
+    set_dock_visible(app, true);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -227,10 +255,7 @@ pub fn run() {
 
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::AppleScript,
@@ -258,12 +283,7 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     let state = app.state::<GuiState>();
                     match event.id().as_ref() {
-                        "show" => {
-                            if let Some(w) = app.get_webview_window("main") {
-                                let _ = w.show();
-                                let _ = w.set_focus();
-                            }
-                        }
+                        "show" => show_main_window(app),
                         "toggle" => {
                             let running = state
                                 .running
@@ -315,10 +335,7 @@ pub fn run() {
                         }
                         "about" => {
                             // Bring window to front and signal frontend to open about modal
-                            if let Some(w) = app.get_webview_window("main") {
-                                let _ = w.show();
-                                let _ = w.set_focus();
-                            }
+                            show_main_window(app);
                             app.emit("show-about", ()).ok();
                         }
                         "quit" => app.exit(0),
@@ -335,11 +352,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -366,8 +379,11 @@ pub fn run() {
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
                 // When silent start is enabled the window stays hidden and the
-                // app lives in the tray until the user opens it.
-                if !silent_start {
+                // app lives in the tray until the user opens it — so the dock
+                // icon is hidden too, keeping the dock in sync with the window.
+                if silent_start {
+                    set_dock_visible(app.handle(), false);
+                } else {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -424,6 +440,7 @@ pub fn run() {
             commands::tail_log,
             commands::read_log_before,
             commands::clear_log_position,
+            commands::clear_log_file,
             commands::open_log_folder,
             commands::get_log_paths,
             commands::get_cache_size,
@@ -444,7 +461,11 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // Closing the window only hides it — the app keeps running in the
+                // tray. Drop the dock icon too so the dock stays in sync with the
+                // window; it is restored whenever the window is shown again.
                 let _ = window.hide();
+                set_dock_visible(window.app_handle(), false);
                 api.prevent_close();
             }
         })

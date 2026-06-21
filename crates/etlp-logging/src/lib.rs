@@ -12,7 +12,7 @@
 mod mask;
 
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -181,6 +181,10 @@ fn build_initial_filter(level: &str) -> EnvFilter {
 /// `Send + Sync` — safe to share across threads.
 pub struct LogHandle {
     handle: reload::Handle<EnvFilter, tracing_subscriber::Registry>,
+    /// The shared log-file handle, when file logging is enabled. Shared with the
+    /// writer so [`clear_log_file`](Self::clear_log_file) can truncate the file
+    /// under the same lock the writer uses, avoiding torn writes or sparse holes.
+    file: Option<SharedFile>,
 }
 
 impl LogHandle {
@@ -193,6 +197,33 @@ impl LogHandle {
             eprintln!("[etlp] set_level({level:?}) failed: {e}");
         }
     }
+
+    /// Truncate the log file to zero length, emptying it in place.
+    ///
+    /// Takes the writer's lock so it cannot race a concurrent log write, then
+    /// flushes, truncates, and rewinds the cursor to byte 0. The rewind is what
+    /// keeps a truncated, non-append handle from writing into a sparse hole after
+    /// the old offset. A no-op (returns `Ok`) when file logging is disabled.
+    pub fn clear_log_file(&self) -> io::Result<()> {
+        match &self.file {
+            Some(file) => truncate_shared_file(file),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Truncate a shared log file to zero length and rewind its cursor.
+///
+/// Split out from [`LogHandle::clear_log_file`] so the truncate-and-rewind
+/// behaviour is unit-testable without installing the global subscriber.
+fn truncate_shared_file(file: &SharedFile) -> io::Result<()> {
+    let mut f = file
+        .lock()
+        .map_err(|_| io::Error::other("log file mutex poisoned"))?;
+    f.flush()?;
+    f.set_len(0)?;
+    f.seek(SeekFrom::Start(0))?;
+    Ok(())
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
@@ -221,7 +252,10 @@ pub fn init(
         None => None,
     };
 
-    let make_writer = MaskingMakeWriter { masker, file };
+    let make_writer = MaskingMakeWriter {
+        masker,
+        file: file.clone(),
+    };
     let filter = build_initial_filter(level);
     let (filter_layer, handle) = reload::Layer::new(filter);
 
@@ -245,7 +279,7 @@ pub fn init(
         .try_init()
         .map_err(|e| e.to_string())?;
 
-    Ok(LogHandle { handle })
+    Ok(LogHandle { handle, file })
 }
 
 #[cfg(test)]
@@ -266,6 +300,41 @@ mod tests {
         }
         let body = std::fs::read_to_string(&path).expect("read");
         assert_eq!(body, "first\nsecond\n");
+    }
+
+    #[test]
+    fn truncate_shared_file_empties_and_continues_at_head() {
+        // A log file held open in write mode keeps an internal cursor; truncating
+        // must rewind it so the next write lands at byte 0, not in a sparse hole.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("clear.log");
+        let handle: SharedFile = {
+            let f = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&path)
+                .expect("open");
+            Arc::new(Mutex::new(f))
+        };
+
+        // Simulate the writer appending a chunk, advancing the cursor.
+        {
+            let mut f = handle.lock().expect("lock");
+            f.write_all(b"old line one\nold line two\n").expect("write");
+            f.flush().expect("flush");
+        }
+
+        truncate_shared_file(&handle).expect("clear");
+
+        // A subsequent write must start a fresh file with no leading NULs.
+        {
+            let mut f = handle.lock().expect("lock");
+            f.write_all(b"fresh\n").expect("write");
+            f.flush().expect("flush");
+        }
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert_eq!(body, "fresh\n");
     }
 
     #[test]
