@@ -315,6 +315,13 @@ export interface UpdateInfo {
 // newer release appears.
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
 
+// Module-level guard so the automatic update check fires at most once per app
+// process, regardless of how many times AppInner mounts. An empty-deps effect
+// already runs once per mount, but StrictMode's double-invoke in dev and any
+// future remount (error-boundary recovery, a parent `key` change) would each
+// re-trigger a network call; this flag makes "once" hold across all of them.
+let autoUpdateChecked = false;
+
 interface AppInnerProps {
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
@@ -334,10 +341,18 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 
     // Auto update check: runs once per app launch (independent of the active
     // tab), gated by the user's `check_update` setting (default on). A version
-    // the user dismissed stays hidden until a newer one appears.
+    // the user dismissed stays hidden until a newer one appears. The
+    // module-level `autoUpdateChecked` guard ensures the network call happens at
+    // most once even if this component mounts more than once.
     useEffect(() => {
+        if (autoUpdateChecked) return;
         let cancelled = false;
         const run = async () => {
+            // Claim the once-guard only when the check actually starts, so a
+            // mount whose timeout is cancelled (StrictMode's first pass) does
+            // not consume the single allowed run.
+            if (autoUpdateChecked) return;
+            autoUpdateChecked = true;
             try {
                 const cfg = await invoke<{ check_update: boolean }>("get_config");
                 if (!cfg.check_update) return;

@@ -827,6 +827,51 @@ pub async fn clear_log_position(
     Ok(())
 }
 
+/// Empty a log file in place (the "Clear" button in the Logs tab).
+///
+/// `path` selects the file, matching [`tail_log`]'s resolution: absent/empty
+/// means the app log. The app log is held open by this process's logger, so it
+/// is truncated through the shared [`LogHandle`] — that takes the writer's lock
+/// and rewinds the cursor, avoiding a torn write or a sparse hole. Other files
+/// (e.g. the mpv log, written by an external process) are truncated directly.
+#[tauri::command]
+pub async fn clear_log_file(
+    state: State<'_, GuiState>,
+    path: Option<String>,
+) -> Result<(), String> {
+    let target = resolve_log_path(&state, path)?;
+    let app_log = state
+        .log_file
+        .lock()
+        .map_err(|e| format!("lock log_file: {e}"))?
+        .clone();
+
+    // The app log: clear it through the logger so the in-process write cursor is
+    // reset in lock-step with the truncation.
+    if target == app_log
+        && let Some(handle) = state
+            .log_handle
+            .lock()
+            .map_err(|e| format!("lock log_handle: {e}"))?
+            .as_ref()
+    {
+        return handle
+            .clear_log_file()
+            .map_err(|e| format!("clear log file: {e}"));
+    }
+
+    // Any other file (or a missing logger handle): a plain truncate is enough,
+    // since no in-process handle holds a stale cursor into it.
+    match std::fs::OpenOptions::new().write(true).open(&target) {
+        Ok(file) => file
+            .set_len(0)
+            .map_err(|e| format!("truncate log file: {e}")),
+        // Nothing written yet → nothing to clear.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("open log file: {e}")),
+    }
+}
+
 /// Open the directory containing the application log file.
 #[tauri::command]
 pub async fn open_log_folder(
