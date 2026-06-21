@@ -97,7 +97,8 @@ export const zhTW: typeof zhCN = {
     vp_max_eps: "單次最大集數",
     vp_max_eps_desc: "單次播放最多加入播放清單的集數，超過此數量時截斷（建議 10–100）",
     vp_last_ep: "最後一集停用清單",
-    vp_last_ep_desc: "當前集是最後一集時不新增後續集",
+    vp_last_ep_desc:
+        "開啟：播放本季最後一集時不建立播放清單，只開啟當前這一集（後面已無可連播的集數）；關閉：任何集數都建立播放清單（當前集 + 後續集）",
     vp_filter: "版本篩選正規表示式",
     vp_filter_desc: "只有匹配該正規表示式的版本才會加入播放清單（留空不篩選）",
     vp_filter_placeholder: "例：|VCB-Studio|ANi|繁體",
@@ -180,7 +181,7 @@ export const zhTW: typeof zhCN = {
     sys_trakt_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_trakt_dup: "允許重複標記",
     sys_trakt_dup_desc:
-        "開啟後每次看完都會再次標記同一劇集 / 影片；關閉則按節流方式去重（補全的歷史集數始終去重）",
+        "開啟後每次看完都會再次標記同一劇集 / 影片；關閉則啟用節流去重：同一條目在 10 分鐘內重複看完只標記一次（補全的歷史集數無論開關始終去重）",
     sys_bangumi: "Bangumi.tv 追番記錄同步",
     sys_bangumi_host: "啟用網域",
     sys_bangumi_host_desc: "逗號分隔的網域關鍵字；留空停用，單獨一個點表示全部啟用",

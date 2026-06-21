@@ -94,7 +94,8 @@ export const zhCN = {
     vp_max_eps_desc:
         "单次播放最多加入播放列表的集数，超过此数量时截断；0 或留空表示不限制（推荐 10–100）",
     vp_last_ep: "最后一集禁用列表",
-    vp_last_ep_desc: "当前集是最后一集时不添加后续集",
+    vp_last_ep_desc:
+        "开启：播放本季最后一集时不构建播放列表，只打开当前这一集（后面已无可连播的集数）；关闭：任何集数都构建播放列表（当前集 + 后续集）",
     vp_filter: "版本过滤正则",
     vp_filter_desc: "只有匹配该正则的版本才会加入播放列表（留空不过滤）",
     vp_filter_placeholder: "例：|VCB-Studio|ANi|简体",
@@ -179,7 +180,7 @@ export const zhCN = {
     sys_trakt_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_trakt_dup: "允许重复标记",
     sys_trakt_dup_desc:
-        "开启后每次看完都会再次标记同一剧集 / 影片；关闭则按节流方式去重（补全的历史集数始终去重）",
+        "开启后每次看完都会再次标记同一剧集 / 影片；关闭则启用节流去重：同一条目在 10 分钟内重复看完只标记一次（补全的历史集数无论开关始终去重）",
     sys_bangumi: "Bangumi.tv 追番记录同步",
     sys_bangumi_host: "启用域名",
     sys_bangumi_host_desc: "逗号分隔的域名关键词；留空禁用，单独一个点表示全部启用",
