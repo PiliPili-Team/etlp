@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
+import type { UpdateInfo } from "../App";
 
 interface ServerStatus {
     running: boolean;
@@ -9,11 +11,14 @@ interface ServerStatus {
 
 interface Props {
     addToast: (msg: string, err?: boolean) => void;
+    /** Pending update info from the app-level check, or null when none. */
+    update: UpdateInfo | null;
+    onDismissUpdate: () => void;
 }
 
 const UPTIME_KEY = "etlp-server-start-time";
 
-export default function Overview({ addToast }: Props) {
+export default function Overview({ addToast, update, onDismissUpdate }: Props) {
     const t = useI18n();
     const [status, setStatus] = useState<ServerStatus>({ running: false, port: 58000 });
     const [busy, setBusy] = useState(false);
@@ -32,6 +37,10 @@ export default function Overview({ addToast }: Props) {
     };
     const [elapsed, setElapsed] = useState("");
     const [prevRunning, setPrevRunning] = useState(status.running);
+
+    const openUpdate = () => {
+        if (update) void openUrl(update.url);
+    };
 
     const refreshStatus = useCallback(async () => {
         try {
@@ -120,39 +129,28 @@ export default function Overview({ addToast }: Props) {
         }
     }, [addToast, t, failToast]);
 
-    const handleRestart = useCallback(async () => {
-        setBusy(true);
-        try {
-            const port = await invoke<number>("restart_server");
-            setStatus({ running: true, port });
-            persistStartTime(new Date());
-            addToast(t("toast_restarted", { port }));
-        } catch (e) {
-            failToast("toast_restart_failed", e);
-        } finally {
-            setBusy(false);
-        }
-    }, [addToast, t, failToast]);
-
-    const handleOpenFolder = useCallback(async () => {
-        try {
-            await invoke("open_config_folder");
-        } catch (e) {
-            failToast("toast_open_failed", e);
-        }
-    }, [failToast]);
-
-    const handleEditConfig = useCallback(async () => {
-        try {
-            await invoke("edit_config");
-        } catch (e) {
-            failToast("toast_open_failed", e);
-        }
-    }, [failToast]);
-
     return (
         <>
             <div className="page-title">{t("page_overview")}</div>
+
+            {update && (
+                <div className="update-banner">
+                    <span className="update-banner-dot" />
+                    <span className="update-banner-text">
+                        {t("ov_update_available", { version: update.latest })}
+                    </span>
+                    <button className="update-banner-btn" onClick={openUpdate}>
+                        {t("ov_update_action")}
+                    </button>
+                    <button
+                        className="update-banner-close"
+                        title={t("ov_update_dismiss")}
+                        onClick={onDismissUpdate}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
 
             {/* Hero card */}
             <div className="overview-hero">
@@ -204,46 +202,6 @@ export default function Overview({ addToast }: Props) {
                         <div className="meta-label">{t("ov_address")}</div>
                         <div className="meta-value">127.0.0.1</div>
                         <div className="meta-sub">{t("ov_address_desc")}</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Config actions */}
-            <div className="settings-group-title" style={{ marginTop: 0 }}>
-                {t("ov_config")}
-            </div>
-            <div
-                style={{
-                    background: "var(--surface)",
-                    borderRadius: 12,
-                    boxShadow: "var(--shadow-sm)",
-                    overflow: "hidden",
-                    marginBottom: 14,
-                }}
-            >
-                <div className="row">
-                    <div className="row-label">
-                        <div>{t("ov_config_file")}</div>
-                        <div className="row-desc">{t("ov_config_file_desc")}</div>
-                    </div>
-                    <div className="row-control">
-                        <button className="btn" onClick={handleOpenFolder}>
-                            {t("open_dir")}
-                        </button>
-                        <button className="btn" onClick={handleEditConfig}>
-                            {t("ov_edit_config")}
-                        </button>
-                    </div>
-                </div>
-                <div className="row" style={{ borderBottom: "none" }}>
-                    <div className="row-label">
-                        <div>{t("ov_restart")}</div>
-                        <div className="row-desc">{t("ov_restart_desc")}</div>
-                    </div>
-                    <div className="row-control">
-                        <button className="btn" onClick={handleRestart} disabled={busy}>
-                            {t("ov_restart")}
-                        </button>
                     </div>
                 </div>
             </div>

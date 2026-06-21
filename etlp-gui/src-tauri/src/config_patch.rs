@@ -47,13 +47,9 @@ pub fn patch_field(
         Err(e) => return Err(e),
     }
 
-    // Create parent dirs if needed.
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create config dir: {e}"))?;
-    }
-
-    std::fs::write(path, doc.to_string())
+    // Write with platform-appropriate encoding (UTF-8 BOM on Windows) so the
+    // file renders correctly in native editors; creates parent dirs as needed.
+    etlp_config::write_config_str(path, &doc.to_string())
         .map_err(|e| format!("write config: {e}"))
 }
 

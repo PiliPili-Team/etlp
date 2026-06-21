@@ -1,5 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LangMode, DisplaySettings, AccentColor } from "../display";
 import { ACCENT_PALETTES } from "../display";
 import { useI18n } from "../i18n";
@@ -26,6 +28,8 @@ interface ConfigDto {
     item_limit: number;
     version_filter: string;
     speed_limit_mb: number;
+    silent_start: boolean;
+    check_update: boolean;
     disable_progress_report: boolean;
     trakt_client_id: string;
     trakt_client_secret: string;
@@ -43,6 +47,7 @@ type SectionTab =
     | "player"
     | "version-prefer"
     | "network"
+    | "config"
     | "system"
     | "bangumi"
     | "trakt";
@@ -896,6 +901,8 @@ export default function Settings({
     if (section === "version-prefer")
         return <VersionPreferSection cfg={cfg} update={update} />;
     if (section === "network") return <NetworkSection cfg={cfg} update={update} />;
+    if (section === "config")
+        return <ConfigSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "bangumi")
         return <BangumiSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "trakt")
@@ -1168,6 +1175,412 @@ function NetworkSection({
 
 // ── System ─────────────────────────────────────────────────────────────────────
 
+// ── Config (config file actions + backup / restore / reset / update) ──────────────
+
+interface BackupEntry {
+    name: string;
+    path: string;
+    size: number;
+    created_ms: number;
+}
+
+interface UpdateInfo {
+    current: string;
+    latest: string;
+    has_update: boolean;
+    url: string;
+}
+
+function ConfigSection({
+    cfg,
+    update,
+    addToast,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+    const [busy, setBusy] = useState(false);
+    const [checking, setChecking] = useState(false);
+    const [backups, setBackups] = useState<BackupEntry[]>([]);
+    const [expanded, setExpanded] = useState(false);
+    // Pending destructive actions awaiting confirmation.
+    const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
+    const [importPath, setImportPath] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<BackupEntry | null>(null);
+    const [confirmReset, setConfirmReset] = useState(false);
+
+    const refreshBackups = useCallback(async () => {
+        try {
+            const list = await invoke<BackupEntry[]>("list_config_backups");
+            setBackups(list);
+        } catch {
+            setBackups([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        const id = setTimeout(() => void refreshBackups(), 0);
+        return () => clearTimeout(id);
+    }, [refreshBackups]);
+
+    const fmtTime = (ms: number) => (ms > 0 ? new Date(ms).toLocaleString() : "—");
+
+    const handleOpenFolder = async () => {
+        try {
+            await invoke("open_config_folder");
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const handleEditConfig = async () => {
+        try {
+            await invoke("edit_config");
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const handleRestart = async () => {
+        setBusy(true);
+        try {
+            const port = await invoke<number>("restart_server");
+            addToast(t("toast_restarted", { port }));
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleBackup = async () => {
+        setBusy(true);
+        try {
+            await invoke<BackupEntry>("backup_config");
+            addToast(t("cfg_backup_done"));
+            setExpanded(true);
+            await refreshBackups();
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handleImport = async () => {
+        try {
+            const selected = await openDialog({
+                multiple: false,
+                directory: false,
+                filters: [{ name: "Backup", extensions: ["zip"] }],
+            });
+            if (typeof selected === "string") {
+                setImportPath(selected);
+            }
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const doRestore = async (path: string) => {
+        setBusy(true);
+        try {
+            await invoke("restore_config", { path });
+            addToast(t("cfg_restore_done"));
+            await refreshBackups();
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const doDelete = async (path: string) => {
+        try {
+            await invoke("delete_config_backup", { path });
+            await refreshBackups();
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const doReveal = async (path: string) => {
+        try {
+            await invoke("reveal_config_backup", { path });
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        }
+    };
+
+    const doReset = async () => {
+        setConfirmReset(false);
+        setBusy(true);
+        try {
+            await invoke("reset_config");
+            addToast(t("cfg_reset_done"));
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const doCheckUpdate = async () => {
+        setChecking(true);
+        try {
+            const info = await invoke<UpdateInfo>("check_update");
+            if (info.has_update) {
+                addToast(t("cfg_update_available", { version: info.latest }));
+                await openUrl(info.url);
+            } else {
+                addToast(t("cfg_update_latest", { version: info.current }));
+            }
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setChecking(false);
+        }
+    };
+
+    return (
+        <>
+            <div className="page-title">{t("page_config")}</div>
+
+            {/* Config file */}
+            <div className="settings-group-title" style={{ marginTop: 0 }}>
+                {t("cfg_file_title")}
+            </div>
+            <div className="settings-group">
+                <div className="row">
+                    <div className="row-label">
+                        <div>{t("ov_config_file")}</div>
+                        <div className="row-desc">{t("ov_config_file_desc")}</div>
+                    </div>
+                    <div className="row-control">
+                        <button className="btn" onClick={() => void handleOpenFolder()}>
+                            {t("open_dir")}
+                        </button>
+                        <button className="btn" onClick={() => void handleEditConfig()}>
+                            {t("ov_edit_config")}
+                        </button>
+                    </div>
+                </div>
+                <ButtonRow
+                    label={t("ov_restart")}
+                    desc={t("ov_restart_desc")}
+                    button={t("ov_restart")}
+                    onClick={() => void handleRestart()}
+                />
+            </div>
+
+            {/* Backup & restore */}
+            <div className="settings-group-title">{t("cfg_backup_title")}</div>
+            <div className="settings-group">
+                <ButtonRow
+                    label={t("cfg_backup_now")}
+                    desc={t("cfg_backup_now_desc")}
+                    button={t("cfg_backup_now")}
+                    onClick={() => void handleBackup()}
+                />
+                <div
+                    className="row"
+                    style={{ flexDirection: "column", alignItems: "stretch" }}
+                >
+                    <div
+                        className="row-label"
+                        style={{
+                            display: "flex",
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            cursor: "pointer",
+                            width: "100%",
+                        }}
+                        onClick={() => setExpanded((v) => !v)}
+                    >
+                        <div>
+                            <div>{t("cfg_backup_list")}</div>
+                            <div className="row-desc">
+                                {t("cfg_backup_list_desc", { count: backups.length })}
+                            </div>
+                        </div>
+                        <span className="cache-size">{expanded ? "▾" : "▸"}</span>
+                    </div>
+                    {expanded && (
+                        <div
+                            style={{
+                                marginTop: 10,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 8,
+                            }}
+                        >
+                            {backups.length === 0 && (
+                                <div className="row-desc">{t("cfg_backup_empty")}</div>
+                            )}
+                            {backups.map((b) => (
+                                <div
+                                    key={b.path}
+                                    style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        gap: 12,
+                                        padding: "8px 12px",
+                                        background: "var(--bg)",
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <div style={{ minWidth: 0 }}>
+                                        <div
+                                            className="code"
+                                            style={{
+                                                fontSize: 12,
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                whiteSpace: "nowrap",
+                                            }}
+                                        >
+                                            {b.name}
+                                        </div>
+                                        <div className="row-desc">
+                                            {fmtTime(b.created_ms)} ·{" "}
+                                            {formatBytes(b.size)}
+                                        </div>
+                                    </div>
+                                    <div
+                                        className="row-control"
+                                        style={{ flexShrink: 0 }}
+                                    >
+                                        <button
+                                            className="btn"
+                                            onClick={() => void doReveal(b.path)}
+                                        >
+                                            {t("cfg_view")}
+                                        </button>
+                                        <button
+                                            className="btn"
+                                            disabled={busy}
+                                            onClick={() => setRestoreTarget(b)}
+                                        >
+                                            {t("cfg_restore")}
+                                        </button>
+                                        <button
+                                            className="btn btn-danger"
+                                            onClick={() => setDeleteTarget(b)}
+                                        >
+                                            {t("cfg_delete")}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <ButtonRow
+                    label={t("cfg_import")}
+                    desc={t("cfg_import_desc")}
+                    button={t("cfg_import")}
+                    onClick={() => void handleImport()}
+                />
+            </div>
+
+            {/* Update */}
+            <div className="settings-group-title">{t("cfg_update_title")}</div>
+            <div className="settings-group">
+                <ToggleRow
+                    label={t("cfg_update_auto")}
+                    desc={t("cfg_update_auto_desc")}
+                    checked={cfg.check_update}
+                    onChange={(v) => update("gui", "check_update", v)}
+                />
+                <ButtonRow
+                    label={t("cfg_update_check")}
+                    desc={t("cfg_update_check_desc")}
+                    button={checking ? t("cfg_update_checking") : t("cfg_update_check")}
+                    onClick={() => void doCheckUpdate()}
+                />
+            </div>
+
+            {/* Reset */}
+            <div className="settings-group-title">{t("cfg_reset_title")}</div>
+            <div className="settings-group">
+                <ButtonRow
+                    label={t("cfg_reset")}
+                    desc={t("cfg_reset_desc")}
+                    button={t("cfg_reset")}
+                    danger
+                    onClick={() => setConfirmReset(true)}
+                />
+            </div>
+
+            {restoreTarget && (
+                <ConfirmModal
+                    title={t("cfg_restore_confirm_title")}
+                    message={t("cfg_restore_confirm_message", {
+                        name: restoreTarget.name,
+                    })}
+                    confirmLabel={t("cfg_restore")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    onConfirm={() => {
+                        const path = restoreTarget.path;
+                        setRestoreTarget(null);
+                        void doRestore(path);
+                    }}
+                    onCancel={() => setRestoreTarget(null)}
+                />
+            )}
+
+            {importPath && (
+                <ConfirmModal
+                    title={t("cfg_import_confirm_title")}
+                    message={t("cfg_import_confirm_message")}
+                    confirmLabel={t("cfg_restore")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    onConfirm={() => {
+                        const path = importPath;
+                        setImportPath(null);
+                        void doRestore(path);
+                    }}
+                    onCancel={() => setImportPath(null)}
+                />
+            )}
+
+            {deleteTarget && (
+                <ConfirmModal
+                    title={t("cfg_delete_confirm_title")}
+                    message={t("cfg_delete_confirm_message", {
+                        name: deleteTarget.name,
+                    })}
+                    confirmLabel={t("cfg_delete")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    danger
+                    onConfirm={() => {
+                        const path = deleteTarget.path;
+                        setDeleteTarget(null);
+                        void doDelete(path);
+                    }}
+                    onCancel={() => setDeleteTarget(null)}
+                />
+            )}
+
+            {confirmReset && (
+                <ConfirmModal
+                    title={t("cfg_reset_confirm_title")}
+                    message={t("cfg_reset_confirm_message")}
+                    confirmLabel={t("cfg_reset")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    danger
+                    onConfirm={() => void doReset()}
+                    onCancel={() => setConfirmReset(false)}
+                />
+            )}
+        </>
+    );
+}
+
 function SystemSection({
     cfg,
     update,
@@ -1281,6 +1694,12 @@ function SystemSection({
                     value={display.accentColor ?? "blue"}
                     onChange={(v) => onDisplayChange({ accentColor: v })}
                 />
+                <ToggleRow
+                    label={t("sys_center_nav")}
+                    desc={t("sys_center_nav_desc")}
+                    checked={display.centerNav ?? false}
+                    onChange={(v) => onDisplayChange({ centerNav: v })}
+                />
             </div>
 
             {/* Display */}
@@ -1314,6 +1733,12 @@ function SystemSection({
                     desc={t("sys_autostart_desc")}
                     checked={autostart}
                     onChange={onAutostart}
+                />
+                <ToggleRow
+                    label={t("sys_silent_start")}
+                    desc={t("sys_silent_start_desc")}
+                    checked={cfg.silent_start}
+                    onChange={(v) => update("gui", "silent_start", v)}
                 />
             </div>
 
@@ -1437,6 +1862,7 @@ function useSyncAuth(
     testCmd: string,
     addToast: (msg: string, err?: boolean) => void,
     t: ReturnType<typeof useI18n>,
+    isComplete: boolean,
 ) {
     const [busy, setBusy] = useState(false);
     const [testing, setTesting] = useState(false);
@@ -1473,12 +1899,25 @@ function useSyncAuth(
     };
 
     const doTest = async () => {
+        // Incomplete config: point the user at the missing fields before any
+        // network round-trip.
+        if (!isComplete) {
+            addToast(t("sync_incomplete"), true);
+            return;
+        }
         setTesting(true);
         try {
             const ok = await invoke<boolean>(testCmd);
+            // A complete config that still fails is either wrong or unauthorized;
+            // steer the user to the refresh-authorization button.
             addToast(ok ? t("sync_test_ok") : t("sync_test_fail"), !ok);
         } catch (e) {
-            addToast(mapBackendError(e, t), true);
+            const msg = String(e);
+            if (msg.includes("NOT_CONFIGURED")) {
+                addToast(t("sync_incomplete"), true);
+            } else {
+                addToast(mapBackendError(e, t), true);
+            }
         } finally {
             setTesting(false);
         }
@@ -1509,12 +1948,13 @@ function SyncTabHeader({
         <div className="page-title-row">
             <div className="page-title">{title}</div>
             <button
-                className="icon-btn"
+                className="btn btn-with-icon"
                 title={t("sync_refresh")}
                 onClick={onRefresh}
                 disabled={busy}
             >
                 <IconRefresh spinning={busy} />
+                <span>{busy ? t("sync_refreshing") : t("sync_refresh")}</span>
             </button>
         </div>
     );
@@ -1530,7 +1970,17 @@ function BangumiSection({
     addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
-    const auth = useSyncAuth("refresh_bangumi_auth", "test_bangumi_auth", addToast, t);
+    const complete =
+        cfg.bangumi_access_token.trim() !== "" &&
+        cfg.bangumi_username.trim() !== "" &&
+        cfg.bangumi_enable_host.trim() !== "";
+    const auth = useSyncAuth(
+        "refresh_bangumi_auth",
+        "test_bangumi_auth",
+        addToast,
+        t,
+        complete,
+    );
 
     return (
         <>
@@ -1627,7 +2077,18 @@ function TraktSection({
     addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
-    const auth = useSyncAuth("refresh_trakt_auth", "test_trakt_auth", addToast, t);
+    const complete =
+        cfg.trakt_client_id.trim() !== "" &&
+        cfg.trakt_client_secret.trim() !== "" &&
+        cfg.trakt_user_name.trim() !== "" &&
+        cfg.trakt_enable_host.trim() !== "";
+    const auth = useSyncAuth(
+        "refresh_trakt_auth",
+        "test_trakt_auth",
+        addToast,
+        t,
+        complete,
+    );
 
     return (
         <>

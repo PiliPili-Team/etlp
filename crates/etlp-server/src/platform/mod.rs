@@ -6,7 +6,11 @@ pub mod dirs;
 pub mod kill;
 pub mod path;
 
-pub use dirs::{ENV_RUNTIME, RuntimeMode, config_dir, data_dir};
+pub use dirs::{
+    ENV_RUNTIME, RuntimeMode, backup_dir, backup_dir_in, cache_dir,
+    cache_dir_in, cache_subdir_in, config_dir, data_dir, log_dir, log_dir_in,
+    migrate_layout,
+};
 pub use kill::kill_matching_processes;
 pub use path::{
     open_folder, open_media_file, open_url, translate_path, warn_if_not_exists,

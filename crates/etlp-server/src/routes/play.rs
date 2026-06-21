@@ -249,9 +249,9 @@ async fn run_player_chain(
         static_ipc: cfg.static_ipc.clone(),
         event_handler: None,
         playlist_start: launch_playlist_start,
-        mpv_log_file: kind
-            .is_mpv_family()
-            .then(|| state.working_dir.join("mpv.log")),
+        mpv_log_file: kind.is_mpv_family().then(|| {
+            crate::platform::log_dir_in(&state.working_dir).join("mpv.log")
+        }),
     };
 
     let spawn_span = Span::new("player_spawn").with_session(session_id);
@@ -699,14 +699,121 @@ async fn start_plex_play(state: SharedState, received: PlexReceivedData) {
 
 // ── Trakt / Bangumi sync helpers ──────────────────────────────────────────────
 
+/// One episode of the current season that the media server reports as watched.
+struct PlayedEpisode {
+    /// Episode number within the season (`IndexNumber`).
+    index: i64,
+    /// Air date, used as the primary key for Bangumi episode matching.
+    premiere_date: Option<String>,
+    /// External ids (Imdb/Tmdb/Tvdb), used to build Trakt history items.
+    provider_ids: std::collections::BTreeMap<String, String>,
+}
+
+/// Episodes of `data`'s season the user already watched, up to and including the
+/// current episode, for "backfill" marking.
+///
+/// The first time a user syncs a season, every earlier episode they had already
+/// finished in the Emby/Jellyfin client should also be marked watched on the
+/// third-party service — not just the episode that triggered this sync. This
+/// queries the season's episodes with per-user `Played` status and returns the
+/// current episode plus every earlier one Emby marks played.
+///
+/// Returns an empty vec for non-Emby servers, when the series/episode cannot be
+/// addressed, or when the request fails; callers then fall back to syncing only
+/// the just-watched entry.
+async fn emby_played_backfill(
+    state: &SharedState,
+    data: &PlaybackData,
+) -> Vec<PlayedEpisode> {
+    if !data.server.is_emby_like()
+        || data.series_id.is_empty()
+        || data.index.is_none()
+    {
+        return Vec::new();
+    }
+    let cur_index = data.index.unwrap_or_default();
+    let base_url = format!("{}://{}", data.scheme, data.netloc);
+    let emby = EmbyClient::new(
+        state.http_client.clone(),
+        &base_url,
+        &data.api_key,
+        &data.user_id,
+    );
+    let list = match emby.episodes_with_status(&data.series_id, None).await {
+        Ok(l) => l,
+        Err(e) => {
+            debug!("backfill: fetch episodes failed: {e}");
+            return Vec::new();
+        }
+    };
+
+    let mut out: Vec<PlayedEpisode> = Vec::new();
+    let mut seen: std::collections::HashSet<i64> =
+        std::collections::HashSet::new();
+    for item in list.items {
+        let Some(idx) = item.index_number else {
+            continue;
+        };
+        if idx > cur_index || !seen.insert(idx) {
+            continue;
+        }
+        // Restrict to the same season when both numbers are known.
+        if let (Some(season), Some(parent)) =
+            (data.season_number, item.parent_index_number)
+            && season != parent
+        {
+            seen.remove(&idx);
+            continue;
+        }
+        // The current episode was just watched; earlier ones must be flagged
+        // played by the server.
+        let played = item.user_data.as_ref().map(|u| u.played).unwrap_or(false);
+        if idx != cur_index && !played {
+            continue;
+        }
+        out.push(PlayedEpisode {
+            index: idx,
+            premiere_date: item.premiere_date.clone(),
+            provider_ids: item.provider_ids.clone(),
+        });
+    }
+    debug!(
+        series_id = %data.series_id,
+        cur_index,
+        backfill = out.len(),
+        "backfill: resolved played episodes"
+    );
+    out
+}
+
+/// Build a [`TraktHistoryItem`] from an episode/movie's external ids, or `None`
+/// when no usable id is present.
+fn trakt_item_from_ids(
+    kind: etlp_sync::TraktItemKind,
+    provider_ids: &std::collections::BTreeMap<String, String>,
+) -> Option<etlp_sync::TraktHistoryItem> {
+    let ids = etlp_sync::TraktIds {
+        imdb: provider_ids.get("Imdb").cloned(),
+        tmdb: provider_ids.get("Tmdb").and_then(|v| v.parse().ok()),
+        tvdb: provider_ids.get("Tvdb").and_then(|v| v.parse().ok()),
+        ..etlp_sync::TraktIds::default()
+    };
+    if ids.imdb.is_none() && ids.tmdb.is_none() && ids.tvdb.is_none() {
+        return None;
+    }
+    Some(etlp_sync::TraktHistoryItem {
+        kind,
+        ids,
+        watched_at: None,
+    })
+}
+
 /// Sync all completed entries to Trakt.tv when configured.
 ///
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
 /// skips when either is absent or the netloc does not match `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
-    use etlp_sync::{
-        TraktApi, TraktHistoryItem, TraktIds, TraktItemKind, sync_history,
-    };
+    use etlp_sync::{TraktApi, TraktHistoryItem, TraktItemKind, sync_history};
 
     if entries.is_empty() {
         return;
@@ -772,36 +879,49 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         }
     }
 
-    let items: Vec<TraktHistoryItem> = entries
-        .iter()
-        .filter(|(_, data)| host_enabled(&data.netloc, &enable_host))
-        .filter_map(|(_, data)| {
-            let kind = if data.item_type.eq_ignore_ascii_case("movie") {
-                TraktItemKind::Movie
-            } else if data.item_type.eq_ignore_ascii_case("episode") {
-                TraktItemKind::Episode
+    let mut items: Vec<TraktHistoryItem> = Vec::new();
+    for (_, data) in entries {
+        if !host_enabled(&data.netloc, &enable_host) {
+            continue;
+        }
+        if data.item_type.eq_ignore_ascii_case("movie") {
+            let key = format!("trakt:{}:{}", data.netloc, data.item_id);
+            if state.sync_recently_done(&key) {
+                debug!(item = %data.media_title, "trakt: throttled, skip");
+                continue;
+            }
+            if let Some(item) =
+                trakt_item_from_ids(TraktItemKind::Movie, &data.provider_ids)
+            {
+                items.push(item);
+            }
+        } else if data.item_type.eq_ignore_ascii_case("episode") {
+            let key = format!("trakt:{}:{}", data.netloc, data.item_id);
+            if state.sync_recently_done(&key) {
+                debug!(item = %data.media_title, "trakt: throttled, skip");
+                continue;
+            }
+            // Backfill earlier episodes the user already watched in the client.
+            let backfill = emby_played_backfill(state, data).await;
+            if backfill.is_empty() {
+                if let Some(item) = trakt_item_from_ids(
+                    TraktItemKind::Episode,
+                    &data.provider_ids,
+                ) {
+                    items.push(item);
+                }
             } else {
-                return None;
-            };
-            let ids = TraktIds {
-                imdb: data.provider_ids.get("Imdb").cloned(),
-                tmdb: data
-                    .provider_ids
-                    .get("Tmdb")
-                    .and_then(|v| v.parse().ok()),
-                tvdb: data
-                    .provider_ids
-                    .get("Tvdb")
-                    .and_then(|v| v.parse().ok()),
-                ..TraktIds::default()
-            };
-            Some(TraktHistoryItem {
-                kind,
-                ids,
-                watched_at: None,
-            })
-        })
-        .collect();
+                for ep in &backfill {
+                    if let Some(item) = trakt_item_from_ids(
+                        TraktItemKind::Episode,
+                        &ep.provider_ids,
+                    ) {
+                        items.push(item);
+                    }
+                }
+            }
+        }
+    }
 
     debug!(items = items.len(), "trakt: built history items");
     if items.is_empty() {
@@ -888,7 +1008,10 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         return;
     }
 
-    let cache_path = state.working_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
+    let bangumi_cache_dir =
+        crate::platform::cache_subdir_in(&state.working_dir, "bangumi");
+    let _ = std::fs::create_dir_all(&bangumi_cache_dir);
+    let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
 
     for (_, data) in entries {
@@ -904,6 +1027,13 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             continue;
         };
 
+        // Throttle repeated marks of the same item within a short window.
+        let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
+        if state.sync_recently_done(&key) {
+            debug!(item = %data.media_title, "bangumi: throttled, skip");
+            continue;
+        }
+
         let Some(subject_id) = resolve_bangumi_subject(
             &api,
             data,
@@ -917,8 +1047,30 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             continue;
         };
 
-        debug!(subject_id, sort, "bangumi: syncing entry");
-        let eps = vec![(sort, data.premiere_date.clone())];
+        // Backfill: mark the current episode plus every earlier one the user
+        // already watched in the Emby/Jellyfin client. Falls back to just the
+        // current episode when no backfill data is available.
+        let backfill = emby_played_backfill(state, data).await;
+        let mut eps: Vec<(u32, Option<String>)> = backfill
+            .iter()
+            .filter_map(|p| {
+                u32::try_from(p.index)
+                    .ok()
+                    .map(|s| (s, p.premiere_date.clone()))
+            })
+            .collect();
+        if eps.is_empty() {
+            eps.push((sort, data.premiere_date.clone()));
+        }
+        eps.sort_by_key(|(s, _)| *s);
+        eps.dedup_by_key(|(s, _)| *s);
+
+        debug!(
+            subject_id,
+            sort,
+            count = eps.len(),
+            "bangumi: syncing entry"
+        );
         match sync_episodes(&api, subject_id, &eps).await {
             Ok(ids) => {
                 info!(

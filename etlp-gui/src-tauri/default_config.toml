@@ -17,7 +17,7 @@ player = "mpv"
 # Launch in full-screen mode.
 fullscreen = false
 
-# ── Developer / advanced ─────��────────────────────────────────────────────────
+# ── Developer / advanced ──────────────────────────────────────────────────────
 
 [dev]
 # Absolute path to the player binary (was [exe] mpv = ... in INI).
@@ -51,7 +51,7 @@ subtitle_priority = [
 ]
 skip_certificate_verify = true
 
-# ── Playlist ───���──────────────────────────────────���───────────────────────────
+# ── Playlist ────────────────────────────────────────────────────────────────────
 
 [playlist]
 item_limit = 1
@@ -61,7 +61,7 @@ item_limit = 1
 # Use TOML literal string (single quotes) to avoid backslash escaping.
 version_filter = "|豌豆字幕组|北宇治字幕组|云光字幕组|织梦字幕组|千夏字幕组|风之圣殿字幕组|风车字幕组|银色子弹字幕组|枫叶字幕组|诸神字幕组|SW字幕组|DAY字幕组|轻之国度字幕组|星空字幕组|冷番补完字幕组|康复中心字幕组|極彩字幕组|桜都字幕组|幻之字幕组|魔穗字幕组|白恋字幕组|动漫国字幕组|FSD字幕组|酷漫字幕组|康复重症监护室字幕组|擦枪字幕组|幻樱字幕组|咪梦字幕组|漫游字幕组|爱恋字幕社|漫猫字幕社|极影字幕社|悠哈璃羽字幕社|六道是我大鸽汉化组|MCE汉化组|猫恋汉化组|猎户发布组|DBD制作组|DBD|Amor压制组|永恒译制|MingYSub|霜庭云花Sub|离谱Sub|新Sub|SweetSub|AI-Raws|Kawaiika-Raws|Zero-Raws|Deadmau-RAWS|IrizaRaws|Beatrice-Raws|jsum|Magic-Raws|喵萌奶茶屋|熔岩动画|Xrip|AKito秋人|智械尚未危机制作|雪飘工作室|亿次研同好会|VARYG|hchcsen|Arid|Knf|sxales|异域-11番小队|DreamHD|AliPan|Kagura|hydes|niizk|氢气烤肉架|LoliHouse|VCB-Studio|7³ACG|LittleBakas|FSD粉羽社|OPFans枫雪动漫|GM-Team|澄空学园|SilverBullet|APTX4869|NEO·QSW|720p|1080p|2160p|4k|remux|hevc|h.265|h.264|h265|h264|flac|aac|sdr|hdr|dv|vision|dvrip|bdrip|mkv|mp4|Baha|Crunchyroll|B-Global|KKTV|MyVideo|AMZN|friDay|Disney\\+|LINETV|Netflix|playWEB|Viu|Amazon|AppleTV\\+|HMAX|BiliBili|Abema|YouTube|CatchPlay|iTunes|ADWeb|NTb|FLUX|简体|繁体|繁體|简繁|中英|简英|繁英|中日|简日|繁日|双语|内封|内嵌"
 
-# ── Path translation ───��──────────────────────────────────────────────────────
+# ── Path translation ──────────────────────────────────────────────────────────
 # Each [[path_map]] entry is one src→dst pair (replaces [src]/[dst] in INI).
 # etlp strips the src prefix from the server-reported path and prepends dst.
 # Entries are matched in order; first match wins.
@@ -78,6 +78,13 @@ dst = 'F:\media'
 
 [gui]
 speed_limit_mb = 0
+
+# Launch hidden to the tray instead of showing the main window (pairs with
+# OS autostart for a quiet login).
+silent_start = false
+
+# Periodically check GitHub for a newer release and show an update hint.
+check_update = true
 
 [bangumi]
 # Personal access token. Generate at https://next.bgm.tv/demo/access-token

@@ -275,7 +275,62 @@ impl PlayerManager {
                 realtime_started,
             ));
         }
+        tokio::spawn(force_playlist_title_loop(client.clone()));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
+    }
+}
+
+/// Force the current playlist entry's title to win over the file's embedded
+/// `title` metadata.
+///
+/// mpv resolves `media-title` as `force-media-title` → embedded metadata title →
+/// playlist entry title → filename. When a stream carries its own `title` tag it
+/// therefore overrides the episode name we put in the `#EXTINF` line, so the OSD
+/// and window show the wrong title and the progress loop (which keys episodes by
+/// `media-title`) fails to match. This loop watches `playlist-pos` and, on every
+/// entry change, copies that entry's playlist title into `force-media-title`,
+/// guaranteeing the playlist name is what mpv displays and reports.
+///
+/// Exits when mpv's IPC disconnects.
+pub async fn force_playlist_title_loop(client: MpvClient) {
+    use serde_json::json;
+
+    let mut last_pos: i64 = -1;
+    loop {
+        let pos = match client
+            .command("get_property", &[json!("playlist-pos")])
+            .await
+        {
+            Ok(Some(v)) => v.as_i64().unwrap_or(-1),
+            Ok(None) => -1,
+            Err(_) => break,
+        };
+
+        if pos >= 0 && pos != last_pos {
+            // Read the title mpv parsed from the playlist's #EXTINF line.
+            let title = client
+                .command(
+                    "get_property",
+                    &[json!(format!("playlist/{pos}/title"))],
+                )
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .filter(|s| !s.is_empty());
+
+            if let Some(title) = title {
+                let _ = client
+                    .command(
+                        "set_property",
+                        &[json!("force-media-title"), json!(title)],
+                    )
+                    .await;
+            }
+            last_pos = pos;
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
 

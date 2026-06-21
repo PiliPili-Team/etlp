@@ -199,13 +199,29 @@ impl Default for DanDanSection {
 }
 
 /// `[gui]` section — download and cache options.
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct GuiSection {
     /// Download speed cap in MiB/s (0 = unlimited).
     pub speed_limit_mb: u64,
     /// Directory for the download cache; defaults to `{working_dir}/cache`.
     pub server_cache_path: Option<PathBuf>,
+    /// Launch hidden to the tray instead of showing the main window. Pairs with
+    /// OS autostart so the app starts quietly on login.
+    pub silent_start: bool,
+    /// Periodically check GitHub for a newer release and surface an update hint.
+    pub check_update: bool,
+}
+
+impl Default for GuiSection {
+    fn default() -> Self {
+        Self {
+            speed_limit_mb: 0,
+            server_cache_path: None,
+            silent_start: false,
+            check_update: true,
+        }
+    }
 }
 
 fn default_redirect_uri() -> String {
@@ -342,6 +358,33 @@ pub fn existing_config_path(dir: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
+/// Write TOML config text to `path` with platform-appropriate encoding,
+/// creating any missing parent directories.
+///
+/// On Windows the content is prefixed with a UTF-8 BOM so editors that would
+/// otherwise fall back to the legacy ANSI code page (e.g. Notepad on older
+/// builds) render multi-byte comments correctly instead of as mojibake. On
+/// other platforms any leading BOM is stripped to keep files clean. Because
+/// [`Config::load_file`] tolerates a BOM, the round-trip is lossless on every
+/// OS — a config saved on Windows still parses on macOS/Linux and vice versa.
+pub fn write_config_str(path: &Path, content: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let body = content.strip_prefix('\u{feff}').unwrap_or(content);
+    #[cfg(target_os = "windows")]
+    {
+        let mut bytes = Vec::with_capacity(body.len() + 3);
+        bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+        bytes.extend_from_slice(body.as_bytes());
+        std::fs::write(path, bytes)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::fs::write(path, body)
+    }
+}
+
 impl Config {
     /// Load `config.toml` from `dir`.
     pub fn load_from_dir(dir: &Path) -> Result<Self> {
@@ -397,10 +440,7 @@ impl Config {
     /// The written file is valid TOML that loads with all defaults; callers
     /// can pass the same path immediately to [`Config::load_file`].
     pub fn write_default(path: &Path) -> std::io::Result<()> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        std::fs::write(path, DEFAULT_CONFIG_TOML)
+        write_config_str(path, DEFAULT_CONFIG_TOML)
     }
 
     /// Return a `Config` with all fields at their defaults, pointing at `path`.
@@ -537,6 +577,32 @@ speed_dummy = 1.5
         write_config(dir.path(), "config.toml", &body);
         let cfg = Config::load_from_dir(dir.path()).expect("load bom");
         assert_eq!(cfg.emby.player, "mpv");
+    }
+
+    #[test]
+    fn write_config_str_roundtrips() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("nested").join("config.toml");
+        // Parent dir does not exist yet; the writer must create it.
+        write_config_str(&path, "[emby]\nplayer = \"iina\"\n")
+            .expect("write config");
+        let cfg = Config::load_file(&path).expect("load written config");
+        assert_eq!(cfg.emby.player, "iina");
+    }
+
+    #[test]
+    fn write_config_str_strips_incoming_bom() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        // Even when the source carries a BOM, the file still parses cleanly
+        // (on Windows a single BOM is re-added; load_file tolerates it).
+        write_config_str(&path, "\u{feff}[emby]\nplayer = \"vlc\"\n")
+            .expect("write config");
+        let cfg = Config::load_file(&path).expect("load");
+        assert_eq!(cfg.emby.player, "vlc");
+        let raw = std::fs::read(&path).expect("read raw");
+        // The body must never contain a double BOM.
+        assert!(!raw.starts_with(&[0xEF, 0xBB, 0xBF, 0xEF, 0xBB, 0xBF]));
     }
 
     #[test]

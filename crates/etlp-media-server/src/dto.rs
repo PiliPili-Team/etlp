@@ -122,6 +122,19 @@ pub struct Item {
     pub chapters: Vec<Chapter>,
     #[serde(rename = "ProviderIds", default)]
     pub provider_ids: BTreeMap<String, String>,
+    /// Per-user playback state; only populated when the request carries a
+    /// `UserId` and requests the `UserData` field. Used to backfill earlier
+    /// episodes the user already watched in the media-server client.
+    #[serde(rename = "UserData", default)]
+    pub user_data: Option<UserData>,
+}
+
+/// Per-user item state returned in the `UserData` field.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct UserData {
+    /// Whether the user has marked the item as played/watched.
+    #[serde(rename = "Played", default)]
+    pub played: bool,
 }
 
 /// Response of `Items/{id}/PlaybackInfo`.

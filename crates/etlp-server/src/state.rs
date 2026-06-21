@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
 
@@ -35,6 +36,10 @@ pub struct AppState {
     /// Persistent device identifier; used as fallback when the request
     /// does not carry a DeviceId query parameter.
     pub device_id: String,
+    /// Timestamps of recent third-party watch-history syncs, keyed by
+    /// `"{provider}:{netloc}:{item_id}"`. Used to throttle repeated marks of the
+    /// same item when it is finished several times in quick succession.
+    pub recent_syncs: RwLock<HashMap<String, Instant>>,
 }
 
 /// The shared handle used by every route handler.
@@ -57,7 +62,31 @@ impl AppState {
             config: RwLock::new(config),
             working_dir,
             device_id: crate::platform::device_id::load_or_create(),
+            recent_syncs: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Throttle window for repeated third-party syncs of the same item.
+    const SYNC_THROTTLE: Duration = Duration::from_secs(600);
+
+    /// Whether syncing `key` should be skipped because it was already synced
+    /// within [`Self::SYNC_THROTTLE`].
+    ///
+    /// On a `false` return (not throttled) the call records `key`'s timestamp,
+    /// so an immediate repeat for the same item is throttled. Stale entries are
+    /// pruned opportunistically to bound the map's size. A poisoned lock fails
+    /// open (returns `false`) so a lock error never blocks legitimate syncs.
+    pub fn sync_recently_done(&self, key: &str) -> bool {
+        let now = Instant::now();
+        let Ok(mut map) = self.recent_syncs.write() else {
+            return false;
+        };
+        map.retain(|_, t| now.duration_since(*t) < Self::SYNC_THROTTLE);
+        if map.contains_key(key) {
+            return true;
+        }
+        map.insert(key.to_owned(), now);
+        false
     }
 }
 

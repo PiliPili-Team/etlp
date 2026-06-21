@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use tauri::State;
 use tower::Layer;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use etlp_config::Config;
 use etlp_download::{
@@ -40,7 +40,7 @@ impl Default for GuiState {
             app_state: Mutex::new(None),
             shutdown_tx: Mutex::new(None),
             port: AtomicU16::new(58000),
-            log_file: Mutex::new(data.join("etlp.log")),
+            log_file: Mutex::new(platform::log_dir_in(&data).join("etlp.log")),
             log_read_pos: Mutex::new(0),
             log_handle: Mutex::new(None),
         }
@@ -81,6 +81,8 @@ pub struct ConfigDto {
     pub version_filter: String,
     // [gui]
     pub speed_limit_mb: u64,
+    pub silent_start: bool,
+    pub check_update: bool,
     // [trakt]
     pub trakt_client_id: String,
     pub trakt_client_secret: String,
@@ -120,6 +122,8 @@ impl From<&Config> for ConfigDto {
             item_limit: c.playlist.item_limit,
             version_filter: c.playlist.version_filter.clone(),
             speed_limit_mb: c.gui.speed_limit_mb,
+            silent_start: c.gui.silent_start,
+            check_update: c.gui.check_update,
             trakt_client_id: c.trakt.client_id.clone(),
             trakt_client_secret: c.trakt.client_secret.clone(),
             trakt_user_name: c.trakt.user_name.clone(),
@@ -151,6 +155,9 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         .ok_or_else(|| "cannot determine data directory".to_owned())?;
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("create data dir: {e}"))?;
+    // Relocate any legacy flat-layout files and ensure the log/ dir exists.
+    platform::migrate_layout(&data_dir);
+    std::fs::create_dir_all(platform::log_dir_in(&data_dir)).ok();
 
     let config = load_or_default_config(&cfg_dir)?;
 
@@ -884,7 +891,7 @@ pub async fn get_log_paths(
             c.dev
                 .mpv_input_ipc_server
                 .as_ref()
-                .and_then(|_| platform::data_dir().map(|d| d.join("mpv.log")))
+                .and_then(|_| platform::log_dir().map(|d| d.join("mpv.log")))
         });
 
     Ok(serde_json::json!({
@@ -905,8 +912,8 @@ pub fn path_exists(path: String) -> bool {
 /// The frontend maps this to a localized "stop the service first" message.
 pub const ERR_SERVICE_RUNNING: &str = "SERVICE_RUNNING";
 
-/// Paths whose contents count as clearable cache: the app log (`etlp.log`) and
-/// the mpv log (`mpv.log`), both written under the data directory.
+/// Log files that count as clearable cache: the app log (`etlp.log`) and the
+/// mpv log (`mpv.log`), both written under the `log/` sub-directory.
 fn cache_log_paths(state: &GuiState) -> Result<Vec<PathBuf>, String> {
     let app_log = state
         .log_file
@@ -914,29 +921,61 @@ fn cache_log_paths(state: &GuiState) -> Result<Vec<PathBuf>, String> {
         .map_err(|e| format!("lock log_file: {e}"))?
         .clone();
     let mut paths = vec![app_log];
-    if let Some(data) = platform::data_dir() {
-        paths.push(data.join("mpv.log"));
+    if let Some(log) = platform::log_dir() {
+        paths.push(log.join("mpv.log"));
     }
     Ok(paths)
 }
 
-/// Total size in bytes of the clearable cache (sum of the existing log files).
+/// Recursively sum the byte size of every regular file under `dir`, skipping
+/// `exclude` (and anything beneath it).
+///
+/// Missing directories contribute zero so a fresh install reports no cache.
+/// `exclude` keeps config backups out of the cache total even if they were ever
+/// nested inside the cache tree.
+fn dir_size(dir: &std::path::Path, exclude: Option<&std::path::Path>) -> u64 {
+    let mut total = 0u64;
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if exclude.is_some_and(|ex| path == ex) {
+            continue;
+        }
+        match entry.file_type() {
+            Ok(ft) if ft.is_dir() => total += dir_size(&path, exclude),
+            Ok(ft) if ft.is_file() => {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+            _ => {}
+        }
+    }
+    total
+}
+
+/// Total clearable cache size: the log files plus everything under `cache/`.
 #[tauri::command]
 pub async fn get_cache_size(state: State<'_, GuiState>) -> Result<u64, String> {
-    let total = cache_log_paths(&state)?
+    let mut total: u64 = cache_log_paths(&state)?
         .iter()
         .filter_map(|p| std::fs::metadata(p).ok())
         .map(|m| m.len())
         .sum();
+    if let Some(cache) = platform::cache_dir() {
+        // Config backups are not cache — never count them.
+        total += dir_size(&cache, platform::backup_dir().as_deref());
+    }
     Ok(total)
 }
 
-/// Clear the cache by truncating the log files to zero length.
+/// Clear the cache: truncate the log files and delete everything under `cache/`.
 ///
 /// Refuses while the service is running (returns [`ERR_SERVICE_RUNNING`]).
-/// Truncation rather than deletion is deliberate: it is race-safe against a
-/// logger that still holds the file open — the writer keeps appending past the
-/// new zero offset instead of failing, and no open handle is invalidated.
+/// Logs are truncated rather than deleted — that is race-safe against a logger
+/// that still holds the file open. The `cache/` tree (download cache, bangumi
+/// subject cache, future per-feature caches) is removed entirely and recreated
+/// empty, since the service is stopped and holds no handles into it.
 /// Returns the number of bytes freed.
 #[tauri::command]
 pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
@@ -959,6 +998,34 @@ pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
             Err(e) => errors.push(format!("{}: {e}", path.display())),
         }
     }
+    if let Some(cache) = platform::cache_dir()
+        && cache.is_dir()
+    {
+        // Clear the cache tree entry-by-entry, preserving config backups: they
+        // are not cache and must survive a cache clear (they live under
+        // `backup/`, but skip the dir explicitly so the guarantee holds even if
+        // that ever moves under `cache/`).
+        let backup = platform::backup_dir();
+        freed += dir_size(&cache, backup.as_deref());
+        if let Ok(entries) = std::fs::read_dir(&cache) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if backup.as_deref().is_some_and(|ex| path == ex) {
+                    continue;
+                }
+                let is_dir =
+                    entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+                let res = if is_dir {
+                    std::fs::remove_dir_all(&path)
+                } else {
+                    std::fs::remove_file(&path)
+                };
+                if let Err(e) = res {
+                    errors.push(format!("{}: {e}", path.display()));
+                }
+            }
+        }
+    }
     if errors.is_empty() {
         info!(freed, "cache cleared");
         Ok(freed)
@@ -967,12 +1034,165 @@ pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
     }
 }
 
+// ── Config backup / restore / reset ──────────────────────────────────────────────
+
+/// List existing config backups, newest first.
+#[tauri::command]
+pub async fn list_config_backups()
+-> Result<Vec<crate::backup::BackupEntry>, String> {
+    crate::backup::list_backups()
+}
+
+/// Create a timestamped backup of the current config; returns the new entry.
+#[tauri::command]
+pub async fn backup_config() -> Result<crate::backup::BackupEntry, String> {
+    let entry = crate::backup::create_backup()?;
+    info!(name = %entry.name, "config backed up");
+    Ok(entry)
+}
+
+/// Restore the config from a backup archive at `path`, then reload the server.
+#[tauri::command]
+pub async fn restore_config(
+    state: State<'_, GuiState>,
+    path: String,
+) -> Result<(), String> {
+    crate::backup::restore_backup(&path)?;
+    info!(path = %path, "config restored from backup");
+    // Push the restored config into a running server, if any.
+    let _ = reload_config(state).await;
+    Ok(())
+}
+
+/// Delete a backup archive at `path`.
+#[tauri::command]
+pub async fn delete_config_backup(path: String) -> Result<(), String> {
+    crate::backup::delete_backup(&path)?;
+    info!(path = %path, "config backup deleted");
+    Ok(())
+}
+
+/// Reveal a backup archive in the system file manager (selects the file).
+#[tauri::command]
+pub async fn reveal_config_backup(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt as _;
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|e| format!("reveal backup: {e}"))
+}
+
+/// Reset the config to the bundled default, then reload the server.
+#[tauri::command]
+pub async fn reset_config(state: State<'_, GuiState>) -> Result<(), String> {
+    crate::backup::reset_config()?;
+    info!("config reset to default");
+    let _ = reload_config(state).await;
+    Ok(())
+}
+
 // ── App info ───────────────────────────────────────────────────────────────────
 
 /// Return the application version string from the Cargo manifest.
 #[tauri::command]
 pub fn get_app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// GitHub repository releases are checked against, in `owner/repo` form.
+const GITHUB_REPO: &str = "PiliPili-Team/etlp";
+
+/// Result of an update check surfaced to the frontend.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UpdateInfo {
+    /// The running version.
+    pub current: String,
+    /// The latest release tag (without a leading `v`); empty when unknown.
+    pub latest: String,
+    /// Whether `latest` is newer than `current`.
+    pub has_update: bool,
+    /// The release page to open when the user chooses to update.
+    pub url: String,
+}
+
+/// Whether dotted-numeric version `a` is strictly newer than `b`.
+///
+/// Compares component by component (`0.0.3` > `0.0.2`); non-numeric suffixes on
+/// a component are ignored. Missing trailing components count as zero.
+fn version_gt(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.split('.')
+            .map(|p| {
+                p.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+                    .parse::<u64>()
+                    .unwrap_or(0)
+            })
+            .collect()
+    };
+    let (av, bv) = (parse(a), parse(b));
+    for i in 0..av.len().max(bv.len()) {
+        let x = av.get(i).copied().unwrap_or(0);
+        let y = bv.get(i).copied().unwrap_or(0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+/// Check GitHub for the latest release and compare it to the running version.
+///
+/// Queries the public releases API (no auth needed). Network or parse failures
+/// return an error string the frontend can surface; a malformed/empty tag fails
+/// safe as "no update".
+#[tauri::command]
+pub async fn check_update() -> Result<UpdateInfo, String> {
+    let current = env!("CARGO_PKG_VERSION").to_owned();
+    let api =
+        format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
+    let fallback_url =
+        format!("https://github.com/{GITHUB_REPO}/releases/latest");
+
+    let client = reqwest::Client::builder()
+        .user_agent(format!("etlp/{current}"))
+        .build()
+        .map_err(|e| format!("build client: {e}"))?;
+    let resp = client
+        .get(&api)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("update request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("github api status {}", resp.status().as_u16()));
+    }
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse release: {e}"))?;
+    let tag = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let url = json
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+        .unwrap_or(fallback_url);
+    let latest = tag.trim_start_matches(['v', 'V']).to_owned();
+    let has_update = !latest.is_empty() && version_gt(&latest, &current);
+    info!(current, latest, has_update, "update check");
+    Ok(UpdateInfo {
+        current,
+        latest,
+        has_update,
+        url,
+    })
 }
 
 /// List the available font families on the current system.
@@ -1091,13 +1311,7 @@ pub(crate) fn load_or_default_config(
 ) -> Result<Config, String> {
     use etlp_config::ConfigError;
     let result = match Config::load_from_dir(cfg_dir) {
-        Ok(c) => {
-            info!(
-                path = %c.path().display(),
-                "config loaded"
-            );
-            Ok(c)
-        }
+        Ok(c) => Ok(c),
         Err(ConfigError::NotFound(_)) => {
             let path = cfg_dir.join("config.toml");
             write_default_config(&path)?;
@@ -1131,24 +1345,14 @@ pub(crate) fn load_or_default_config(
         }
     }?;
 
-    // Emit current config as JSON at debug level so problems can be diagnosed
-    // without grepping TOML files.
-    let dto = ConfigDto::from(&result);
-    match serde_json::to_string(&dto) {
-        Ok(json) => debug!(config_json = %json, "current config"),
-        Err(e) => warn!("config JSON serialise failed: {e}"),
-    }
-
     Ok(result)
 }
 
-fn write_default_config(path: &std::path::Path) -> Result<(), String> {
+pub(crate) fn write_default_config(
+    path: &std::path::Path,
+) -> Result<(), String> {
     let template = default_config_template();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create config dir: {e}"))?;
-    }
-    match std::fs::write(path, &template) {
+    match etlp_config::write_config_str(path, &template) {
         Ok(()) => {
             info!(path = %path.display(), "default config written");
             Ok(())
@@ -1189,8 +1393,20 @@ fn default_config_template() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::read_lines_before;
+    use super::{read_lines_before, version_gt};
     use std::io::Write as _;
+
+    #[test]
+    fn version_gt_compares_numeric_components() {
+        assert!(version_gt("0.0.3", "0.0.2"));
+        assert!(version_gt("0.1.0", "0.0.9"));
+        assert!(version_gt("1.0.0", "0.9.9"));
+        assert!(!version_gt("0.0.2", "0.0.2"));
+        assert!(!version_gt("0.0.2", "0.0.3"));
+        // Missing trailing components count as zero.
+        assert!(version_gt("1.2", "1.1.9"));
+        assert!(!version_gt("1.2", "1.2.0"));
+    }
 
     fn write_tmp(content: &str) -> tempfile::NamedTempFile {
         let mut f = tempfile::NamedTempFile::new().expect("tempfile");

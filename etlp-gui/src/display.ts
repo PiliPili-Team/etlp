@@ -18,6 +18,8 @@ export interface DisplaySettings {
     zoom: number;
     fontFamily: string;
     accentColor: AccentColor;
+    /** Vertically center the sidebar nav items as a group (default: top-aligned). */
+    centerNav: boolean;
 }
 
 /** [light-hex, dark-hex, soft-rgba] */
@@ -40,6 +42,7 @@ export function defaultDisplay(): DisplaySettings {
         zoom: 1,
         fontFamily: "",
         accentColor: "blue",
+        centerNav: false,
     };
 }
 
@@ -66,4 +69,5 @@ export function applyDisplay(s: DisplaySettings) {
     const [, dark, soft] = ACCENT_PALETTES[s.accentColor ?? "blue"];
     root.style.setProperty("--accent", dark);
     root.style.setProperty("--accent-soft", soft);
+    root.setAttribute("data-center-nav", s.centerNav ? "true" : "false");
 }

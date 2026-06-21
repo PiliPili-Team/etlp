@@ -81,6 +81,29 @@ impl EmbyClient {
         self.http.get_json(&url, &params).await
     }
 
+    /// `Shows/{show_id}/Episodes` with per-user watched status.
+    ///
+    /// Like [`Self::episodes`] but bound to the client's `user_id` and requesting
+    /// the `UserData` field, so each returned item carries its `played` flag.
+    /// Used to backfill earlier episodes the user already watched in the
+    /// media-server client before third-party sync was enabled.
+    pub async fn episodes_with_status(
+        &self,
+        show_id: &str,
+        season_id: Option<&str>,
+    ) -> Result<ItemList, NetError> {
+        let url = self.url(&format!("Shows/{show_id}/Episodes"));
+        let mut params = vec![
+            ("Fields", "ProviderIds,PremiereDate,UserData"),
+            ("UserId", self.user_id.as_str()),
+            ("X-Emby-Token", self.api_key.as_str()),
+        ];
+        if let Some(season_id) = season_id {
+            params.push(("SeasonId", season_id));
+        }
+        self.http.get_json(&url, &params).await
+    }
+
     /// Build the direct-stream URL for an item.
     ///
     /// `container` defaults to `"mkv"` when absent. If `media_source_id` is

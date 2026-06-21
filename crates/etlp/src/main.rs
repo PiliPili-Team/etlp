@@ -71,13 +71,17 @@ async fn main() {
     // `dev.mix_log = false` disables log masking; absent keeps the default true.
     let mix_log = config.dev.mix_log;
     let log_level = config.dev.log_level.clone();
-    // Use the configured log file, or default to data_dir/etlp.log.
+    // Relocate any legacy flat-layout files into the log/ and cache/ dirs.
+    let _ = std::fs::create_dir_all(&data_dir);
+    platform::migrate_layout(&data_dir);
+    let log_dir = platform::log_dir_in(&data_dir);
+    let _ = std::fs::create_dir_all(&log_dir);
+    // Use the configured log file, or default to log/etlp.log.
     let log_file = config
         .dev
         .log_file
         .clone()
-        .or_else(|| Some(data_dir.join("etlp.log")));
-    let _ = std::fs::create_dir_all(&data_dir);
+        .or_else(|| Some(log_dir.join("etlp.log")));
 
     let _ = init_logging(Masker::new(mix_log), &log_level, log_file.as_deref());
 

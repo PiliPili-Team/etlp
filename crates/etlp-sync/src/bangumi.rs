@@ -134,6 +134,152 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
     prev.last().copied().unwrap_or(0)
 }
 
+/// Detect the season number stated in a subject's titles, if any.
+///
+/// Bangumi splits a franchise into one subject per season, and the season is
+/// usually spelled out in the title — e.g. `4th season`, `Season 2`, `第四季`,
+/// `第2期`, `二期`. Returns the parsed number, or `None` when no season marker
+/// is present (which is the normal case for a first season). Both the native
+/// (`name`) and Chinese (`name_cn`) titles are inspected.
+fn season_from_title(name: &str, name_cn: &str) -> Option<u32> {
+    english_season(&name.to_lowercase())
+        .or_else(|| english_season(&name_cn.to_lowercase()))
+        .or_else(|| cjk_season(name))
+        .or_else(|| cjk_season(name_cn))
+}
+
+/// Parse an English season marker (`season 4`, `4th season`, `season4`).
+fn english_season(lower: &str) -> Option<u32> {
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    for (i, w) in words.iter().enumerate() {
+        // Compact form: "season4".
+        if let Some(rest) = w.strip_prefix("season")
+            && let Some(n) = leading_u32(rest)
+        {
+            return Some(n);
+        }
+        if *w == "season" {
+            // "season 4"
+            if let Some(next) = words.get(i + 1)
+                && let Some(n) = leading_u32(next)
+            {
+                return Some(n);
+            }
+            // "4th season"
+            if i > 0
+                && let Some(prev) = words.get(i - 1)
+                && let Some(n) = leading_u32(prev)
+            {
+                return Some(n);
+            }
+        }
+    }
+    None
+}
+
+/// Parse a CJK season marker: a numeral run immediately before `季`/`期`/`部`.
+fn cjk_season(s: &str) -> Option<u32> {
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c != '季' && c != '期' && c != '部' {
+            continue;
+        }
+        // Collect the numeral run ending just before this marker.
+        let mut j = i;
+        let mut run: Vec<char> = Vec::new();
+        while j > 0 {
+            let p = chars.get(j - 1).copied().unwrap_or(' ');
+            if p.is_ascii_digit() || cjk_digit(p).is_some() {
+                run.insert(0, p);
+                j -= 1;
+            } else {
+                break;
+            }
+        }
+        let parsed: String = run.into_iter().collect();
+        if let Some(n) = parse_numeral(&parsed) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// Leading ASCII digits of `s` parsed as a number (`"4th"` → `4`).
+fn leading_u32(s: &str) -> Option<u32> {
+    let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// Map a single CJK digit character to its value (`一`→1 … `十`→10).
+fn cjk_digit(c: char) -> Option<u32> {
+    match c {
+        '一' => Some(1),
+        '二' | '两' => Some(2),
+        '三' => Some(3),
+        '四' => Some(4),
+        '五' => Some(5),
+        '六' => Some(6),
+        '七' => Some(7),
+        '八' => Some(8),
+        '九' => Some(9),
+        '十' => Some(10),
+        _ => None,
+    }
+}
+
+/// Parse an Arabic or CJK numeral string (1–99) into a number.
+fn parse_numeral(s: &str) -> Option<u32> {
+    if s.is_empty() {
+        return None;
+    }
+    if let Ok(n) = s.parse::<u32>() {
+        return Some(n);
+    }
+    let chars: Vec<char> = s.chars().collect();
+    match chars.as_slice() {
+        [a] => cjk_digit(*a),
+        ['十', b] => cjk_digit(*b).map(|v| 10 + v),
+        [a, '十'] => cjk_digit(*a).map(|v| v * 10),
+        [a, '十', b] => match (cjk_digit(*a), cjk_digit(*b)) {
+            (Some(va), Some(vb)) => Some(va * 10 + vb),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Score how well `keyword` matches a candidate's titles.
+///
+/// Builds on [`title_similarity`] but treats substring containment as a strong
+/// signal: a season subject whose title embeds the base title (e.g.
+/// `Re:ゼロ… 4th season` contains `Re:ゼロ…`) would otherwise be penalised by the
+/// extra characters and fall below the acceptance threshold.
+fn base_match_score(keyword: &str, name: &str, name_cn: &str) -> f64 {
+    let mut best =
+        title_similarity(keyword, name).max(title_similarity(keyword, name_cn));
+    for cand in [name, name_cn] {
+        if title_contains(cand, keyword) || title_contains(keyword, cand) {
+            best = best.max(0.9);
+        }
+    }
+    best
+}
+
+/// Whether `haystack` contains `needle` after lowercasing and removing spaces.
+fn title_contains(haystack: &str, needle: &str) -> bool {
+    let norm = |s: &str| -> String {
+        s.to_lowercase()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect()
+    };
+    let n = norm(needle);
+    !n.is_empty() && norm(haystack).contains(&n)
+}
+
 /// Convert a leading `YYYY-MM-DD` date into a day index for comparison.
 ///
 /// Longer ISO strings (e.g. `2024-10-09T00:00:00Z`) are accepted by reading
@@ -429,34 +575,75 @@ impl BangumiApi {
         season: u32,
         min_score: f64,
     ) -> Result<Option<u64>> {
-        let mut best: Option<(f64, u64)> = None;
+        // Gather candidates from every keyword, de-duplicated by subject id.
+        let mut candidates: Vec<BangumiSearchSubject> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
-            let candidates =
-                self.search_subjects(keyword, None, None, 10).await?;
-            for candidate in &candidates {
-                let score = keywords
-                    .iter()
-                    .filter(|k| !k.trim().is_empty())
-                    .map(|k| {
-                        title_similarity(k, &candidate.name)
-                            .max(title_similarity(k, &candidate.name_cn))
-                    })
-                    .fold(0.0_f64, f64::max);
-                let is_better = match best {
-                    Some((b, _)) => score > b,
-                    None => true,
-                };
-                if score >= min_score && is_better {
-                    best = Some((score, candidate.id));
+            for candidate in
+                self.search_subjects(keyword, None, None, 10).await?
+            {
+                if seen.insert(candidate.id) {
+                    candidates.push(candidate);
                 }
             }
         }
-        let Some((score, root)) = best else {
+        if candidates.is_empty() {
+            debug!("bangumi: title search returned no candidates");
+            return Ok(None);
+        }
+
+        let score_of = |c: &BangumiSearchSubject| -> f64 {
+            keywords
+                .iter()
+                .filter(|k| !k.trim().is_empty())
+                .map(|k| base_match_score(k, &c.name, &c.name_cn))
+                .fold(0.0_f64, f64::max)
+        };
+
+        // Direct hit: a candidate whose own title states the target season and
+        // whose base title matches. This handles franchises with continuous
+        // episode numbering, where the sequel-chain heuristics are unreliable.
+        if season > 1 {
+            let mut direct: Option<(f64, u64)> = None;
+            for c in &candidates {
+                let score = score_of(c);
+                if score >= min_score
+                    && season_from_title(&c.name, &c.name_cn) == Some(season)
+                    && direct.is_none_or(|(b, _)| score > b)
+                {
+                    direct = Some((score, c.id));
+                }
+            }
+            if let Some((score, id)) = direct {
+                debug!(
+                    id,
+                    score, season, "bangumi: resolved season subject by title"
+                );
+                return Ok(Some(id));
+            }
+        }
+
+        // Otherwise pick the franchise root: the best base-title match, biased
+        // toward a first-season title so the sequel walk starts at the root.
+        let mut root: Option<(f64, u64)> = None;
+        for c in &candidates {
+            let score = score_of(c);
+            if score < min_score {
+                continue;
+            }
+            let is_root =
+                season_from_title(&c.name, &c.name_cn).is_none_or(|s| s <= 1);
+            let rank = if is_root { score + 1.0 } else { score };
+            if root.is_none_or(|(b, _)| rank > b) {
+                root = Some((rank, c.id));
+            }
+        }
+        let Some((rank, root_id)) = root else {
             debug!("bangumi: no subject candidate cleared min_score");
             return Ok(None);
         };
-        debug!(root, score, season, "bangumi: resolved franchise root");
-        self.season_subject_id(root, season).await
+        debug!(root_id, rank, season, "bangumi: resolved franchise root");
+        self.season_subject_id(root_id, season).await
     }
 
     /// Walk the `续集` (sequel) chain to the subject representing `season`.
@@ -484,6 +671,25 @@ impl BangumiApi {
                 debug!(current, "bangumi: sequel chain ended before season");
                 return Ok(None);
             };
+            // Prefer the season stated in the sequel's own title: it is exact
+            // even when episodes are numbered continuously across the franchise
+            // (where the episode-count heuristic below cannot tell a new season
+            // from a split-cour continuation).
+            if let Some(s) = season_from_title(&sequel.name, &sequel.name_cn) {
+                if s == season {
+                    return Ok(Some(sequel.id));
+                }
+                if s > season {
+                    debug!(current, "bangumi: sequel chain overshot season");
+                    return Ok(None);
+                }
+                counter = s;
+                current = sequel.id;
+                continue;
+            }
+            // Fallback when the title carries no season marker: treat a sequel
+            // that restarts numbering (first sort ≤ 1, more than three episodes)
+            // as the next season.
             let episodes = self.get_episodes(sequel.id).await?;
             let is_season = episodes.total > 3
                 && episodes.data.first().is_some_and(|e| e.sort <= 1.0);
@@ -1218,6 +1424,72 @@ mod tests {
         assert!(title_similarity("abcdef", "zzzzzz") < 0.2);
         // Near matches score high.
         assert!(title_similarity("進撃の巨人", "進撃の巨人 2") > 0.7);
+    }
+
+    // ── season_from_title ─────────────────────────────────────────────────────
+
+    #[test]
+    fn season_from_title_parses_english_and_cjk() {
+        // English forms.
+        assert_eq!(
+            season_from_title("Re:Zero 4th season 喪失編 TV", ""),
+            Some(4)
+        );
+        assert_eq!(season_from_title("Attack on Titan Season 2", ""), Some(2));
+        assert_eq!(season_from_title("Show season3", ""), Some(3));
+        // CJK forms.
+        assert_eq!(season_from_title("", "从零开始 第四季 丧失篇"), Some(4));
+        assert_eq!(season_from_title("", "进击的巨人 第2期"), Some(2));
+        assert_eq!(season_from_title("", "某番 二期"), Some(2));
+        // No marker → None (a first season).
+        assert_eq!(season_from_title("Re:Zero", "从零开始"), None);
+    }
+
+    #[test]
+    fn base_match_score_rewards_containment() {
+        // The longer season title embeds the base keyword, so it must clear a
+        // typical acceptance threshold despite the extra characters.
+        let score = base_match_score(
+            "Re:ゼロから始める異世界生活",
+            "Re:ゼロから始める異世界生活 4th season 喪失編 TV",
+            "Re：从零开始的异世界生活 第四季 丧失篇",
+        );
+        assert!(score >= 0.9, "containment should score high, got {score}");
+    }
+
+    #[tokio::test]
+    async fn resolve_subject_picks_season_directly_by_title() {
+        // Re:Zero S4 case: the season subject is in the search results and its
+        // title states "4th season", so it is selected without walking the
+        // sequel chain (which would fail on continuous episode numbering).
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "id": 100, "name": "Re:ゼロから始める異世界生活",
+                          "name_cn": "Re：从零开始的异世界生活" },
+                        { "id": 547888,
+                          "name": "Re:ゼロから始める異世界生活 4th season 喪失編 TV",
+                          "name_cn": "Re：从零开始的异世界生活 第四季 丧失篇" }
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let id = api
+            .resolve_subject_id(
+                &["Re:ゼロから始める異世界生活", "Re：从零开始的异世界生活"],
+                4,
+                0.6,
+            )
+            .await
+            .unwrap();
+        assert_eq!(id, Some(547888));
     }
 
     // ── date helpers ──────────────────────────────────────────────────────────

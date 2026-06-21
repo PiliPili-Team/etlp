@@ -1,5 +1,6 @@
 //! Tauri application entry point for etlp GUI.
 
+pub mod backup;
 pub mod commands;
 pub mod config_patch;
 
@@ -136,6 +137,23 @@ fn build_tray_menu(
         .build()
 }
 
+/// Rebuild the tray menu to reflect the service's running state. Best-effort:
+/// a missing tray or menu-build error is ignored.
+fn refresh_tray_running(app: &tauri::AppHandle, running: bool) {
+    if let Some(tray) = app.tray_by_id("")
+        && let Ok(menu) = build_tray_menu(app, &TrayLabels::detect(), running)
+    {
+        let _ = tray.set_menu(Some(menu));
+    }
+}
+
+/// Show a best-effort system notification. Failures (e.g. permissions denied)
+/// are ignored so notification problems never affect the app.
+fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
+    use tauri_plugin_notification::NotificationExt as _;
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -149,15 +167,28 @@ pub fn run() {
     let data_dir = etlp_server::platform::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     std::fs::create_dir_all(&data_dir).ok();
-    let log_file = data_dir.join("etlp.log");
+    // Relocate legacy flat-layout files (etlp.log, mpv.log, bangumi cache) into
+    // the new log/ and cache/ sub-directories before opening any of them.
+    etlp_server::platform::migrate_layout(&data_dir);
+    let log_dir = etlp_server::platform::log_dir_in(&data_dir);
+    std::fs::create_dir_all(&log_dir).ok();
+    let log_file = log_dir.join("etlp.log");
 
     // Read the config early so we can honour dev.log_level from the very first
-    // log line.  Failures are silently ignored here — the server will re-read
-    // and report the error when it starts up.
-    let initial_log_level = etlp_server::platform::config_dir()
-        .and_then(|d| etlp_config::Config::load_from_dir(&d).ok())
+    // log line and decide whether to start hidden.  Failures are silently
+    // ignored here — the server will re-read and report the error on startup.
+    let initial_config = etlp_server::platform::config_dir()
+        .and_then(|d| etlp_config::Config::load_from_dir(&d).ok());
+    let initial_log_level = initial_config
+        .as_ref()
         .map(|c| c.dev.log_level.clone())
         .unwrap_or_else(|| "info".to_owned());
+    // Silent start: when enabled, launch straight to the tray without showing
+    // the main window (pairs with OS autostart for a quiet login).
+    let silent_start = initial_config
+        .as_ref()
+        .map(|c| c.gui.silent_start)
+        .unwrap_or(false);
 
     let masker = etlp_logging::Masker::new(false);
     let log_handle = etlp_logging::init(
@@ -206,6 +237,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(gui_state)
         .setup(move |app| {
@@ -333,8 +365,43 @@ pub fn run() {
                 }
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
-                let _ = window.show();
-                let _ = window.set_focus();
+                // When silent start is enabled the window stays hidden and the
+                // app lives in the tray until the user opens it.
+                if !silent_start {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+
+            // Silent start also brings the local service up so the app is
+            // usable straight from the tray. A startup failure (e.g. a port
+            // conflict) is logged and surfaced as a system notification — never
+            // a crash, since there is no window to report it.
+            if silent_start {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<GuiState>();
+                    match commands::start_server(state).await {
+                        Ok(port) => {
+                            tracing::info!(
+                                port,
+                                "silent start: service started"
+                            );
+                            refresh_tray_running(&app_handle, true);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "silent start: service failed to start: {e}"
+                            );
+                            let body = if sys_is_chinese() {
+                                format!("服务启动失败：{e}")
+                            } else {
+                                format!("Failed to start service: {e}")
+                            };
+                            notify(&app_handle, "etlp", &body);
+                        }
+                    }
+                });
             }
 
             Ok(())
@@ -361,9 +428,16 @@ pub fn run() {
             commands::get_log_paths,
             commands::get_cache_size,
             commands::clear_cache,
+            commands::list_config_backups,
+            commands::backup_config,
+            commands::restore_config,
+            commands::delete_config_backup,
+            commands::reveal_config_backup,
+            commands::reset_config,
             commands::pick_player_path,
             commands::path_exists,
             commands::get_app_version,
+            commands::check_update,
             commands::list_system_fonts,
             commands::set_autostart,
             commands::get_autostart,

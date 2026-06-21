@@ -88,6 +88,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Full history + tags so the changelog can diff against the previous tag.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -100,9 +105,21 @@ jobs:
           echo "Checksums:"
           cat ../etlp-gui.sha512sum
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          bash scripts/gen-changelog.sh --tag "${GITHUB_REF_NAME}" > release_body.md || true
+          if [ -s release_body.md ]; then
+            echo "omit=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "omit=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Release packages + checksum kept 60 days
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe,etlp-gui.sha512sum"
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
+          bodyFile: release_body.md
+          omitBody: ${{ steps.changelog.outputs.omit }}

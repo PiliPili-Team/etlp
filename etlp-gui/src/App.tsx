@@ -90,19 +90,21 @@ function IconNetwork() {
 }
 
 function IconSystem() {
+    // Cog/gear, in the line-art style (currentColor stroke) shared by the other
+    // nav icons.
     return (
         <svg
-            viewBox="0 0 20 20"
+            viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.6"
+            strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
             width="18"
             height="18"
         >
-            <circle cx="10" cy="10" r="2.8" />
-            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" />
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
     );
 }
@@ -123,6 +125,17 @@ function IconLogs() {
             <line x1="6" y1="7" x2="14" y2="7" />
             <line x1="6" y1="10.5" x2="14" y2="10.5" />
             <line x1="6" y1="14" x2="10" y2="14" />
+        </svg>
+    );
+}
+
+function IconConfig() {
+    // Sliders/adjustment glyph (from 配置管理.svg). Uses `fill="currentColor"`
+    // — like the Bangumi/Trakt brand icons — so it inherits the nav item color
+    // and adapts to theme and active state instead of the source's fixed white.
+    return (
+        <svg viewBox="0 0 1024 1024" fill="currentColor" width="18" height="18">
+            <path d="M114.11 276.65h474.9c13.49 54.81 63.05 95.59 121.96 95.59s108.47-40.78 121.96-95.59h76.86c16.57 0 30-13.43 30-30s-13.43-30-30-30h-76.86c-13.49-54.81-63.05-95.59-121.96-95.59s-108.47 40.78-121.96 95.59h-474.9c-16.57 0-30 13.43-30 30s13.43 30 30 30z m596.85-95.59c36.17 0 65.59 29.42 65.59 65.59s-29.42 65.59-65.59 65.59-65.59-29.42-65.59-65.59 29.42-65.59 65.59-65.59zM114.11 542h97.06c13.49 54.81 63.04 95.59 121.96 95.59S441.6 596.81 455.09 542h454.8c16.57 0 30-13.43 30-30s-13.43-30-30-30h-454.8c-13.49-54.81-63.04-95.59-121.96-95.59S224.66 427.19 211.17 482h-97.06c-16.57 0-30 13.43-30 30s13.43 30 30 30z m219.02-95.59c36.17 0 65.59 29.42 65.59 65.59s-29.42 65.59-65.59 65.59-65.59-29.42-65.59-65.59 29.42-65.59 65.59-65.59z m576.75 300.94H737.33c-13.49-54.81-63.05-95.59-121.96-95.59s-108.47 40.78-121.96 95.59h-379.3c-16.57 0-30 13.43-30 30s13.43 30 30 30h379.31c13.49 54.81 63.04 95.59 121.96 95.59s108.47-40.78 121.96-95.59h172.55c16.57 0 30-13.43 30-30s-13.43-30-30-30z m-294.51 95.59c-36.17 0-65.59-29.42-65.59-65.59s29.42-65.59 65.59-65.59 65.59 29.42 65.59 65.59-29.42 65.59-65.59 65.59z" />
         </svg>
     );
 }
@@ -272,6 +285,7 @@ type TabId =
     | "player"
     | "version-prefer"
     | "network"
+    | "config"
     | "system"
     | "bangumi"
     | "trakt"
@@ -283,11 +297,23 @@ const VALID_TABS: TabId[] = [
     "player",
     "version-prefer",
     "network",
+    "config",
     "system",
     "bangumi",
     "trakt",
     "logs",
 ];
+
+export interface UpdateInfo {
+    current: string;
+    latest: string;
+    has_update: boolean;
+    url: string;
+}
+
+// Stores the version the user dismissed so the banner stays hidden until a
+// newer release appears.
+const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
 
 interface AppInnerProps {
     display: DisplaySettings;
@@ -303,7 +329,39 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     });
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [showAbout, setShowAbout] = useState(false);
+    const [update, setUpdate] = useState<UpdateInfo | null>(null);
     const toastIdRef = useRef(0);
+
+    // Auto update check: runs once per app launch (independent of the active
+    // tab), gated by the user's `check_update` setting (default on). A version
+    // the user dismissed stays hidden until a newer one appears.
+    useEffect(() => {
+        let cancelled = false;
+        const run = async () => {
+            try {
+                const cfg = await invoke<{ check_update: boolean }>("get_config");
+                if (!cfg.check_update) return;
+                const info = await invoke<UpdateInfo>("check_update");
+                if (cancelled || !info.has_update) return;
+                if (localStorage.getItem(UPDATE_DISMISS_KEY) === info.latest) return;
+                setUpdate(info);
+            } catch {
+                /* offline or rate-limited — silently skip */
+            }
+        };
+        const id = setTimeout(run, 0);
+        return () => {
+            cancelled = true;
+            clearTimeout(id);
+        };
+    }, []);
+
+    const dismissUpdate = useCallback(() => {
+        setUpdate((u) => {
+            if (u) localStorage.setItem(UPDATE_DISMISS_KEY, u.latest);
+            return null;
+        });
+    }, []);
 
     useEffect(() => {
         document.body.className = platform !== "unknown" ? `platform-${platform}` : "";
@@ -374,12 +432,17 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         // Config is intentionally last so the System tab (with destructive
         // actions like cache clearing) stays at the bottom of the sidebar.
         {
-            label: t("nav_sec_config"),
+            label: t("nav_sec_settings"),
             items: [
                 {
                     id: "network" as TabId,
                     icon: <IconNetwork />,
                     label: t("nav_network"),
+                },
+                {
+                    id: "config" as TabId,
+                    icon: <IconConfig />,
+                    label: t("nav_config"),
                 },
                 { id: "system" as TabId, icon: <IconSystem />, label: t("nav_system") },
             ],
@@ -427,10 +490,17 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 </nav>
 
                 <main className="content">
-                    {tab === "overview" && <Overview addToast={addToast} />}
+                    {tab === "overview" && (
+                        <Overview
+                            addToast={addToast}
+                            update={update}
+                            onDismissUpdate={dismissUpdate}
+                        />
+                    )}
                     {(tab === "player" ||
                         tab === "version-prefer" ||
                         tab === "network" ||
+                        tab === "config" ||
                         tab === "system" ||
                         tab === "bangumi" ||
                         tab === "trakt") && (
