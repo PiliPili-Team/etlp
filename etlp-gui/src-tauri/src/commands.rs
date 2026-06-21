@@ -1269,46 +1269,153 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
     })
 }
 
+/// Font directories to scan, covering both system-wide and per-user locations.
+///
+/// User locations matter: fonts a user installs themselves (e.g. via Font Book
+/// on macOS or the "Install for me" option on Windows) land under the home
+/// directory and would otherwise be missed.
+fn font_directories() -> Vec<std::path::PathBuf> {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    let home = dirs::home_dir();
+
+    #[cfg(target_os = "macos")]
+    {
+        dirs.push("/System/Library/Fonts".into());
+        dirs.push("/System/Library/Fonts/Supplemental".into());
+        dirs.push("/Library/Fonts".into());
+        if let Some(h) = &home {
+            dirs.push(h.join("Library/Fonts"));
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        dirs.push(r"C:\Windows\Fonts".into());
+        // Per-user fonts (Windows 10 1809+): %LOCALAPPDATA%\Microsoft\Windows\Fonts.
+        if let Some(local) = dirs::data_local_dir() {
+            dirs.push(local.join("Microsoft").join("Windows").join("Fonts"));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        dirs.push("/usr/share/fonts".into());
+        dirs.push("/usr/local/share/fonts".into());
+        if let Some(h) = &home {
+            dirs.push(h.join(".fonts"));
+            dirs.push(h.join(".local/share/fonts"));
+        }
+    }
+
+    dirs
+}
+
+/// Collect font files under `dir` recursively, up to `depth` levels deep.
+///
+/// Font directories (notably on Linux) nest by foundry/family, so a flat scan
+/// would miss most files; the depth bound keeps the walk cheap and avoids
+/// pathological recursion.
+fn collect_font_files(
+    dir: &std::path::Path,
+    depth: u8,
+    out: &mut Vec<std::path::PathBuf>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if depth > 0 {
+                collect_font_files(&path, depth - 1, out);
+            }
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_default();
+        if matches!(ext.as_str(), "ttf" | "otf" | "ttc" | "dfont") {
+            out.push(path);
+        }
+    }
+}
+
+/// Read a font file and return its family name(s), preferring the typographic
+/// family and a Latin-script name so the value matches what CSS `font-family`
+/// expects. Falls back to nothing on parse failure (the caller keeps the stem).
+fn font_family_names(path: &std::path::Path) -> Vec<String> {
+    let Ok(data) = std::fs::read(path) else {
+        return Vec::new();
+    };
+    let face_count = ttf_parser::fonts_in_collection(&data).unwrap_or(1).max(1);
+    let mut names: Vec<String> = Vec::new();
+    for index in 0..face_count {
+        if let Ok(face) = ttf_parser::Face::parse(&data, index)
+            && let Some(name) = best_family_name(&face)
+        {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Pick the best family name from a parsed face: the typographic family (name
+/// id 16) wins over the legacy family (id 1), and a Latin-script entry wins over
+/// a localized one so the picker shows e.g. "LXGW WenKai" rather than "霞鹜文楷".
+fn best_family_name(face: &ttf_parser::Face) -> Option<String> {
+    use ttf_parser::name_id;
+    let mut best: Option<(u8, bool, String)> = None;
+    for name in face.names() {
+        let priority = match name.name_id {
+            name_id::TYPOGRAPHIC_FAMILY => 0u8,
+            name_id::FAMILY => 1,
+            _ => continue,
+        };
+        let Some(text) = name.to_string() else {
+            continue;
+        };
+        let text = text.trim().to_owned();
+        if text.is_empty() {
+            continue;
+        }
+        let is_latin = text.is_ascii();
+        // Lower priority value and Latin script are preferred.
+        let better = match &best {
+            None => true,
+            Some((bp, bl, _)) => {
+                priority < *bp || (priority == *bp && is_latin && !*bl)
+            }
+        };
+        if better {
+            best = Some((priority, is_latin, text));
+        }
+    }
+    best.map(|(_, _, text)| text)
+}
+
 /// List the available font families on the current system.
 ///
-/// Returns a deduplicated, sorted list of font names derived from the system
-/// font directories.  Common cross-platform fonts are prepended so they appear
-/// at the top of any picker.
+/// Scans the system and per-user font directories, reading each file's real
+/// family name from its `name` table (so a font appears under the name CSS
+/// expects, not its filename). Common cross-platform fonts are prepended so they
+/// appear at the top of any picker.
 #[tauri::command]
 pub fn list_system_fonts() -> Vec<String> {
     let mut fonts: Vec<String> = Vec::new();
 
-    // System-specific font directories
-    #[cfg(target_os = "macos")]
-    let dirs: &[&str] = &[
-        "/System/Library/Fonts",
-        "/System/Library/Fonts/Supplemental",
-        "/Library/Fonts",
-    ];
-    #[cfg(target_os = "windows")]
-    let dirs: &[&str] = &[r"C:\Windows\Fonts"];
-    #[cfg(target_os = "linux")]
-    let dirs: &[&str] = &["/usr/share/fonts", "/usr/local/share/fonts"];
-    #[cfg(not(any(
-        target_os = "macos",
-        target_os = "windows",
-        target_os = "linux"
-    )))]
-    let dirs: &[&str] = &[];
-
-    for dir in dirs {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let s = name.to_string_lossy();
-                for ext in &[".ttf", ".otf", ".ttc", ".dfont"] {
-                    if s.to_lowercase().ends_with(ext) {
-                        let stem = s[..s.len() - ext.len()].to_string();
-                        fonts.push(stem);
-                        break;
-                    }
-                }
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    for dir in font_directories() {
+        collect_font_files(&dir, 4, &mut files);
+    }
+    for file in &files {
+        let parsed = font_family_names(file);
+        if parsed.is_empty() {
+            // Parse failed (e.g. a .dfont resource fork): fall back to the stem.
+            if let Some(stem) = file.file_stem().and_then(|s| s.to_str()) {
+                fonts.push(stem.to_owned());
             }
+        } else {
+            fonts.extend(parsed);
         }
     }
 

@@ -37,6 +37,7 @@ toml_edit = "0.25"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7", features = ["normalize-path"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+ttf-parser = "0.25"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 window-vibrancy = "0.6"
 sys-locale = "0.3"
