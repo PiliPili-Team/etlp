@@ -48,6 +48,59 @@ interface ParsedLine {
     content: string;
 }
 
+// Display-only anonymizer for the Logs view. Heuristically redacts values that
+// could identify a user or server when sharing a screenshot. It never touches
+// the on-disk log file — file redaction is governed by the `mix_log` setting.
+// Key=value rules cover device id, tokens and user/account names; bare IPv4
+// addresses and URL hosts are matched structurally.
+const ANON_KV_RULES: { re: RegExp; replace: string }[] = [
+    // Secrets: api_key, token, access/refresh token, X-Emby-Token, ...
+    {
+        re: /\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|x-emby-token|x-mediabrowser-token)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        replace: "$1***",
+    },
+    // Bearer tokens in Authorization headers.
+    { re: /\bBearer\s+[A-Za-z0-9._-]+/gi, replace: "Bearer ***" },
+    // Device identifiers.
+    {
+        re: /\b((?:device[_-]?id|x-emby-device-id)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        replace: "$1***",
+    },
+    // Numeric / opaque user ids (kept distinct from usernames below).
+    {
+        re: /\b((?:user[_-]?id|userid)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        replace: "$1***",
+    },
+    // Account names, incl. Bangumi / Trakt usernames passed as key=value.
+    {
+        re: /\b((?:user[_-]?name|username|nickname)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        replace: "$1***",
+    },
+    // Bangumi / Trakt user slug embedded in a URL path, e.g. /users/alice.
+    { re: /\/users\/[^/\s"'?]+/gi, replace: "/users/***" },
+];
+
+// Keep the scheme and the leading half of the host so the masked URL stays
+// recognizable, mirroring the file-level `mix_host_gen` placeholder.
+function maskUrlHost(line: string): string {
+    return line.replace(
+        /(https?:\/\/)([^/\s:"']+)(:\d+)?/gi,
+        (_m, scheme: string, host: string, port = "") => {
+            const keep = host.slice(0, Math.floor(host.length / 2));
+            return `${scheme}${keep}***${port}`;
+        },
+    );
+}
+
+function maskSensitive(line: string): string {
+    let out = maskUrlHost(line);
+    for (const { re, replace } of ANON_KV_RULES) {
+        out = out.replace(re, replace);
+    }
+    // Bare IPv4 addresses anywhere in the remaining text.
+    return out.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "***.***.***.***");
+}
+
 function parseLine(raw: string): ParsedLine {
     // ISO timestamp + level
     const m1 = raw.match(
@@ -110,6 +163,10 @@ export default function Logs({ active }: { active: boolean }) {
     const [autoScroll, setAutoScroll] = useState(true);
     const [filter, setFilter] = useState("");
     const [source, setSource] = useState<LogSource>("app");
+    // Display-only anonymous mode; persisted so it survives a tab switch.
+    const [anon, setAnon] = useState(
+        () => localStorage.getItem("logs_anon") === "1",
+    );
     const [paths, setPaths] = useState<LogPaths | null>(null);
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [hasOlder, setHasOlder] = useState(false);
@@ -326,10 +383,11 @@ export default function Logs({ active }: { active: boolean }) {
     // expensive filtering runs at lower priority and is memoized.
     const deferredFilter = useDeferredValue(filter);
     const displayed = useMemo(() => {
-        if (!deferredFilter) return lines;
+        const base = anon ? lines.map(maskSensitive) : lines;
+        if (!deferredFilter) return base;
         const needle = deferredFilter.toLowerCase();
-        return lines.filter((l) => l.toLowerCase().includes(needle));
-    }, [lines, deferredFilter]);
+        return base.filter((l) => l.toLowerCase().includes(needle));
+    }, [lines, deferredFilter, anon]);
 
     // mpv view is usable when a default log exists or the user picked a file.
     const hasMpv = Boolean(effectiveMpvPath);
@@ -413,6 +471,21 @@ export default function Logs({ active }: { active: boolean }) {
                             value={filter}
                             onChange={(e) => setFilter(e.target.value)}
                         />
+                        <button
+                            className={`btn${anon ? " btn-primary" : ""}`}
+                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            title={t("logs_anon_title")}
+                            onClick={() => {
+                                const next = !anon;
+                                setAnon(next);
+                                localStorage.setItem(
+                                    "logs_anon",
+                                    next ? "1" : "0",
+                                );
+                            }}
+                        >
+                            {t("logs_anon")}
+                        </button>
                         <button
                             className="btn"
                             style={{ padding: "4px 10px", fontSize: 12 }}

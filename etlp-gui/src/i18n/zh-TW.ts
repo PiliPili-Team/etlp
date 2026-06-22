@@ -287,6 +287,9 @@ export const zhTW: typeof zhCN = {
     logs_scroll_older: "向上捲動載入更早的日誌",
     logs_open_folder: "開啟日誌資料夾",
     logs_pick_mpv: "選擇 mpv 日誌",
+    logs_anon: "匿名模式",
+    logs_anon_title:
+        "僅在介面上隱藏裝置 ID、權杖、IP、使用者 ID、URL 主機以及 Bangumi / Trakt 使用者名稱，便於截圖分享；不會改動日誌檔案，檔案脫敏仍由「敏感文案」開關決定",
 
     // About modal
     about_thanks: "致謝",
