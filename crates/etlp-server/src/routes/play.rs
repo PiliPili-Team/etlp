@@ -1081,6 +1081,18 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             } else {
                 (ScrobbleAction::Pause, entry.progress)
             };
+
+            // Open the watching session first so Trakt registers a proper
+            // start → pause/stop lifecycle (a lone terminal scrobble can leave
+            // the resume point unregistered). Best-effort: Trakt auto-expires
+            // the status by runtime, so a failure here never blocks the
+            // terminal action below. No periodic re-send is needed.
+            if let Err(e) =
+                api.scrobble(ScrobbleAction::Start, &item, progress).await
+            {
+                debug!("trakt scrobble start (non-fatal): {e}");
+            }
+
             match api.scrobble(action, &item, progress).await {
                 Ok(_) => info!(
                     item = %data.media_title,
