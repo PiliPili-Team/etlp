@@ -104,7 +104,8 @@ fn augment_path() {}
 /// image that the system recolours to match the light/dark menu bar, while Linux
 /// (which has no template support) gets the white emblem, kept visible on the
 /// commonly dark panel. Windows has no template support either and a silhouette
-/// renders nearly invisible on its taskbar, so it keeps the full-colour app logo.
+/// renders nearly invisible on its taskbar, so it keeps the full-colour app
+/// logo — the squircle-rounded variant so it matches the rounded app icon.
 fn tray_icon_asset() -> (&'static [u8], bool) {
     #[cfg(target_os = "macos")]
     {
@@ -116,7 +117,7 @@ fn tray_icon_asset() -> (&'static [u8], bool) {
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
-        (include_bytes!("../icons/32x32.png"), false)
+        (include_bytes!("../icons/tray-icon-windows.png"), false)
     }
 }
 
