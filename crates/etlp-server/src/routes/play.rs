@@ -888,6 +888,11 @@ async fn build_trakt_item(
             (u32::try_from(season), u32::try_from(number))
         && let Some(show_ids) = fetch_series_trakt_ids(state, data).await
     {
+        debug!(
+            item = %data.media_title,
+            season, number,
+            "trakt: matched episode by show ids + season/number"
+        );
         return Some(etlp_sync::TraktHistoryItem {
             kind,
             ids: show_ids,
@@ -895,7 +900,19 @@ async fn build_trakt_item(
             watched_at: None,
         });
     }
-    trakt_item_from_ids(kind, &data.provider_ids)
+    let item = trakt_item_from_ids(kind, &data.provider_ids);
+    match &item {
+        Some(_) => debug!(
+            item = %data.media_title,
+            "trakt: matched by the item's own provider ids"
+        ),
+        None => warn!(
+            item = %data.media_title,
+            item_type = %data.item_type,
+            "trakt: no usable tmdb/imdb/tvdb id, cannot sync this item"
+        ),
+    }
+    item
 }
 
 /// Fetch the series' Trakt ids from the media server, or `None` when the series
@@ -926,6 +943,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     };
 
     if entries.is_empty() {
+        debug!("trakt: no watched entries to sync, skip");
         return;
     }
 
@@ -938,9 +956,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         allow_duplicate,
     ) = {
         let Ok(cfg) = state.config.read() else {
+            warn!("trakt: config lock poisoned, skip");
             return;
         };
         if cfg.trakt.client_id.is_empty() {
+            debug!("trakt: client_id not configured, skip");
             return;
         }
         (
@@ -981,7 +1001,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     };
 
     match api.ensure_auth().await {
-        Ok(true) => {}
+        Ok(true) => debug!("trakt: token valid"),
         Ok(false) => {
             // No token yet (or refresh failed): open the OAuth authorize page
             // so the user can grant access. The /trakt_auth callback then
@@ -1035,6 +1055,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         if let Some(mut item) = build_trakt_item(state, kind, data).await {
             if item.episode.is_none() && item.ids.trakt.is_none() {
                 item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
+                debug!(
+                    item = %data.media_title,
+                    trakt_id = ?item.ids.trakt,
+                    "trakt: resolved numeric id for id-only item"
+                );
             }
             let (action, progress) = if entry.completed {
                 (ScrobbleAction::Stop, 100.0)
