@@ -1,18 +1,10 @@
 # etlp configuration — TOML format
-# Converted from embyToLocalPlayer_config.ini
-#
-# Only keys that differ from their defaults are required.
-# See etlp-config/src/lib.rs for the full struct definitions and defaults.
 
 # ── Player ────────────────────────────────────────────────────────────────────
 
 [emby]
 # Which player to launch.
 player = "mpv"
-
-# Full path to the player binary (overrides [emby].player for lookup).
-# Corresponds to [exe] mpv = ... in the original INI.
-# player_path is under [dev]; listed here as a comment for discoverability.
 
 # Launch in full-screen mode.
 fullscreen = false
@@ -85,25 +77,3 @@ silent_start = false
 
 # Periodically check GitHub for a newer release and show an update hint.
 check_update = true
-
-[bangumi]
-# Personal access token. Generate at https://next.bgm.tv/demo/access-token
-access_token = ""
-
-# bgm.tv username or UID (the digits in bgm.tv/user/123456).
-username = ""
-
-# Comma-separated host keywords that enable the sync; blank disables it.
-# A single "." enables every host. Example: localhost, 192.168., emby.example.com
-enable_host = ""
-
-# Mark new collection entries as private (hidden from your public profile).
-private = true
-
-# Only series whose genres match this regex are synced (case-insensitive).
-genres = "动画|anime"
-
-# When an item has no Bangumi id, resolve the subject by searching bgm.tv by
-# title (native title / series name) and walking the sequel chain to the season
-# given by the file's season number. Disable to require an explicit Bangumi id.
-title_search_fallback = true
