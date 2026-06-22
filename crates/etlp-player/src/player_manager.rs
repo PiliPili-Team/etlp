@@ -269,21 +269,51 @@ impl PlayerManager {
             }
         }
     }
-    /// Return `(stop_sec, &PlaybackData)` pairs for every episode whose stop
-    /// time was collected.
+    /// Return a [`SyncEntry`] for every episode whose stop time was collected.
     ///
-    /// Used by the Trakt/Bangumi sync layer after `write_progress`.
+    /// Used by the Trakt/Bangumi sync layer after `write_progress`. Each entry
+    /// carries the watched percentage and a `completed` flag (≥ 90 %) so the
+    /// sync layer can distinguish "watched" from merely "in-progress".
     #[must_use]
-    pub fn completed_entries(&self) -> Vec<(i64, &PlaybackData)> {
+    pub fn completed_entries(&self) -> Vec<SyncEntry<'_>> {
         self.stop_times
             .iter()
             .map(|(key, &stop_sec)| {
                 // Fall back to primary data for single-episode playback.
                 let ep = self.playlist.get(key).unwrap_or(&self.data);
-                (stop_sec, ep)
+                let progress = if ep.total_sec > 0 {
+                    (stop_sec as f64 / ep.total_sec as f64 * 100.0)
+                        .clamp(0.0, 100.0)
+                } else {
+                    0.0
+                };
+                SyncEntry {
+                    stop_sec,
+                    progress,
+                    completed: progress >= Self::COMPLETION_RATIO * 100.0,
+                    data: ep,
+                }
             })
             .collect()
     }
+}
+
+/// A watched episode/movie surfaced to the third-party (Trakt/Bangumi) sync
+/// layer after playback ends.
+///
+/// `completed` mirrors the `mark_as_played` threshold: when the viewer reached
+/// at least 90 % of the runtime the item is marked watched, otherwise it is
+/// reported as in-progress ("watching" / "Up Next") only.
+#[derive(Debug, Clone, Copy)]
+pub struct SyncEntry<'a> {
+    /// Final playback position in whole seconds.
+    pub stop_sec: i64,
+    /// Watched percentage in the range `0.0..=100.0`.
+    pub progress: f64,
+    /// Whether `progress` reached the completion threshold (≥ 90 %).
+    pub completed: bool,
+    /// The episode/movie metadata.
+    pub data: &'a PlaybackData,
 }
 
 impl PlayerManager {
@@ -959,6 +989,54 @@ mod tests {
             !mgr.stop_times.contains_key("Anime S01E03"),
             "a later episode watched < 90 % must not be marked"
         );
+    }
+
+    // ── completed_entries completion flag ─────────────────────────────────────
+
+    #[test]
+    fn completed_entries_flags_watched_vs_in_progress() {
+        // total_sec is 3600 for dummy episodes; 90 % = 3240 s.
+        let mut mgr = make_mgr(dummy_data("Anime S01E01", 0));
+        mgr.register_playlist(
+            "Anime S01E01".into(),
+            dummy_data("Anime S01E01", 0),
+        );
+        mgr.register_playlist(
+            "Anime S01E02".into(),
+            dummy_data("Anime S01E02", 0),
+        );
+        mgr.stop_times.insert("Anime S01E01".into(), 1800); // 50 %: watching
+        mgr.stop_times.insert("Anime S01E02".into(), 3400); // ≥ 90 %: watched
+
+        let entries = mgr.completed_entries();
+        let by_title = |title: &str| {
+            entries
+                .iter()
+                .find(|e| e.data.media_title == title)
+                .copied()
+                .unwrap()
+        };
+
+        let e1 = by_title("Anime S01E01");
+        assert!(!e1.completed, "50 % must report as in-progress");
+        assert!((e1.progress - 50.0).abs() < 0.001);
+
+        let e2 = by_title("Anime S01E02");
+        assert!(e2.completed, "≥ 90 % must report as watched");
+        assert!(e2.progress > 90.0);
+    }
+
+    #[test]
+    fn completed_entries_progress_zero_when_duration_unknown() {
+        let mut data = dummy_data("Movie", 0);
+        data.total_sec = 0; // unknown runtime
+        let mut mgr = make_mgr(data);
+        mgr.stop_times.insert("Movie".into(), 1200);
+
+        let entries = mgr.completed_entries();
+        let e = entries.first().unwrap();
+        assert!(!e.completed);
+        assert_eq!(e.progress, 0.0);
     }
 
     // ── write_progress skip logic ─────────────────────────────────────────────

@@ -784,6 +784,28 @@ impl BangumiApi {
         Err(SyncError::Api { status, body })
     }
 
+    /// Ensure the subject sits in the user's collection, adding it as
+    /// `Watching` when absent.
+    ///
+    /// Used when the viewer has only partially watched an episode (< 90 %): the
+    /// series should appear as in-progress without marking any episode watched.
+    /// An existing collection state (including `Watched`) is left untouched so a
+    /// partial replay never downgrades a finished subject.
+    pub async fn ensure_collected_watching(
+        &self,
+        subject_id: u64,
+    ) -> Result<()> {
+        if self.get_subject_collection(subject_id).await?.is_none() {
+            info!(
+                "bangumi: subject {subject_id} not collected, \
+                 adding as Watching"
+            );
+            self.add_collection_subject(subject_id, CollectionState::Watching)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Mark one or more episodes of a subject as watched.
     ///
     /// Uses `PATCH /users/-/collections/{subject_id}/episodes` for bulk
@@ -1256,6 +1278,54 @@ mod tests {
         api.add_collection_subject(42, CollectionState::Watching)
             .await
             .unwrap();
+    }
+
+    // ── ensure_collected_watching ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn ensure_watching_adds_when_not_collected() {
+        let server = MockServer::start().await;
+        // Not collected yet → 404.
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/42"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        // ...so it must be added as Watching (type 3).
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/42"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "type": 3,
+            })))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.ensure_collected_watching(42).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ensure_watching_leaves_existing_collection_untouched() {
+        let server = MockServer::start().await;
+        // Already collected → must not POST any collection update.
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "type": 2, "subject_id": 42 }),
+            ))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/42"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.ensure_collected_watching(42).await.unwrap();
     }
 
     // ── verify_token ──────────────────────────────────────────────────────────

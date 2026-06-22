@@ -22,7 +22,7 @@ use etlp_media_server::{
 use etlp_metrics::{PlayMetrics, Span};
 use etlp_player::{
     DanDanConfig, DanDanHandle, LaunchArgs, LoadMode, LoadOptions, MpcHandle,
-    MpvHandle, PlayerHandle, PlayerManager, PotHandle, VlcHandle,
+    MpvHandle, PlayerHandle, PlayerManager, PotHandle, SyncEntry, VlcHandle,
 };
 
 use crate::state::SharedState;
@@ -812,8 +812,10 @@ fn trakt_item_from_ids(
 ///
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
 /// skips when either is absent or the netloc does not match `enable_host`.
-async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
-    use etlp_sync::{TraktApi, TraktHistoryItem, TraktItemKind, sync_history};
+async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
+    use etlp_sync::{
+        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind, sync_history,
+    };
 
     if entries.is_empty() {
         return;
@@ -853,7 +855,7 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
     // Skip early when nothing targets an enabled host.
     if !entries
         .iter()
-        .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
+        .any(|e| host_enabled(&e.data.netloc, &enable_host))
     {
         debug!("trakt: no entry matches enable_host, skipping");
         return;
@@ -887,44 +889,55 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         }
     }
 
+    // Earlier already-watched episodes are batched into a single history call;
+    // the just-watched item is scrobbled so partial views show as in-progress.
     let mut items: Vec<TraktHistoryItem> = Vec::new();
-    for (_, data) in entries {
+    for entry in entries {
+        let data = entry.data;
         if !host_enabled(&data.netloc, &enable_host) {
             continue;
         }
-        if data.item_type.eq_ignore_ascii_case("movie") {
-            // The just-watched movie. With duplicate marking off, throttle
-            // repeats; with it on, bypass the throttle so every completion
-            // adds another play. No Trakt id is resolved, so `sync_history`
-            // adds it unconditionally (single-item marking).
-            let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-            if !allow_duplicate && state.sync_recently_done(&key) {
-                debug!(item = %data.media_title, "trakt: throttled, skip");
-                continue;
-            }
-            if let Some(item) =
-                trakt_item_from_ids(TraktItemKind::Movie, &data.provider_ids)
-            {
-                items.push(item);
-            }
+        let kind = if data.item_type.eq_ignore_ascii_case("movie") {
+            TraktItemKind::Movie
         } else if data.item_type.eq_ignore_ascii_case("episode") {
-            let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-            if !allow_duplicate && state.sync_recently_done(&key) {
-                debug!(item = %data.media_title, "trakt: throttled, skip");
-                continue;
+            TraktItemKind::Episode
+        } else {
+            continue;
+        };
+
+        // Throttle repeats of the just-watched item; `allow_duplicate` bypasses
+        // it so every completion is reported again.
+        let key = format!("trakt:{}:{}", data.netloc, data.item_id);
+        if !allow_duplicate && state.sync_recently_done(&key) {
+            debug!(item = %data.media_title, "trakt: throttled, skip");
+            continue;
+        }
+
+        // Scrobble the just-watched item. ≥ 90 % stops at 100 % so Trakt marks
+        // it watched; below that we pause at the real progress so it surfaces as
+        // "currently watching" / Up Next without being marked watched.
+        if let Some(item) = trakt_item_from_ids(kind, &data.provider_ids) {
+            let (action, progress) = if entry.completed {
+                (ScrobbleAction::Stop, 100.0)
+            } else {
+                (ScrobbleAction::Pause, entry.progress)
+            };
+            match api.scrobble(action, &item, progress).await {
+                Ok(_) => info!(
+                    item = %data.media_title,
+                    progress,
+                    completed = entry.completed,
+                    "trakt: scrobbled"
+                ),
+                Err(e) => warn!("trakt scrobble error: {e}"),
             }
-            // The just-watched episode: added without a resolved Trakt id so
-            // `sync_history` adds it unconditionally (single-episode marking,
-            // governed by the duplicate toggle / throttle above).
-            if let Some(item) =
-                trakt_item_from_ids(TraktItemKind::Episode, &data.provider_ids)
-            {
-                items.push(item);
-            }
-            // Backfill earlier episodes already watched in the client. These
-            // are always de-duplicated against the existing Trakt history by
-            // resolving each one's Trakt id first, so finishing later episodes
-            // never re-marks the ones already synced.
+        }
+
+        // Backfill earlier episodes already finished in the client. These are
+        // de-duplicated against the existing Trakt history by resolving each
+        // one's Trakt id first, so finishing later episodes never re-marks the
+        // ones already synced.
+        if kind == TraktItemKind::Episode {
             let cur_index = data.index.unwrap_or_default();
             for ep in &emby_played_backfill(state, data).await {
                 if ep.index == cur_index {
@@ -944,14 +957,13 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
         }
     }
 
-    debug!(items = items.len(), "trakt: built history items");
+    debug!(items = items.len(), "trakt: built backfill history items");
     if items.is_empty() {
-        debug!("trakt: no movie/episode items with provider ids, skipping");
         return;
     }
 
     match sync_history(&api, items).await {
-        Ok(n) => info!("trakt: synced {n} item(s)"),
+        Ok(n) => info!("trakt: backfilled {n} item(s)"),
         Err(e) => warn!("trakt sync error: {e}"),
     }
 }
@@ -966,7 +978,7 @@ async fn sync_trakt(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
 /// episode is matched by air date (`premiere_date`) with `index` as fallback.
 /// When the token is rejected, the bgm.tv token page is opened so the user can
 /// regenerate it.
-async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
+async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{BangumiApi, SubjectCache, SyncError, sync_episodes};
 
     if entries.is_empty() {
@@ -1002,7 +1014,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
     // Skip early when no completed entry targets an enabled host.
     if !entries
         .iter()
-        .any(|(_, data)| host_enabled(&data.netloc, &enable_host))
+        .any(|e| host_enabled(&e.data.netloc, &enable_host))
     {
         debug!("bangumi: no entry matches enable_host, skipping");
         return;
@@ -1035,7 +1047,8 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
     let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
 
-    for (_, data) in entries {
+    for entry in entries {
+        let data = entry.data;
         if !host_enabled(&data.netloc, &enable_host) {
             continue;
         }
@@ -1068,23 +1081,43 @@ async fn sync_bangumi(state: &SharedState, entries: &[(i64, &PlaybackData)]) {
             continue;
         };
 
-        // Backfill: mark the current episode plus every earlier one the user
-        // already watched in the Emby/Jellyfin client. Falls back to just the
-        // current episode when no backfill data is available.
+        // Collect the episodes to mark watched: every earlier one the client
+        // already finished, plus the current episode only when it reached the
+        // completion threshold (≥ 90 %). A partial view of the current episode
+        // is dropped here so it is not marked watched.
         let backfill = emby_played_backfill(state, data).await;
         let mut eps: Vec<(u32, Option<String>)> = backfill
             .iter()
+            .filter(|p| entry.completed || p.index != ep_index)
             .filter_map(|p| {
                 u32::try_from(p.index)
                     .ok()
                     .map(|s| (s, p.premiere_date.clone()))
             })
             .collect();
-        if eps.is_empty() {
+        // Non-Emby servers report no backfill; fall back to the current episode
+        // only when it was actually completed.
+        if eps.is_empty() && entry.completed {
             eps.push((sort, data.premiere_date.clone()));
         }
         eps.sort_by_key(|(s, _)| *s);
         eps.dedup_by_key(|(s, _)| *s);
+
+        // Nothing watched to mark (the current episode is still in progress and
+        // there is no earlier history): just register the subject as "watching"
+        // so the season shows up as in-progress on Bangumi.
+        if eps.is_empty() {
+            match api.ensure_collected_watching(subject_id).await {
+                Ok(()) => info!(
+                    "bangumi: subject {subject_id} marked watching ({}%)",
+                    entry.progress as i64
+                ),
+                Err(e) => {
+                    warn!("bangumi watching mark failed for {subject_id}: {e}")
+                }
+            }
+            continue;
+        }
 
         debug!(
             subject_id,

@@ -21,7 +21,7 @@ pub use mpv::{
     PlayerError, build_args, connect_with_retry,
 };
 pub use player_manager::{
-    PlayerHandle, PlayerManager, realtime_playing_feedback_loop,
+    PlayerHandle, PlayerManager, SyncEntry, realtime_playing_feedback_loop,
     redirect_next_ep_loop,
 };
 pub use pot::{PotError, PotHandle};
