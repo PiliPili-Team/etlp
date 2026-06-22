@@ -78,6 +78,10 @@ pub struct DevSection {
     pub log_level: String,
     /// Optional path to a log file; absent means stderr only.
     pub log_file: Option<PathBuf>,
+    /// Maximum size of a single log file, in megabytes, before it rotates.
+    pub log_max_size_mb: u64,
+    /// Maximum number of log files to keep (the active file included).
+    pub log_max_files: usize,
     /// Kill leftover player processes on startup.
     pub kill_process_at_start: bool,
     /// HTTP proxy for the etlp process itself (`host:port`).
@@ -138,6 +142,8 @@ impl Default for DevSection {
             mix_log: true,
             log_level: "info".to_owned(),
             log_file: None,
+            log_max_size_mb: 50,
+            log_max_files: 7,
             kill_process_at_start: true,
             proxy: None,
             skip_certificate_verify: false,
@@ -496,6 +502,8 @@ const DEFAULT_CONFIG_TOML: &str = "\
 
 [dev]
 # log_level = \"info\"
+# log_max_size_mb = 50   # rotate the log once it exceeds this many megabytes
+# log_max_files = 7      # number of rotated log files to keep
 # kill_process_at_start = true
 # pretty_title = true
 # user_agent = \"etlp\"   # custom User-Agent for normal requests; download/prefetch UAs are fixed
@@ -553,6 +561,8 @@ speed_dummy = 1.5
         assert!(!cfg.emby.disable_audio);
         assert!(cfg.dev.mix_log);
         assert_eq!(cfg.dev.log_level, "info");
+        assert_eq!(cfg.dev.log_max_size_mb, 50);
+        assert_eq!(cfg.dev.log_max_files, 7);
         assert!(cfg.dev.kill_process_at_start);
         assert_eq!(cfg.playlist.item_limit, 10);
         assert_eq!(cfg.dandan.port, 8080);

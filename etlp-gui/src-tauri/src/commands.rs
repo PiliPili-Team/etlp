@@ -81,6 +81,8 @@ pub struct ConfigDto {
     pub skip_certificate_verify: bool,
     // [dev] – misc
     pub log_level: String,
+    pub log_max_size_mb: u64,
+    pub log_max_files: usize,
     pub user_agent: String,
     pub mix_log: bool,
     pub disable_progress_report: bool,
@@ -126,6 +128,8 @@ impl From<&Config> for ConfigDto {
             redirect_check_host: c.dev.redirect_check_host.clone(),
             skip_certificate_verify: c.dev.skip_certificate_verify,
             log_level: c.dev.log_level.clone(),
+            log_max_size_mb: c.dev.log_max_size_mb,
+            log_max_files: c.dev.log_max_files,
             user_agent: c.dev.user_agent.clone().unwrap_or_default(),
             mix_log: c.dev.mix_log,
             disable_progress_report: c.dev.disable_progress_report,
@@ -181,6 +185,10 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
             .map_err(|e| format!("lock log_handle: {e}"))?;
         if let Some(handle) = guard.as_ref() {
             handle.set_level(&config.dev.log_level);
+            handle.set_rotation(etlp_logging::LogRotation::from_mb(
+                config.dev.log_max_size_mb,
+                config.dev.log_max_files,
+            ));
         }
     }
 
@@ -333,6 +341,31 @@ pub async fn get_config() -> Result<ConfigDto, String> {
     Ok(ConfigDto::from(&config))
 }
 
+/// Re-read the log-rotation settings from disk and push them to the live
+/// writer so a size/count change takes effect without a restart.
+///
+/// Both fields are read together because [`LogHandle::set_rotation`] needs the
+/// full policy, while a field patch only carries the one key that changed.
+fn apply_log_rotation(state: &GuiState, cfg_dir: &std::path::Path) {
+    let Ok(config) = load_or_default_config(cfg_dir) else {
+        return;
+    };
+    let rotation = etlp_logging::LogRotation::from_mb(
+        config.dev.log_max_size_mb,
+        config.dev.log_max_files,
+    );
+    if let Ok(guard) = state.log_handle.lock()
+        && let Some(handle) = guard.as_ref()
+    {
+        handle.set_rotation(rotation);
+        info!(
+            max_size_mb = config.dev.log_max_size_mb,
+            max_files = config.dev.log_max_files,
+            "log rotation applied live"
+        );
+    }
+}
+
 /// Patch exactly one field in the config file without rewriting the rest.
 ///
 /// `section` is the TOML table name (e.g. `"emby"`, `"dev"`, `"playlist"`).
@@ -376,6 +409,13 @@ pub async fn update_config_field(
             {
                 handle.set_level(level);
                 info!(level, "log level applied live");
+            }
+            // Log-rotation changes apply live too: the writer reads its budget
+            // from a shared handle, so re-read both fields and push them down.
+            if section == "dev"
+                && (key == "log_max_size_mb" || key == "log_max_files")
+            {
+                apply_log_rotation(&state, &cfg_dir);
             }
             Ok(())
         }
@@ -449,6 +489,10 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
             .map_err(|e| format!("lock log_handle: {e}"))?;
         if let Some(handle) = guard.as_ref() {
             handle.set_level(&new_config.dev.log_level);
+            handle.set_rotation(etlp_logging::LogRotation::from_mb(
+                new_config.dev.log_max_size_mb,
+                new_config.dev.log_max_files,
+            ));
         }
     }
 

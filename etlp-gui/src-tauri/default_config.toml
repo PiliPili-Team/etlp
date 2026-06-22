@@ -20,6 +20,12 @@ mix_log = true
 
 log_level = "debug"
 
+# Rotate the log file once it exceeds this size (in megabytes).
+log_max_size_mb = 50
+
+# Number of rotated log files to keep; the oldest is removed.
+log_max_files = 7
+
 # Log file path; leave commented to log to stderr only.
 log_file = "./log.txt"
 kill_process_at_start = false

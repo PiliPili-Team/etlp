@@ -252,11 +252,21 @@ pub fn run() {
         .map(|c| c.gui.autostart)
         .unwrap_or(false);
 
+    let rotation = initial_config
+        .as_ref()
+        .map(|c| {
+            etlp_logging::LogRotation::from_mb(
+                c.dev.log_max_size_mb,
+                c.dev.log_max_files,
+            )
+        })
+        .unwrap_or_default();
     let masker = etlp_logging::Masker::new(false);
     let log_handle = etlp_logging::init(
         masker,
         &initial_log_level,
         Some(log_file.as_path()),
+        rotation,
     )
     .ok();
 

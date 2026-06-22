@@ -25,6 +25,8 @@ interface ConfigDto {
     redirect_check_host: string[];
     skip_certificate_verify: boolean;
     log_level: string;
+    log_max_size_mb: number;
+    log_max_files: number;
     mix_log: boolean;
     item_limit: number;
     version_filter: string;
@@ -1802,6 +1804,20 @@ function SystemSection({
                     value={cfg.log_level}
                     options={LOG_LEVELS}
                     onChange={(v) => update("dev", "log_level", v)}
+                />
+                <NumberRow
+                    label={t("sys_log_max_size")}
+                    desc={t("sys_log_max_size_desc")}
+                    value={cfg.log_max_size_mb}
+                    min={1}
+                    onCommit={(v) => update("dev", "log_max_size_mb", v)}
+                />
+                <NumberRow
+                    label={t("sys_log_max_files")}
+                    desc={t("sys_log_max_files_desc")}
+                    value={cfg.log_max_files}
+                    min={1}
+                    onCommit={(v) => update("dev", "log_max_files", v)}
                 />
                 <ToggleRow
                     label={t("sys_log_mask")}

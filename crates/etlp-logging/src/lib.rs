@@ -10,9 +10,9 @@
 //! through the GUI and the server is reloaded).
 
 mod mask;
+mod rotate;
 
-use std::fs::{File, OpenOptions};
-use std::io::{self, Seek, SeekFrom, Write};
+use std::io::{self, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -23,11 +23,12 @@ use tracing_subscriber::reload;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
 pub use mask::{Masker, mix_host_gen};
+pub use rotate::{DEFAULT_MAX_FILES, DEFAULT_MAX_SIZE_MB, LogRotation};
 
-/// 10 MiB: the Python threshold above which the log file is truncated.
-const LOG_RESET_BYTES: u64 = 10 * 1024 * 1000;
+use rotate::RotatingFile;
 
-type SharedFile = Arc<Mutex<File>>;
+/// A size-rotating log file shared between the writer and the [`LogHandle`].
+type SharedFile = Arc<Mutex<RotatingFile>>;
 
 /// A `MakeWriter` that masks each event before writing it to stdout and,
 /// optionally, a log file.
@@ -70,10 +71,10 @@ impl Drop for MaskingWriter {
         if let Some(file) = &self.file
             && let Ok(mut f) = file.lock()
         {
-            // Strip ANSI colour codes before writing to file.
+            // Strip ANSI colour codes before writing to file; the rotating
+            // writer flushes internally.
             let plain = strip_ansi(&masked);
-            let _ = f.write_all(plain.as_bytes());
-            let _ = f.flush();
+            let _ = f.write(plain.as_bytes());
         }
     }
 }
@@ -107,25 +108,6 @@ impl<'a> MakeWriter<'a> for MaskingMakeWriter {
             file: self.file.clone(),
         }
     }
-}
-
-/// Open the log file the way Python does: append while it is small, otherwise
-/// truncate, creating parent directories as needed.
-fn open_log_file(path: &Path) -> io::Result<File> {
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(parent)?;
-    }
-    let small = std::fs::metadata(path)
-        .map(|m| m.len() < LOG_RESET_BYTES)
-        .unwrap_or(false);
-    OpenOptions::new()
-        .create(true)
-        .append(small)
-        .truncate(!small)
-        .write(true)
-        .open(path)
 }
 
 /// Compute the `EnvFilter` for `level`.
@@ -198,32 +180,32 @@ impl LogHandle {
         }
     }
 
-    /// Truncate the log file to zero length, emptying it in place.
+    /// Empty the log file in place, also deleting any rotated files.
     ///
-    /// Takes the writer's lock so it cannot race a concurrent log write, then
-    /// flushes, truncates, and rewinds the cursor to byte 0. The rewind is what
-    /// keeps a truncated, non-append handle from writing into a sparse hole after
-    /// the old offset. A no-op (returns `Ok`) when file logging is disabled.
+    /// Takes the writer's lock so it cannot race a concurrent log write. A no-op
+    /// (returns `Ok`) when file logging is disabled.
     pub fn clear_log_file(&self) -> io::Result<()> {
         match &self.file {
-            Some(file) => truncate_shared_file(file),
+            Some(file) => {
+                let mut f = file
+                    .lock()
+                    .map_err(|_| io::Error::other("log file mutex poisoned"))?;
+                f.clear()
+            }
             None => Ok(()),
         }
     }
-}
 
-/// Truncate a shared log file to zero length and rewind its cursor.
-///
-/// Split out from [`LogHandle::clear_log_file`] so the truncate-and-rewind
-/// behaviour is unit-testable without installing the global subscriber.
-fn truncate_shared_file(file: &SharedFile) -> io::Result<()> {
-    let mut f = file
-        .lock()
-        .map_err(|_| io::Error::other("log file mutex poisoned"))?;
-    f.flush()?;
-    f.set_len(0)?;
-    f.seek(SeekFrom::Start(0))?;
-    Ok(())
+    /// Apply a new rotation policy at runtime (e.g. when the user changes the
+    /// maximum file size or count in the GUI). A no-op when file logging is
+    /// disabled.
+    pub fn set_rotation(&self, rotation: LogRotation) {
+        if let Some(file) = &self.file
+            && let Ok(mut f) = file.lock()
+        {
+            f.set_rotation(rotation);
+        }
+    }
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
@@ -235,6 +217,7 @@ fn truncate_shared_file(file: &SharedFile) -> io::Result<()> {
 /// * `level` is the initial filter directive (e.g. `"info"`); `RUST_LOG`
 ///   overrides it when set.
 /// * `log_file`, when provided, additionally writes masked output to that path.
+/// * `rotation` bounds the on-disk log size (per-file budget and file count).
 ///
 /// Returns `Err` when the global subscriber is already set; callers that do not
 /// need runtime level changes may call `.ok()` and discard the handle.
@@ -242,13 +225,14 @@ pub fn init(
     masker: Masker,
     level: &str,
     log_file: Option<&Path>,
+    rotation: LogRotation,
 ) -> Result<LogHandle, String> {
     let file = match log_file {
-        Some(path) => {
-            Some(Arc::new(Mutex::new(open_log_file(path).map_err(|e| {
+        Some(path) => Some(Arc::new(Mutex::new(
+            RotatingFile::open(path, rotation).map_err(|e| {
                 format!("open log file {}: {e}", path.display())
-            })?)))
-        }
+            })?,
+        ))),
         None => None,
     };
 
@@ -285,57 +269,6 @@ pub fn init(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn open_log_file_creates_and_appends() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("nested").join("log.txt");
-        {
-            let mut f = open_log_file(&path).expect("create");
-            f.write_all(b"first\n").expect("write");
-        }
-        {
-            let mut f = open_log_file(&path).expect("reopen");
-            f.write_all(b"second\n").expect("write");
-        }
-        let body = std::fs::read_to_string(&path).expect("read");
-        assert_eq!(body, "first\nsecond\n");
-    }
-
-    #[test]
-    fn truncate_shared_file_empties_and_continues_at_head() {
-        // A log file held open in write mode keeps an internal cursor; truncating
-        // must rewind it so the next write lands at byte 0, not in a sparse hole.
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("clear.log");
-        let handle: SharedFile = {
-            let f = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&path)
-                .expect("open");
-            Arc::new(Mutex::new(f))
-        };
-
-        // Simulate the writer appending a chunk, advancing the cursor.
-        {
-            let mut f = handle.lock().expect("lock");
-            f.write_all(b"old line one\nold line two\n").expect("write");
-            f.flush().expect("flush");
-        }
-
-        truncate_shared_file(&handle).expect("clear");
-
-        // A subsequent write must start a fresh file with no leading NULs.
-        {
-            let mut f = handle.lock().expect("lock");
-            f.write_all(b"fresh\n").expect("write");
-            f.flush().expect("flush");
-        }
-        let body = std::fs::read_to_string(&path).expect("read");
-        assert_eq!(body, "fresh\n");
-    }
 
     #[test]
     fn build_level_filter_debug_scopes_to_etlp() {

@@ -25,7 +25,7 @@ use etlp_config::Config;
 use etlp_download::{
     DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_PER_DOMAIN, DownloadManager,
 };
-use etlp_logging::{Masker, init as init_logging};
+use etlp_logging::{LogRotation, Masker, init as init_logging};
 use etlp_net::HttpClientBuilder;
 use etlp_server::{AppState, build_router, platform};
 
@@ -62,7 +62,12 @@ async fn main() {
     let config = match Config::load_file(&config_path) {
         Ok(c) => c,
         Err(e) => {
-            let _ = init_logging(Masker::new(true), "info", None);
+            let _ = init_logging(
+                Masker::new(true),
+                "info",
+                None,
+                LogRotation::default(),
+            );
             eprintln!("failed to load config {}: {e}", config_path.display());
             std::process::exit(1);
         }
@@ -83,7 +88,16 @@ async fn main() {
         .clone()
         .or_else(|| Some(log_dir.join("etlp.log")));
 
-    let _ = init_logging(Masker::new(mix_log), &log_level, log_file.as_deref());
+    let rotation = LogRotation::from_mb(
+        config.dev.log_max_size_mb,
+        config.dev.log_max_files,
+    );
+    let _ = init_logging(
+        Masker::new(mix_log),
+        &log_level,
+        log_file.as_deref(),
+        rotation,
+    );
 
     info!(
         "etlp {} starting (config={})",
