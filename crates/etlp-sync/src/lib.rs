@@ -27,6 +27,7 @@ pub use bangumi_map::{
 };
 pub use error::{Result, SyncError};
 pub use trakt::{
-    DeviceCodeResponse, ScrobbleAction, TraktApi, TraktHistoryItem, TraktIds,
-    TraktItemKind, TraktToken, sync_history, trakt_authorize_url,
+    DeviceCodeResponse, ScrobbleAction, TraktApi, TraktEpisode,
+    TraktHistoryItem, TraktIds, TraktItemKind, TraktToken, sync_history,
+    trakt_authorize_url,
 };

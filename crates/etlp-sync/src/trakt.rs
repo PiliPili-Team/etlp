@@ -77,11 +77,27 @@ pub struct TraktIds {
     pub tvdb: Option<u64>,
 }
 
-/// One item to add to watch history.
+/// Locates an episode within a show by season and episode number.
+///
+/// Paired with the show's [`TraktIds`] this is the match Trakt resolves most
+/// reliably — far more so than an episode's own external ids, which media
+/// servers often omit or populate with the series-level id (yielding a 404).
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct TraktEpisode {
+    pub season: u32,
+    pub number: u32,
+}
+
+/// One item to add to watch history or scrobble.
 #[derive(Debug, Clone)]
 pub struct TraktHistoryItem {
     pub kind: TraktItemKind,
+    /// Provider ids. When `episode` is `Some`, these address the **show**;
+    /// otherwise they address the item itself (movie or episode).
     pub ids: TraktIds,
+    /// When `Some` (episodes only), `ids` are the show's and the episode is
+    /// addressed by season/number. When `None`, `ids` address the item directly.
+    pub episode: Option<TraktEpisode>,
     /// Optional RFC-3339 timestamp; if `None` the current time is used.
     pub watched_at: Option<String>,
 }
@@ -480,8 +496,33 @@ impl TraktApi {
     ) -> Result<serde_json::Value> {
         let mut movies: Vec<serde_json::Value> = Vec::new();
         let mut episodes: Vec<serde_json::Value> = Vec::new();
+        let mut shows: Vec<serde_json::Value> = Vec::new();
 
         for item in items {
+            // Show + season/number locator: the reliable episode match. Sent
+            // under "shows" with the season/episode hierarchy.
+            if let (TraktItemKind::Episode, Some(ep)) =
+                (item.kind, item.episode)
+            {
+                let mut ep_obj = serde_json::json!({ "number": ep.number });
+                if let (Some(wa), Some(map)) =
+                    (&item.watched_at, ep_obj.as_object_mut())
+                {
+                    let _ = map.insert(
+                        "watched_at".to_owned(),
+                        serde_json::Value::String(wa.clone()),
+                    );
+                }
+                shows.push(serde_json::json!({
+                    "ids": item.ids,
+                    "seasons": [{
+                        "number": ep.season,
+                        "episodes": [ep_obj],
+                    }],
+                }));
+                continue;
+            }
+
             let mut obj = serde_json::json!({ "ids": item.ids });
             if let (Some(wa), Some(map)) =
                 (&item.watched_at, obj.as_object_mut())
@@ -500,11 +541,13 @@ impl TraktApi {
         debug!(
             movies = movies.len(),
             episodes = episodes.len(),
+            shows = shows.len(),
             "trakt: POST /sync/history"
         );
         let payload = serde_json::json!({
             "movies":   movies,
             "episodes": episodes,
+            "shows":    shows,
         });
 
         let resp = self
@@ -546,14 +589,26 @@ impl TraktApi {
             ScrobbleAction::Pause => "scrobble/pause",
             ScrobbleAction::Stop => "scrobble/stop",
         };
-        let key = match item.kind {
-            TraktItemKind::Movie => "movie",
-            TraktItemKind::Episode => "episode",
+        let progress = progress.clamp(0.0, 100.0);
+        // Show + season/number is Trakt's most reliable episode match; fall back
+        // to the item's own ids for movies and id-only episodes.
+        let payload = match (item.kind, item.episode) {
+            (TraktItemKind::Episode, Some(ep)) => serde_json::json!({
+                "show": { "ids": item.ids },
+                "episode": { "season": ep.season, "number": ep.number },
+                "progress": progress,
+            }),
+
+            (TraktItemKind::Movie, _) => serde_json::json!({
+                "movie": { "ids": item.ids },
+                "progress": progress,
+            }),
+
+            (TraktItemKind::Episode, None) => serde_json::json!({
+                "episode": { "ids": item.ids },
+                "progress": progress,
+            }),
         };
-        let payload = serde_json::json!({
-            key: { "ids": item.ids },
-            "progress": progress.clamp(0.0, 100.0),
-        });
 
         debug!(path, progress, "trakt: POST /{path}");
         let resp = self
@@ -992,6 +1047,7 @@ mod tests {
                 imdb: Some("tt1234567".into()),
                 ..Default::default()
             },
+            episode: None,
             watched_at: None,
         }];
         let resp = api.add_to_history(&items).await.unwrap();
@@ -1027,6 +1083,7 @@ mod tests {
                 tvdb: Some(42),
                 ..Default::default()
             },
+            episode: None,
             watched_at: None,
         };
         let resp = api
@@ -1058,6 +1115,7 @@ mod tests {
                 tvdb: Some(7),
                 ..Default::default()
             },
+            episode: None,
             watched_at: None,
         };
         let resp = api
@@ -1084,6 +1142,7 @@ mod tests {
                 imdb: Some("tt1".into()),
                 ..Default::default()
             },
+            episode: None,
             watched_at: None,
         };
         // A 409 (scrobble already in flight) must resolve to Ok, not an error.
@@ -1095,6 +1154,89 @@ mod tests {
             resp.get("ignored").and_then(|v| v.as_str()),
             Some("conflict")
         );
+    }
+
+    #[tokio::test]
+    async fn scrobble_episode_with_season_uses_show_format() {
+        let server = MockServer::start().await;
+        // An episode located by season/number must be sent as show + episode,
+        // which is the match Trakt resolves reliably (no 404).
+        Mock::given(method("POST"))
+            .and(path("/scrobble/pause"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "progress": 35.0,
+                "show": { "ids": { "tvdb": 121 } },
+                "episode": { "season": 2, "number": 5 },
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(
+                serde_json::json!({ "action": "pause", "progress": 35.0 }),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let item = TraktHistoryItem {
+            kind: TraktItemKind::Episode,
+            ids: TraktIds {
+                tvdb: Some(121),
+                ..Default::default()
+            },
+            episode: Some(TraktEpisode {
+                season: 2,
+                number: 5,
+            }),
+            watched_at: None,
+        };
+        let resp = api
+            .scrobble(ScrobbleAction::Pause, &item, 35.0)
+            .await
+            .unwrap();
+        assert_eq!(resp.get("action").and_then(|a| a.as_str()), Some("pause"));
+    }
+
+    #[tokio::test]
+    async fn add_to_history_episode_with_season_uses_shows() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/sync/history"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "shows": [{
+                    "ids": { "tvdb": 121 },
+                    "seasons": [{
+                        "number": 2,
+                        "episodes": [{ "number": 5 }],
+                    }],
+                }],
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(
+                serde_json::json!({
+                    "added": { "movies": 0, "episodes": 1 },
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let items = vec![TraktHistoryItem {
+            kind: TraktItemKind::Episode,
+            ids: TraktIds {
+                tvdb: Some(121),
+                ..Default::default()
+            },
+            episode: Some(TraktEpisode {
+                season: 2,
+                number: 5,
+            }),
+            watched_at: None,
+        }];
+        let resp = api.add_to_history(&items).await.unwrap();
+        let added = resp
+            .get("added")
+            .and_then(|a| a.get("episodes"))
+            .and_then(serde_json::Value::as_u64);
+        assert_eq!(added, Some(1));
     }
 
     // ── get_watch_history ─────────────────────────────────────────────────────
@@ -1222,6 +1364,7 @@ mod tests {
                 trakt: Some(7),
                 ..Default::default()
             },
+            episode: None,
             watched_at: None,
         }];
         let count = sync_history(&api, items).await.unwrap();

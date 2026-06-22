@@ -786,26 +786,88 @@ async fn emby_played_backfill(
     out
 }
 
+/// Extract Trakt provider ids from a media-server `ProviderIds` map.
+fn trakt_ids_from_provider_map(
+    provider_ids: &std::collections::BTreeMap<String, String>,
+) -> etlp_sync::TraktIds {
+    etlp_sync::TraktIds {
+        imdb: provider_ids.get("Imdb").cloned(),
+        tmdb: provider_ids.get("Tmdb").and_then(|v| v.parse().ok()),
+        tvdb: provider_ids.get("Tvdb").and_then(|v| v.parse().ok()),
+        ..etlp_sync::TraktIds::default()
+    }
+}
+
+/// Whether any external id is present.
+fn has_any_trakt_id(ids: &etlp_sync::TraktIds) -> bool {
+    ids.imdb.is_some() || ids.tmdb.is_some() || ids.tvdb.is_some()
+}
+
 /// Build a [`TraktHistoryItem`] from an episode/movie's external ids, or `None`
 /// when no usable id is present.
 fn trakt_item_from_ids(
     kind: etlp_sync::TraktItemKind,
     provider_ids: &std::collections::BTreeMap<String, String>,
 ) -> Option<etlp_sync::TraktHistoryItem> {
-    let ids = etlp_sync::TraktIds {
-        imdb: provider_ids.get("Imdb").cloned(),
-        tmdb: provider_ids.get("Tmdb").and_then(|v| v.parse().ok()),
-        tvdb: provider_ids.get("Tvdb").and_then(|v| v.parse().ok()),
-        ..etlp_sync::TraktIds::default()
-    };
-    if ids.imdb.is_none() && ids.tmdb.is_none() && ids.tvdb.is_none() {
+    let ids = trakt_ids_from_provider_map(provider_ids);
+    if !has_any_trakt_id(&ids) {
         return None;
     }
     Some(etlp_sync::TraktHistoryItem {
         kind,
         ids,
+        episode: None,
         watched_at: None,
     })
+}
+
+/// Build the best-matching Trakt item for the just-watched entry.
+///
+/// For an Emby/Jellyfin episode it prefers the **show's** ids plus the
+/// season/episode number — the match Trakt resolves most reliably — by fetching
+/// the series' `ProviderIds` from the media server. It falls back to the item's
+/// own ids (movies, or when the show ids / season / episode number are missing).
+/// Returns `None` when no usable id can be found, so the caller skips the item
+/// instead of sending a request that would 404.
+async fn build_trakt_item(
+    state: &SharedState,
+    kind: etlp_sync::TraktItemKind,
+    data: &PlaybackData,
+) -> Option<etlp_sync::TraktHistoryItem> {
+    if kind == etlp_sync::TraktItemKind::Episode
+        && data.server.is_emby_like()
+        && !data.series_id.is_empty()
+        && let (Some(season), Some(number)) = (data.season_number, data.index)
+        && let (Ok(season), Ok(number)) =
+            (u32::try_from(season), u32::try_from(number))
+        && let Some(show_ids) = fetch_series_trakt_ids(state, data).await
+    {
+        return Some(etlp_sync::TraktHistoryItem {
+            kind,
+            ids: show_ids,
+            episode: Some(etlp_sync::TraktEpisode { season, number }),
+            watched_at: None,
+        });
+    }
+    trakt_item_from_ids(kind, &data.provider_ids)
+}
+
+/// Fetch the series' Trakt ids from the media server, or `None` when the series
+/// item cannot be read or carries no usable external id.
+async fn fetch_series_trakt_ids(
+    state: &SharedState,
+    data: &PlaybackData,
+) -> Option<etlp_sync::TraktIds> {
+    let base_url = format!("{}://{}", data.scheme, data.netloc);
+    let emby = EmbyClient::new(
+        state.http_client.clone(),
+        &base_url,
+        &data.api_key,
+        &data.user_id,
+    );
+    let series = emby.item(&data.series_id).await.ok()?;
+    let ids = trakt_ids_from_provider_map(&series.provider_ids);
+    has_any_trakt_id(&ids).then_some(ids)
 }
 
 /// Sync all completed entries to Trakt.tv when configured.
@@ -905,10 +967,12 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         };
 
-        // Throttle repeats of the just-watched item; `allow_duplicate` bypasses
-        // it so every completion is reported again.
+        // Throttle only once the item is finished; an unfinished item must keep
+        // reporting so newer progress always reaches Trakt. `allow_duplicate`
+        // bypasses the throttle for completed items too.
         let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-        if !allow_duplicate && state.sync_recently_done(&key) {
+        if entry.completed && !allow_duplicate && state.sync_recently_done(&key)
+        {
             debug!(item = %data.media_title, "trakt: throttled, skip");
             continue;
         }
@@ -916,7 +980,16 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // Scrobble the just-watched item. ≥ 90 % stops at 100 % so Trakt marks
         // it watched; below that we pause at the real progress so it surfaces as
         // "currently watching" / Up Next without being marked watched.
-        if let Some(item) = trakt_item_from_ids(kind, &data.provider_ids) {
+        //
+        // Episodes are matched by show ids + season/number (see
+        // `build_trakt_item`); an id-only item additionally resolves its numeric
+        // Trakt id first so the match does not 404. If the scrobble still fails
+        // and the item is finished, fall back to the history API so the watch is
+        // at least recorded.
+        if let Some(mut item) = build_trakt_item(state, kind, data).await {
+            if item.episode.is_none() && item.ids.trakt.is_none() {
+                item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
+            }
             let (action, progress) = if entry.completed {
                 (ScrobbleAction::Stop, 100.0)
             } else {
@@ -929,6 +1002,17 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
                     completed = entry.completed,
                     "trakt: scrobbled"
                 ),
+
+                // An in-progress item is reported on every stop, so marking it
+                // watched here would spam duplicate history entries — only the
+                // finished item falls back to the history API.
+                Err(e) if entry.completed => {
+                    warn!("trakt scrobble error: {e}; falling back to history");
+                    if let Err(e2) = sync_history(&api, vec![item]).await {
+                        warn!("trakt history fallback error: {e2}");
+                    }
+                }
+
                 Err(e) => warn!("trakt scrobble error: {e}"),
             }
         }
@@ -1081,9 +1165,10 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Throttle repeated marks of the same item within a short window.
+        // Throttle only once the episode is finished; while it is still in
+        // progress, keep reporting so newer progress always reaches Bangumi.
         let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
-        if state.sync_recently_done(&key) {
+        if entry.completed && state.sync_recently_done(&key) {
             debug!(item = %data.media_title, "bangumi: throttled, skip");
             continue;
         }

@@ -6,7 +6,7 @@
 
 use etlp_net::{HttpClient, NetError};
 
-use crate::dto::{ItemList, PlaybackInfo};
+use crate::dto::{Item, ItemList, PlaybackInfo};
 
 /// A lightweight Emby client bound to one server + credentials.
 #[derive(Debug, Clone)]
@@ -102,6 +102,25 @@ impl EmbyClient {
             params.push(("SeasonId", season_id));
         }
         self.http.get_json(&url, &params).await
+    }
+
+    /// `Users/{user_id}/Items/{item_id}` — fetch a single item's metadata.
+    ///
+    /// Requests only the `ProviderIds` field; used to read a series' external
+    /// ids so an episode can be reported to Trakt by show ids + season/episode
+    /// number (the match Trakt resolves most reliably). The returned [`Item`]
+    /// carries empty provider ids when the server supplies none.
+    pub async fn item(&self, item_id: &str) -> Result<Item, NetError> {
+        let url = self.url(&format!("Users/{}/Items/{item_id}", self.user_id));
+        self.http
+            .get_json(
+                &url,
+                &[
+                    ("Fields", "ProviderIds"),
+                    ("X-Emby-Token", self.api_key.as_str()),
+                ],
+            )
+            .await
     }
 
     /// Build the direct-stream URL for an item.
@@ -201,6 +220,35 @@ mod tests {
         let item = list.items.first().expect("one item");
         assert_eq!(item.id, "1");
         assert_eq!(item.index_number, Some(1));
+    }
+
+    #[tokio::test]
+    async fn item_parses_provider_ids() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/emby/Users/U/Items/900"))
+            .and(query_param("X-Emby-Token", "KEY"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "Id": "900",
+                    "Type": "Series",
+                    "ProviderIds": { "Tvdb": "121361", "Tmdb": "1399" }
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let http = HttpClient::new().expect("client");
+        let client = EmbyClient::new(http, server.uri(), "KEY", "U");
+        let item = client.item("900").await.expect("item");
+        assert_eq!(
+            item.provider_ids.get("Tvdb").map(String::as_str),
+            Some("121361")
+        );
+        assert_eq!(
+            item.provider_ids.get("Tmdb").map(String::as_str),
+            Some("1399")
+        );
     }
 
     #[test]
