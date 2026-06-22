@@ -175,7 +175,7 @@ export const en: typeof zhCN = {
         'Preload and download mode are triggered by the browser userscript\'s commands, not toggled here: the script\'s "cache while playing" is preload, and "download only" is download mode; download mode also requires your media server account to permit resource downloads',
     sys_trakt: "Trakt.tv Scrobbling",
     sys_trakt_sync_note:
-        'Synced automatically when playback ends: a real watch (roughly 20s or more, not a momentary open) is reported and Trakt decides by progress — about 80% or more marks it watched and writes history (Up Next then shows the next episode), below that the resume position is saved; episodes of the season already finished in your media server are backfilled and de-duplicated; re-watching this episode marks it again, gated by the "allow duplicate" switch below for the time window',
+        'Synced automatically when playback ends: finishing the episode (about 90% or more) marks it watched and writes history, and Trakt\'s Up Next then shows the next one; an unfinished view is not reported; episodes of the season already finished in your media server are backfilled and de-duplicated; re-watching this episode writes a fresh history entry, gated by the "allow duplicate" switch below for the time window',
     sys_trakt_dashboard: "Open Trakt dashboard",
     sys_trakt_setup_title: "Setup",
     sys_trakt_setup_step1: "1. Create an app on Trakt: ",

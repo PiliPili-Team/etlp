@@ -938,9 +938,7 @@ async fn fetch_series_trakt_ids(
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
 /// skips when either is absent or the netloc does not match `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
-    use etlp_sync::{
-        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind, sync_history,
-    };
+    use etlp_sync::{TraktApi, TraktHistoryItem, TraktItemKind, sync_history};
 
     if entries.is_empty() {
         debug!("trakt: no watched entries to sync, skip");
@@ -1017,10 +1015,15 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         }
     }
 
-    // The just-watched item is reported with a single `scrobble/stop` (Trakt
-    // decides watched vs resume by progress); earlier episodes the server marks
-    // played are batched into one `/sync/history` call.
-    let mut items: Vec<TraktHistoryItem> = Vec::new();
+    // Two batches, both added via `/sync/history` (no scrobble):
+    // - `current_items`: the just-watched items, added directly with **no**
+    //   history de-dup, so re-watching an episode records a fresh entry. The
+    //   throttle above is the only gate (bypassed by `allow_duplicate`).
+    // - `backfill_items`: earlier episodes the server already marks played,
+    //   added through `sync_history` which de-duplicates against the existing
+    //   history so they are never re-marked.
+    let mut current_items: Vec<TraktHistoryItem> = Vec::new();
+    let mut backfill_items: Vec<TraktHistoryItem> = Vec::new();
     for entry in entries {
         let data = entry.data;
         if !host_enabled(&data.netloc, &enable_host) {
@@ -1034,10 +1037,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         };
 
-        // Throttle a finished item only: re-watching it within the window is
-        // skipped unless `allow_duplicate` is on (then every completion is
-        // reported again, so re-watching e.g. episode 6 re-marks it). A partial
-        // view is never throttled — it always re-reports its resume position.
+        // Throttle a finished item: re-watching it within the window is skipped
+        // unless `allow_duplicate` is on (then every completion is reported
+        // again, so re-watching e.g. episode 6 re-marks it).
         let key = format!("trakt:{}:{}", data.netloc, data.item_id);
         if entry.completed && !allow_duplicate && state.sync_recently_done(&key)
         {
@@ -1045,53 +1047,29 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Report the just-watched item with a single `scrobble/stop` at the real
-        // progress, without an etlp-side completion gate: Trakt itself marks it
-        // watched (and writes history) at ≥ 80 %, or saves the resume position
-        // between 1 % and 79 %. The progress is floored to 1 % because Trakt
-        // rejects a stop below 1 % with HTTP 422. A momentary open under the
-        // real-watch floor is dropped as noise.
-        //
-        // Scrobble (not /sync/history) is used for the current item so a
-        // re-watch is reported every time — the history de-dup that
-        // /sync/history applies would otherwise silently drop it.
-        let watched_secs = (entry.stop_sec - data.start_sec).unsigned_abs();
-        if watched_secs < MIN_REAL_WATCH_SECS {
+        // Mark the just-watched item watched only when finished (≥ the
+        // completion threshold), matching the reference implementation — the
+        // `/sync/history` API has no progress concept, so a partial view is
+        // simply not synced.
+        if entry.completed {
+            // build_trakt_item logs the reason when it yields None.
+            if let Some(item) = build_trakt_item(state, kind, data).await {
+                info!(
+                    item = %data.media_title,
+                    "trakt: queued watched item for history"
+                );
+                current_items.push(item);
+            }
+        } else {
             info!(
                 item = %data.media_title,
-                watched_secs,
-                "trakt: watched too short (< {MIN_REAL_WATCH_SECS}s), skip"
+                progress = entry.progress,
+                "trakt: not finished, not marked watched"
             );
-        } else if let Some(mut item) = build_trakt_item(state, kind, data).await
-        {
-            if item.episode.is_none() && item.ids.trakt.is_none() {
-                item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
-            }
-            let progress = entry.progress.max(1.0);
-            match api.scrobble(ScrobbleAction::Stop, &item, progress).await {
-                Ok(_) => info!(
-                    item = %data.media_title,
-                    progress,
-                    completed = entry.completed,
-                    "trakt: scrobbled"
-                ),
-
-                // Only a finished item falls back to the history API; a partial
-                // view is left as the saved resume position.
-                Err(e) if entry.completed => {
-                    warn!("trakt scrobble error: {e}; falling back to history");
-                    if let Err(e2) = sync_history(&api, vec![item]).await {
-                        warn!("trakt history fallback error: {e2}");
-                    }
-                }
-
-                Err(e) => warn!("trakt scrobble error: {e}"),
-            }
         }
 
         // Backfill earlier episodes the server already marks played, so the
         // first sync of a season records everything finished in the client.
-        // sync_history resolves and de-duplicates each against the history.
         if kind == TraktItemKind::Episode {
             let cur_index = data.index.unwrap_or_default();
             for ep in &emby_played_backfill(state, data).await {
@@ -1107,31 +1085,43 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 item.ids.trakt = api
                     .resolve_trakt_id(TraktItemKind::Episode, &item.ids)
                     .await;
-                items.push(item);
+                backfill_items.push(item);
             }
         }
     }
 
-    // De-duplicate within this batch: the same episode can be queued by more
-    // than one entry (its own watch plus a later episode's backfill) when a
-    // playlist is binged, which would otherwise add it to history several times.
-    // Items whose Trakt id could not be resolved are kept (sync_history then
-    // de-duplicates them against the existing history server-side).
+    // De-duplicate the backfill batch (a binged playlist can queue the same
+    // earlier episode from several entries). Items with no resolved Trakt id are
+    // kept; `sync_history` then de-duplicates them against the history.
     let mut seen: std::collections::HashSet<(bool, u64)> =
         std::collections::HashSet::new();
-    items.retain(|item| match item.ids.trakt {
+    backfill_items.retain(|item| match item.ids.trakt {
         Some(id) => seen.insert((item.kind == TraktItemKind::Movie, id)),
         None => true,
     });
 
-    debug!(items = items.len(), "trakt: built history items");
-    if items.is_empty() {
-        return;
+    debug!(
+        current = current_items.len(),
+        backfill = backfill_items.len(),
+        "trakt: built history items"
+    );
+
+    // Current items: added directly, no de-dup, so a re-watch records again.
+    if !current_items.is_empty() {
+        match api.add_to_history(&current_items).await {
+            Ok(_) => {
+                info!("trakt: added {} watched item(s)", current_items.len())
+            }
+            Err(e) => warn!("trakt history add error: {e}"),
+        }
     }
 
-    match sync_history(&api, items).await {
-        Ok(n) => info!("trakt: synced {n} item(s) to history"),
-        Err(e) => warn!("trakt sync error: {e}"),
+    // Backfill: de-duplicated against the existing history before adding.
+    if !backfill_items.is_empty() {
+        match sync_history(&api, backfill_items).await {
+            Ok(n) => info!("trakt: backfilled {n} item(s)"),
+            Err(e) => warn!("trakt sync error: {e}"),
+        }
     }
 }
 
