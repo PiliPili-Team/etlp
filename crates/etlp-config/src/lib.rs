@@ -291,6 +291,11 @@ pub struct BangumiSection {
     /// sequel chain to the right season. Defaults to enabled.
     #[serde(default = "default_true")]
     pub title_search_fallback: bool,
+    /// User-defined provider→Bangumi subject mappings, one DSL line each, e.g.
+    /// `tmdb:10000|type:tv|S4 -> bgm:20000|E+59`. Parsed and applied as the
+    /// highest-priority subject resolver (see `etlp-sync::bangumi_map`).
+    #[serde(default)]
+    pub subject_map: Vec<String>,
 }
 
 impl Default for BangumiSection {
@@ -302,6 +307,7 @@ impl Default for BangumiSection {
             private: true,
             genres: default_bangumi_genres(),
             title_search_fallback: true,
+            subject_map: Vec::new(),
         }
     }
 }

@@ -486,6 +486,7 @@ pub fn run() {
             commands::list_system_fonts,
             commands::set_autostart,
             commands::get_autostart,
+            commands::validate_bangumi_mapping,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

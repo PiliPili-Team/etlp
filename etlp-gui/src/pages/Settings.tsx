@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LangMode, DisplaySettings, AccentColor } from "../display";
 import { ACCENT_PALETTES } from "../display";
 import { useI18n } from "../i18n";
+import type { I18nKey } from "../i18n";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ interface ConfigDto {
     bangumi_username: string;
     bangumi_private: boolean;
     bangumi_genres: string;
+    bangumi_subject_map: string[];
     config_path: string;
 }
 
@@ -1955,6 +1957,101 @@ function SyncTabHeader({
     );
 }
 
+/// Editable list of provider→Bangumi subject mappings. New entries are
+/// validated by the backend (`validate_bangumi_mapping`): a valid line is
+/// normalised and appended, an invalid one shows a localised inline error.
+function SubjectMapRow({
+    label,
+    desc,
+    items,
+    onAdd,
+    onRemove,
+}: {
+    label: string;
+    desc?: string;
+    items: string[];
+    onAdd: (canonical: string) => void;
+    onRemove: (index: number) => void;
+}) {
+    const t = useI18n();
+    const [input, setInput] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [checking, setChecking] = useState(false);
+
+    const handleCheck = async () => {
+        const line = input.trim();
+        if (!line) {
+            setError(t("map_err_empty"));
+            return;
+        }
+        setChecking(true);
+        try {
+            const canonical = await invoke<string>("validate_bangumi_mapping", {
+                line,
+                existing: items,
+            });
+            onAdd(canonical);
+            setInput("");
+            setError(null);
+        } catch (code) {
+            // The backend rejects with a stable i18n key (e.g. map_err_provider).
+            const key = (typeof code === "string" ? code : "map_err_format") as I18nKey;
+            setError(t(key));
+        } finally {
+            setChecking(false);
+        }
+    };
+
+    return (
+        <div className="row row-block">
+            <div className="row-label">
+                <div>{label}</div>
+                {desc && <div className="row-desc">{desc}</div>}
+            </div>
+            <div className="row-control map-control">
+                {items.length > 0 && (
+                    <div className="map-list">
+                        {items.map((m, i) => (
+                            <div className="map-item" key={`${m}-${i}`}>
+                                <span className="map-item-text">{m}</span>
+                                <button
+                                    className="map-item-remove"
+                                    title={t("map_remove")}
+                                    onClick={() => onRemove(i)}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="map-add">
+                    <input
+                        className="input code"
+                        value={input}
+                        placeholder={t("map_placeholder")}
+                        onChange={(e) => {
+                            setInput(e.target.value);
+                            if (error) setError(null);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") void handleCheck();
+                        }}
+                    />
+                    <button
+                        className="btn btn-primary map-check"
+                        disabled={checking}
+                        onClick={() => void handleCheck()}
+                    >
+                        {t("map_check")}
+                    </button>
+                </div>
+                {error && <div className="map-error">{error}</div>}
+            </div>
+        </div>
+    );
+}
+
 function BangumiSection({
     cfg,
     update,
@@ -2037,6 +2134,24 @@ function BangumiSection({
                     placeholder={t("sys_bangumi_genres_placeholder")}
                     mono
                     onCommit={(v) => update("bangumi", "genres", v)}
+                />
+                <SubjectMapRow
+                    label={t("sys_bangumi_map")}
+                    desc={t("sys_bangumi_map_desc")}
+                    items={cfg.bangumi_subject_map}
+                    onAdd={(line) =>
+                        update("bangumi", "subject_map", [
+                            ...cfg.bangumi_subject_map,
+                            line,
+                        ])
+                    }
+                    onRemove={(i) =>
+                        update(
+                            "bangumi",
+                            "subject_map",
+                            cfg.bangumi_subject_map.filter((_, j) => j !== i),
+                        )
+                    }
                 />
                 <ButtonRow
                     label={t("sync_test")}

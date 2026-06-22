@@ -985,7 +985,15 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         return;
     }
 
-    let (username, access_token, private, enable_host, genres, title_fallback) = {
+    let (
+        username,
+        access_token,
+        private,
+        enable_host,
+        genres,
+        title_fallback,
+        subject_map,
+    ) = {
         let Ok(cfg) = state.config.read() else {
             return;
         };
@@ -999,8 +1007,11 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.enable_host.clone(),
             cfg.bangumi.genres.clone(),
             cfg.bangumi.title_search_fallback,
+            cfg.bangumi.subject_map.clone(),
         )
     };
+    // User-pinned subject mappings take priority over auto-resolution.
+    let mappings = etlp_sync::parse_mappings(&subject_map);
 
     debug!(
         entries = entries.len(),
@@ -1057,9 +1068,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             debug!(item = %data.media_title, "bangumi: no episode index, skip");
             continue;
         };
-        let Ok(sort) = u32::try_from(ep_index) else {
+        if u32::try_from(ep_index).is_err() {
             continue;
-        };
+        }
 
         // Throttle repeated marks of the same item within a short window.
         let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
@@ -1068,17 +1079,27 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        let Some(subject_id) = resolve_bangumi_subject(
+        let Some(target) = resolve_bangumi_subject(
             &api,
             data,
             title_fallback,
             &genres,
+            &mappings,
             &mut cache,
             &cache_path,
         )
         .await
         else {
             continue;
+        };
+        let subject_id = target.subject_id;
+
+        // Translate a local episode index to a Bangumi sort number, applying
+        // the mapping's per-season offset; drops indices that fall out of range.
+        let to_bgm_sort = |index: i64| -> Option<u32> {
+            u32::try_from(index + target.ep_offset)
+                .ok()
+                .filter(|s| *s > 0)
         };
 
         // Collect the episodes to mark watched: every earlier one the client
@@ -1090,15 +1111,16 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             .iter()
             .filter(|p| entry.completed || p.index != ep_index)
             .filter_map(|p| {
-                u32::try_from(p.index)
-                    .ok()
-                    .map(|s| (s, p.premiere_date.clone()))
+                to_bgm_sort(p.index).map(|s| (s, p.premiere_date.clone()))
             })
             .collect();
         // Non-Emby servers report no backfill; fall back to the current episode
         // only when it was actually completed.
-        if eps.is_empty() && entry.completed {
-            eps.push((sort, data.premiere_date.clone()));
+        if eps.is_empty()
+            && entry.completed
+            && let Some(s) = to_bgm_sort(ep_index)
+        {
+            eps.push((s, data.premiere_date.clone()));
         }
         eps.sort_by_key(|(s, _)| *s);
         eps.dedup_by_key(|(s, _)| *s);
@@ -1121,7 +1143,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 
         debug!(
             subject_id,
-            sort,
+            ep_offset = target.ep_offset,
             count = eps.len(),
             "bangumi: syncing entry"
         );
@@ -1137,23 +1159,72 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     }
 }
 
-/// Resolve the Bangumi subject ID for one entry.
+/// A resolved Bangumi subject plus the per-season episode offset to apply when
+/// marking episodes. The offset is non-zero only for user-mapping matches.
+struct BangumiTarget {
+    subject_id: u64,
+    ep_offset: i64,
+}
+
+impl BangumiTarget {
+    /// A target resolved through auto-detection (no episode offset).
+    fn auto(subject_id: u64) -> Self {
+        Self {
+            subject_id,
+            ep_offset: 0,
+        }
+    }
+}
+
+/// Resolve the Bangumi subject for one entry.
 ///
-/// Prefers `provider_ids["Bangumi"]`. When absent and `title_fallback` is on,
-/// resolves via cache → title search (gated to anime by `genres`) and persists
-/// any newly resolved `series:season → subject` mapping. Returns `None` when
-/// the subject cannot be determined.
+/// Resolution order: a user-pinned `subject_map` mapping (highest priority,
+/// carries an episode offset) → `provider_ids["Bangumi"]` → cache → title search
+/// (gated to anime by `genres`). Returns `None` when the subject cannot be
+/// determined.
 async fn resolve_bangumi_subject(
     api: &etlp_sync::BangumiApi,
     data: &PlaybackData,
     title_fallback: bool,
     genres: &str,
+    mappings: &[etlp_sync::SubjectMapping],
     cache: &mut etlp_sync::SubjectCache,
     cache_path: &std::path::Path,
-) -> Option<u64> {
+) -> Option<BangumiTarget> {
+    use etlp_sync::{MapProvider, match_mapping};
+
+    // Highest priority: an explicit user mapping pinned to this item by its
+    // tmdb/imdb/tvdb id (and season for TV).
+    let is_movie = data.item_type.eq_ignore_ascii_case("movie");
+    let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
+    let ids: Vec<(MapProvider, &str)> = [
+        ("Tmdb", MapProvider::Tmdb),
+        ("Imdb", MapProvider::Imdb),
+        ("Tvdb", MapProvider::Tvdb),
+    ]
+    .into_iter()
+    .filter_map(|(key, prov)| {
+        data.provider_ids
+            .get(key)
+            .filter(|v| !v.is_empty())
+            .map(|v| (prov, v.as_str()))
+    })
+    .collect();
+    if let Some(m) = match_mapping(mappings, &ids, is_movie, season_u32) {
+        info!(
+            subject_id = m.subject_id,
+            ep_offset = m.ep_offset,
+            "bangumi: subject from user mapping"
+        );
+        return Some(BangumiTarget {
+            subject_id: m.subject_id,
+            ep_offset: m.ep_offset,
+        });
+    }
+
     if let Some(id_str) = data.provider_ids.get("Bangumi") {
         match id_str.parse::<u64>() {
-            Ok(id) => return Some(id),
+            Ok(id) => return Some(BangumiTarget::auto(id)),
             Err(_) => {
                 warn!("bangumi: invalid subject id {id_str:?}, skipping");
                 return None;
@@ -1176,7 +1247,7 @@ async fn resolve_bangumi_subject(
         && let Some(id) = cache.get(&data.series_id, season)
     {
         debug!(id, "bangumi: subject from cache");
-        return Some(id);
+        return Some(BangumiTarget::auto(id));
     }
 
     let keywords: Vec<&str> =
@@ -1207,7 +1278,7 @@ async fn resolve_bangumi_subject(
             {
                 warn!("bangumi: subject cache write failed: {e}");
             }
-            Some(id)
+            Some(BangumiTarget::auto(id))
         }
         Ok(None) => {
             warn!(

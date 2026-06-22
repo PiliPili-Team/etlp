@@ -102,6 +102,7 @@ pub struct ConfigDto {
     pub bangumi_username: String,
     pub bangumi_private: bool,
     pub bangumi_genres: String,
+    pub bangumi_subject_map: Vec<String>,
     // runtime (not from config file)
     pub config_path: String,
 }
@@ -142,6 +143,7 @@ impl From<&Config> for ConfigDto {
             bangumi_username: c.bangumi.username.clone(),
             bangumi_private: c.bangumi.private,
             bangumi_genres: c.bangumi.genres.clone(),
+            bangumi_subject_map: c.bangumi.subject_map.clone(),
             config_path: c.path().to_string_lossy().into_owned(),
         }
     }
@@ -374,6 +376,33 @@ pub async fn update_config_field(
             Err(e)
         }
     }
+}
+
+/// Validate one Bangumi subject-mapping line and return its canonical form.
+///
+/// On success returns the normalised single-line DSL (ready to append to the
+/// list). On failure returns a stable i18n key (e.g. `map_err_provider`) the
+/// frontend localises, including `map_err_duplicate` when the entry's key
+/// collides with one already in `existing`.
+#[tauri::command]
+pub fn validate_bangumi_mapping(
+    line: String,
+    existing: Vec<String>,
+) -> Result<String, String> {
+    let parsed =
+        etlp_sync::parse_mapping(&line).map_err(|e| e.code().to_owned())?;
+
+    // Reject a duplicate key (same provider + id + kind + season).
+    let collides = etlp_sync::parse_mappings(&existing).iter().any(|m| {
+        m.provider == parsed.provider
+            && m.provider_id == parsed.provider_id
+            && m.is_movie == parsed.is_movie
+            && m.season == parsed.season
+    });
+    if collides {
+        return Err("map_err_duplicate".to_owned());
+    }
+    Ok(parsed.to_canonical())
 }
 
 /// Reload the in-memory config from disk and push to a running server.

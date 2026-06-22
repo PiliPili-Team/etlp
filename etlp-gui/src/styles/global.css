@@ -464,6 +464,86 @@ html[data-center-nav="true"] .sidebar {
     -webkit-app-region: no-drag;
 }
 
+/* ── Subject-mapping editor ──────────────────────────────────────────── */
+.row-block {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.map-control {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.map-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.map-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: var(--surface-alt);
+}
+
+.map-item-text {
+    flex: 1;
+    min-width: 0;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+    font-size: 12px;
+    color: var(--text);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.map-item-remove {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        color 0.15s;
+}
+
+.map-item-remove:hover {
+    background: var(--red-soft);
+    color: var(--red);
+}
+
+.map-add {
+    display: flex;
+    gap: 8px;
+}
+
+.map-add .input {
+    flex: 1;
+    min-width: 0;
+}
+
+.map-check {
+    flex-shrink: 0;
+}
+
+.map-error {
+    font-size: 12px;
+    color: var(--red);
+    line-height: 1.4;
+}
+
 /* ── Toggle ──────────────────────────────────────────────────────────── */
 .toggle {
     position: relative;

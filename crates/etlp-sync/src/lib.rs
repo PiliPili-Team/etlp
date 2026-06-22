@@ -13,12 +13,17 @@
 //! and marks the given episode sort numbers as watched.
 
 pub mod bangumi;
+pub mod bangumi_map;
 pub mod error;
 pub mod trakt;
 
 pub use bangumi::{
     BangumiApi, CollectionState, SubjectCache, sync_episode_by_bangumi_id,
     sync_episodes,
+};
+pub use bangumi_map::{
+    MapError, MapProvider, SubjectMapping, match_mapping, parse_mapping,
+    parse_mappings,
 };
 pub use error::{Result, SyncError};
 pub use trakt::{
