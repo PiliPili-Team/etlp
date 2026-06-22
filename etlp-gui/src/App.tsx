@@ -171,13 +171,22 @@ export interface Toast {
 
 // ── About modal ─────────────────────────────────────────────────────────────────
 
+// The app version is a compile-time constant, but the About modal remounts on
+// every open. Cache it module-level so reopening skips the IPC round-trip and
+// the brief placeholder flash. (No freshness concern: it never changes.)
+let cachedVersion: string | null = null;
+
 function AboutModal({ onClose }: { onClose: () => void }) {
     const t = useI18n();
-    const [version, setVersion] = useState("0.1.0");
+    const [version, setVersion] = useState(cachedVersion ?? "0.1.0");
 
     useEffect(() => {
+        if (cachedVersion) return;
         invoke<string>("get_app_version")
-            .then(setVersion)
+            .then((v) => {
+                cachedVersion = v;
+                setVersion(v);
+            })
             .catch(() => {});
     }, []);
 
