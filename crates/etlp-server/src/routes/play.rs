@@ -23,6 +23,7 @@ use etlp_metrics::{PlayMetrics, Span};
 use etlp_player::{
     DanDanConfig, DanDanHandle, LaunchArgs, LoadMode, LoadOptions, MpcHandle,
     MpvHandle, PlayerHandle, PlayerManager, PotHandle, SyncEntry, VlcHandle,
+    resolve_player_executable,
 };
 
 use crate::state::SharedState;
@@ -155,7 +156,7 @@ async fn run_player_chain(
     let chain_start = std::time::Instant::now();
     let playlist_m3u8 = format!("etlp_playlist_{session_id}.m3u8");
 
-    let cfg = match read_launch_cfg(&state) {
+    let mut cfg = match read_launch_cfg(&state) {
         Some(c) => c,
         None => {
             warn!("run_player_chain: config lock poisoned");
@@ -165,6 +166,19 @@ async fn run_player_chain(
             return;
         }
     };
+
+    // A macOS `.app` is a directory; spawning it fails with "Permission denied"
+    // (os error 13). Unwrap such a bundle to the executable inside it (e.g.
+    // /Applications/IINA.app → …/Contents/MacOS/iina-cli) before launch.
+    let resolved_exe = resolve_player_executable(&cfg.player_exe);
+    if resolved_exe != cfg.player_exe {
+        info!(
+            from = %cfg.player_exe,
+            to = %resolved_exe,
+            "resolved app bundle to executable"
+        );
+        cfg.player_exe = resolved_exe;
+    }
 
     let kind = PlayerKind::detect_from_path(&cfg.player_exe)
         .unwrap_or(PlayerKind::Mpv);
