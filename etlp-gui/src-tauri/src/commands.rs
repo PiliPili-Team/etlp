@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
 use tauri::State;
@@ -1437,14 +1438,15 @@ fn best_family_name(face: &ttf_parser::Face) -> Option<String> {
     best.map(|(_, _, text)| text)
 }
 
-/// List the available font families on the current system.
+/// Scan the system and per-user font directories for available family names.
 ///
-/// Scans the system and per-user font directories, reading each file's real
-/// family name from its `name` table (so a font appears under the name CSS
-/// expects, not its filename). Common cross-platform fonts are prepended so they
-/// appear at the top of any picker.
-#[tauri::command]
-pub fn list_system_fonts() -> Vec<String> {
+/// Reads each file's real family name from its `name` table (so a font appears
+/// under the name CSS expects, not its filename). Common cross-platform fonts
+/// are prepended so they appear at the top of any picker.
+///
+/// This is CPU- and I/O-bound (it parses every font file), so it must never run
+/// on the UI thread — see [`list_system_fonts`], which offloads it.
+fn scan_system_fonts() -> Vec<String> {
     let mut fonts: Vec<String> = Vec::new();
 
     let mut files: Vec<std::path::PathBuf> = Vec::new();
@@ -1487,6 +1489,25 @@ pub fn list_system_fonts() -> Vec<String> {
     fonts.sort();
     fonts.dedup();
     fonts
+}
+
+/// List the available font families on the current system.
+///
+/// The scan ([`scan_system_fonts`]) parses every installed font file, which can
+/// take hundreds of milliseconds. As a synchronous Tauri command it would run on
+/// the main thread and freeze the UI (notably when opening the System tab), so
+/// it is offloaded to the blocking pool and the result is cached for the process
+/// lifetime — repeat calls (e.g. revisiting the tab) return instantly.
+#[tauri::command]
+pub async fn list_system_fonts() -> Vec<String> {
+    static CACHE: OnceLock<Vec<String>> = OnceLock::new();
+    if let Some(cached) = CACHE.get() {
+        return cached.clone();
+    }
+    let fonts = tauri::async_runtime::spawn_blocking(scan_system_fonts)
+        .await
+        .unwrap_or_default();
+    CACHE.get_or_init(|| fonts).clone()
 }
 
 // ── System ─────────────────────────────────────────────────────────────────────
@@ -1618,8 +1639,26 @@ fn default_config_template() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_lines_before, version_gt};
+    use super::{read_lines_before, scan_system_fonts, version_gt};
     use std::io::Write as _;
+
+    #[test]
+    fn scan_always_includes_cross_platform_presets() {
+        // Presets are prepended regardless of what is installed, so the picker
+        // is never empty even on a machine with no scannable font files.
+        let fonts = scan_system_fonts();
+        for preset in ["system-ui", "Arial", "PingFang SC"] {
+            assert!(
+                fonts.iter().any(|f| f == preset),
+                "missing preset: {preset}"
+            );
+        }
+        // Output must be sorted and de-duplicated.
+        let mut sorted = fonts.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(fonts, sorted);
+    }
 
     #[test]
     fn version_gt_compares_numeric_components() {

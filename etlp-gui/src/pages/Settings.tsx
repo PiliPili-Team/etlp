@@ -805,6 +805,11 @@ function AccentColorRow({
 
 // ── Font picker row (pure <select> dropdown) ────────────────────────────────────
 
+// Module-level cache: the backend already memoizes the scan, but caching the
+// resolved list here also skips the IPC round-trip and the empty-list flash when
+// the System tab is reopened (the row remounts on every visit).
+let cachedFonts: string[] | null = null;
+
 function FontPickerRow({
     value,
     onChange,
@@ -813,11 +818,15 @@ function FontPickerRow({
     onChange: (v: string) => void;
 }) {
     const t = useI18n();
-    const [fonts, setFonts] = useState<string[]>([]);
+    const [fonts, setFonts] = useState<string[]>(cachedFonts ?? []);
 
     useEffect(() => {
+        if (cachedFonts) return;
         invoke<string[]>("list_system_fonts")
-            .then(setFonts)
+            .then((list) => {
+                cachedFonts = list;
+                setFonts(list);
+            })
             .catch(() => setFonts(["SF Pro Text", "Helvetica Neue", "Arial", "Roboto"]));
     }, []);
 
