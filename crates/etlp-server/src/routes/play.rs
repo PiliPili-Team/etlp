@@ -938,7 +938,9 @@ async fn fetch_series_trakt_ids(
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
 /// skips when either is absent or the netloc does not match `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
-    use etlp_sync::{TraktApi, TraktHistoryItem, TraktItemKind, sync_history};
+    use etlp_sync::{
+        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind, sync_history,
+    };
 
     if entries.is_empty() {
         debug!("trakt: no watched entries to sync, skip");
@@ -1047,13 +1049,16 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Mark the just-watched item watched only when finished (≥ the
-        // completion threshold), matching the reference implementation — the
-        // `/sync/history` API has no progress concept, so a partial view is
-        // simply not synced.
+        // Resolve the just-watched item once (build_trakt_item logs the reason
+        // when it yields None).
+        let mut current_item = build_trakt_item(state, kind, data).await;
+
+        // Primary: mark the item watched only when finished (≥ the completion
+        // threshold), matching the reference implementation — the
+        // `/sync/history` API has no progress concept, so a partial view is not
+        // added to history.
         if entry.completed {
-            // build_trakt_item logs the reason when it yields None.
-            if let Some(item) = build_trakt_item(state, kind, data).await {
+            if let Some(item) = current_item.clone() {
                 info!(
                     item = %data.media_title,
                     "trakt: queued watched item for history"
@@ -1064,8 +1069,28 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             info!(
                 item = %data.media_title,
                 progress = entry.progress,
-                "trakt: not finished, not marked watched"
+                "trakt: not finished, not added to history"
             );
+        }
+
+        // Double insurance: also fire a `scrobble/stop` at the real progress so
+        // Trakt registers the watch a second way — at ≥ 80 % it scrobbles to
+        // history, between 1 % and 79 % it saves the resume position. Progress
+        // is floored to 1 % because Trakt rejects a stop below 1 % with HTTP
+        // 422. (A completed item is therefore recorded by both paths.)
+        if let Some(ref mut item) = current_item {
+            if item.episode.is_none() && item.ids.trakt.is_none() {
+                item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
+            }
+            let progress = entry.progress.max(1.0);
+            match api.scrobble(ScrobbleAction::Stop, item, progress).await {
+                Ok(_) => info!(
+                    item = %data.media_title,
+                    progress,
+                    "trakt: scrobbled stop (double insurance)"
+                ),
+                Err(e) => warn!("trakt scrobble stop error: {e}"),
+            }
         }
 
         // Backfill earlier episodes the server already marks played, so the
