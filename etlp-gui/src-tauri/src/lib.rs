@@ -100,17 +100,21 @@ fn augment_path() {}
 
 /// The tray icon asset and whether it should render as a monochrome template.
 ///
-/// macOS menu-bar icons are template images that the system recolours to match
-/// the light/dark menu bar, so a black silhouette is correct there. Windows and
-/// Linux tray areas have no template support: a black silhouette renders nearly
-/// invisible on the (commonly dark) taskbar, so they use the full-colour app
-/// logo instead.
+/// macOS and Linux menu bars use the Liyue emblem: macOS gets a black *template*
+/// image that the system recolours to match the light/dark menu bar, while Linux
+/// (which has no template support) gets the white emblem, kept visible on the
+/// commonly dark panel. Windows has no template support either and a silhouette
+/// renders nearly invisible on its taskbar, so it keeps the full-colour app logo.
 fn tray_icon_asset() -> (&'static [u8], bool) {
     #[cfg(target_os = "macos")]
     {
         (include_bytes!("../icons/tray-icon.png"), true)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        (include_bytes!("../icons/tray-icon-linux.png"), false)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         (include_bytes!("../icons/32x32.png"), false)
     }
