@@ -77,6 +77,8 @@ export const zhTW: typeof zhCN = {
     pl_path_desc: "可選；留空使用系統 PATH 中的播放器",
     pl_browse: "瀏覽…",
     pl_path_error: "路徑不存在，請確認輸入",
+    pl_progress_support:
+        "進度上報：mpv / IINA 完整支援——播放中即時上報、退出寫回續播位置、標記已看並同步 Trakt / Bangumi、多集逐集追蹤。其他播放器僅在退出時寫回最終進度並同步，無播放中的即時上報；其中 VLC 支援整季連播，MPC 與 dandanplay 為單集，PotPlayer 的進度取得僅 Windows 可用",
 
     // Version prefer
     page_vp: "版本偏好",

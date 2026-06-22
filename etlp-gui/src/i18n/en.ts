@@ -77,6 +77,8 @@ export const en: typeof zhCN = {
     pl_path_desc: "Optional — leave empty to use the player from system PATH",
     pl_browse: "Browse…",
     pl_path_error: "Path not found — please check the input",
+    pl_progress_support:
+        "Progress reporting: mpv / IINA are fully supported — live updates while playing, resume position written back on exit, watched marking, Trakt / Bangumi sync and per-episode tracking. Other players only write the final position and sync on exit, with no live reporting during playback; VLC plays the whole season continuously, MPC and dandanplay are single-episode, and PotPlayer position read-back is Windows-only",
 
     // Version prefer
     page_vp: "Version Preference",

@@ -999,6 +999,7 @@ function PlayerSection({
                     value={cfg.player_path}
                     onCommit={(v) => update("dev", "player_path", v || null)}
                 />
+                <div className="settings-note">{t("pl_progress_support")}</div>
             </div>
             <div className="settings-group-title">{t("pl_startup")}</div>
             <div className="settings-group">
