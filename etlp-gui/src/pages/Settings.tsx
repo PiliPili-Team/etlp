@@ -2137,6 +2137,10 @@ function BangumiSection({
             />
 
             <div className="settings-group">
+                <div className="settings-note">{t("sys_bangumi_sync_note")}</div>
+            </div>
+
+            <div className="settings-group">
                 <TagListRow
                     label={t("sys_bangumi_host")}
                     desc={t("sys_bangumi_host_desc")}
@@ -2309,6 +2313,10 @@ function TraktSection({
                 busy={auth.busy}
                 onRefresh={() => void auth.onRefreshClick()}
             />
+
+            <div className="settings-group">
+                <div className="settings-note">{t("sys_trakt_sync_note")}</div>
+            </div>
 
             <div className="settings-group-title" style={{ marginTop: 0 }}>
                 {t("sys_trakt_setup_title")}

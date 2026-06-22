@@ -170,8 +170,10 @@ export const en: typeof zhCN = {
     sys_speed_limit_desc:
         "Caps the bandwidth used by downloads and preload caching (MiB/s); 0 = unlimited",
     sys_download_note:
-        'Preload and download mode are triggered by the browser userscript\'s commands, not toggled here: the script\'s "cache while playing" is preload, and "download only" is download mode; download mode also requires your media server account to permit resource downloads.',
+        'Preload and download mode are triggered by the browser userscript\'s commands, not toggled here: the script\'s "cache while playing" is preload, and "download only" is download mode; download mode also requires your media server account to permit resource downloads',
     sys_trakt: "Trakt.tv Scrobbling",
+    sys_trakt_sync_note:
+        'Synced automatically when playback ends: watching 90% or more marks the item watched and adds it to history; below 90% it is recorded at the real progress as "currently watching" so it surfaces under Up Next. Earlier episodes of the season already finished in your media server are backfilled too',
     sys_trakt_setup_title: "Setup",
     sys_trakt_setup_step1: "1. Create an app on Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -198,6 +200,8 @@ export const en: typeof zhCN = {
     sys_trakt_dup_desc:
         "When on, every completion re-marks the same episode/movie; when off, throttled de-duplication applies: the same item finished again within 10 minutes is marked only once (back-filled earlier episodes are always de-duplicated regardless)",
     sys_bangumi: "Bangumi.tv Tracking",
+    sys_bangumi_sync_note:
+        'Synced automatically when playback ends: Bangumi has no per-episode progress, so any real watch of the episode (roughly 20s or more, not a momentary open) marks it watched and sets the subject to "watching". Earlier episodes of the season already finished in your media server are backfilled too',
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
         "Comma-separated host keywords; leave empty to disable, a single dot enables all",
@@ -217,7 +221,7 @@ export const en: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID Mapping",
     sys_bangumi_map_desc:
-        "Pin a tmdb/imdb/tvdb show or movie to an exact Bangumi subject; takes top priority. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 maps season 4 to subject 20000 with a +59 episode offset; a movie is tmdb:10001|type:movie -> bgm:20001. With no type it is inferred from the season (a season means TV, otherwise movie).",
+        "Pin a tmdb/imdb/tvdb show or movie to an exact Bangumi subject; takes top priority. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 maps season 4 to subject 20000 with a +59 episode offset; a movie is tmdb:10001|type:movie -> bgm:20001. With no type it is inferred from the season (a season means TV, otherwise movie)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Check & Add",
     map_remove: "Remove",
