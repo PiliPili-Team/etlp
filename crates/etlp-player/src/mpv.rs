@@ -364,6 +364,13 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
                 }
             })
             .collect();
+
+        // When iina-cli detects anything on stdin it auto-adds `--stdin`, and
+        // IINA then opens `stdin` (an empty stream → "Failed to recognize file
+        // format") instead of our file. Force it off. `--no-stdin` is an
+        // iina-cli flag, not an mpv option, so it is added after the `--mpv-`
+        // rewrite and must not carry that prefix.
+        cmd.insert(0, "--no-stdin".into());
     }
 
     cmd
@@ -426,6 +433,9 @@ impl MpvHandle {
         let cmd_args = build_args(&args, &ipc);
         let child = std::process::Command::new(&args.exe)
             .args(&cmd_args)
+            // Detach stdin too: an inherited stdin makes iina-cli believe a file
+            // is being piped in and open `stdin` instead of our media file.
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()?;
@@ -974,6 +984,30 @@ mod tests {
         assert!(!flat.contains("--mpv-playlist=/tmp/etlp_playlist_0.m3u8"));
         assert!(!flat.contains("--playlist=/tmp/etlp_playlist_0.m3u8"));
         assert!(flat.contains("--mpv-playlist-start=8"));
+        // iina-cli's own --no-stdin must be present and not --mpv- prefixed,
+        // otherwise IINA opens stdin instead of the playlist file.
+        assert!(cmd.iter().any(|s| s == "--no-stdin"));
+        assert!(!flat.contains("--mpv-no-stdin"));
+    }
+
+    #[test]
+    fn build_args_iina_single_file_disables_stdin() {
+        // --no-stdin applies to every iina launch, not just playlists.
+        let mut args = default_launch();
+        args.exe = "/Applications/IINA.app/Contents/MacOS/iina-cli".into();
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        assert!(cmd.iter().any(|s| s == "--no-stdin"));
+        assert!(!cmd.join(" ").contains("--mpv-no-stdin"));
+    }
+
+    #[test]
+    fn build_args_non_iina_has_no_stdin_flag() {
+        // Plain mpv must not receive iina-cli's --no-stdin flag.
+        let args = default_launch();
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        assert!(!cmd.iter().any(|s| s == "--no-stdin"));
     }
 
     #[test]
