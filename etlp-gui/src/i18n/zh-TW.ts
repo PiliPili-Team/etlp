@@ -164,8 +164,10 @@ export const zhTW: typeof zhCN = {
     sys_speed_limit: "下載速度限制 (MiB/s)",
     sys_speed_limit_desc: "限制下載與預先載入快取佔用的頻寬（MiB/s）；0 表示不限速",
     sys_download_note:
-        "預先載入與下載模式由瀏覽器油猴腳本的指令觸發，不在此處開關：腳本發起「邊播邊快取」即為預先載入，發起「僅下載」即為下載模式；其中下載模式還要求你的媒體伺服器帳號本身具備資源下載權限。",
+        "預先載入與下載模式由瀏覽器油猴腳本的指令觸發，不在此處開關：腳本發起「邊播邊快取」即為預先載入，發起「僅下載」即為下載模式；其中下載模式還要求你的媒體伺服器帳號本身具備資源下載權限",
     sys_trakt: "Trakt.tv 播放記錄同步",
+    sys_trakt_sync_note:
+        "播放結束後自動同步：本集看到 90% 及以上標記為已觀看並寫入記錄，未達 90% 則依真實進度記錄為「正在觀看」，可在 Trakt 的 Up Next 繼續；媒體伺服器中此前已看完的本季劇集會一併補記",
     sys_trakt_setup_title: "設定步驟",
     sys_trakt_setup_step1: "1. 在 Trakt 建立應用程式：",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -187,6 +189,8 @@ export const zhTW: typeof zhCN = {
     sys_trakt_dup_desc:
         "開啟後每次看完都會再次標記同一劇集 / 影片；關閉則啟用節流去重：同一條目在 10 分鐘內重複看完只標記一次（補全的歷史集數無論開關始終去重）",
     sys_bangumi: "Bangumi.tv 追番記錄同步",
+    sys_bangumi_sync_note:
+        "播放結束後自動同步：Bangumi 沒有單集進度的概念，因此本集只要有效觀看（約 20 秒以上、非誤點即退）即標記為「看過」，整個條目置為「在看」；媒體伺服器中此前已看完的本季劇集會一併補標",
     sys_bangumi_host: "啟用網域",
     sys_bangumi_host_desc: "逗號分隔的網域關鍵字；留空停用，單獨一個點表示全部啟用",
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
@@ -203,7 +207,7 @@ export const zhTW: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID 對應",
     sys_bangumi_map_desc:
-        "把 tmdb/imdb/tvdb 的劇集或電影手動釘到指定 Bangumi 條目，優先級最高。格式：tmdb:10000|type:tv|S4 -> bgm:20000|E+59，表示該劇第 4 季每集 +59 偏移對應到條目 20000；電影寫 tmdb:10001|type:movie -> bgm:20001。未寫 type 時依是否帶季數推斷（帶季為劇集，否則電影）。",
+        "把 tmdb/imdb/tvdb 的劇集或電影手動釘到指定 Bangumi 條目，優先級最高。格式：tmdb:10000|type:tv|S4 -> bgm:20000|E+59，表示該劇第 4 季每集 +59 偏移對應到條目 20000；電影寫 tmdb:10001|type:movie -> bgm:20001。未寫 type 時依是否帶季數推斷（帶季為劇集，否則電影）",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "檢查並新增",
     map_remove: "刪除",
