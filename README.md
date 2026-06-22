@@ -24,6 +24,32 @@ playlist construction, progress write-back, and optional watch-history sync.
 
 ---
 
+## App preview
+
+Native desktop UI with macOS vibrancy, an accent-color theme, and full
+English / 简体中文 / 繁體中文 localization. Thumbnails below — click to
+enlarge.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="assets/images/01.png"><img src="assets/images/01.png" width="260" alt="Overview"/></a><br/><sub><b>Overview</b> · local service status</sub></td>
+    <td align="center" width="33%"><a href="assets/images/02.png"><img src="assets/images/02.png" width="260" alt="Player"/></a><br/><sub><b>Player</b> · type, path & launch options</sub></td>
+    <td align="center" width="33%"><a href="assets/images/03.png"><img src="assets/images/03.png" width="260" alt="Version preference"/></a><br/><sub><b>Version</b> · priority & subtitle filtering</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="assets/images/04.png"><img src="assets/images/04.png" width="260" alt="Bangumi tracking"/></a><br/><sub><b>Bangumi</b> · watch-history sync</sub></td>
+    <td align="center" width="33%"><a href="assets/images/05.png"><img src="assets/images/05.png" width="260" alt="Trakt scrobbling"/></a><br/><sub><b>Trakt</b> · scrobbling setup</sub></td>
+    <td align="center" width="33%"><a href="assets/images/06.png"><img src="assets/images/06.png" width="260" alt="Logs"/></a><br/><sub><b>Logs</b> · live, masked output</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="assets/images/07.png"><img src="assets/images/07.png" width="260" alt="Network"/></a><br/><sub><b>Network</b> · proxy & redirect probing</sub></td>
+    <td align="center" width="33%"><a href="assets/images/08.png"><img src="assets/images/08.png" width="260" alt="Config"/></a><br/><sub><b>Config</b> · backup, restore & reset</sub></td>
+    <td align="center" width="33%"><a href="assets/images/09.png"><img src="assets/images/09.png" width="260" alt="System"/></a><br/><sub><b>System</b> · appearance & startup</sub></td>
+  </tr>
+</table>
+
+---
+
 ## Requirements
 
 | Component    | Minimum                                                           |
@@ -39,9 +65,20 @@ extra system dependencies on macOS and Windows.
 
 ## Installation
 
-### Pre-built binary
+### Desktop app (GUI)
 
-Download the archive for your platform from the
+Download the installer for your platform from the
+[Releases](https://github.com/PiliPili-Team/etlp/releases) page:
+
+- **macOS** — `.dmg`, drag the app into `Applications`
+- **Windows** — `.msi` / `.exe`, run the installer
+
+The desktop app embeds the server and exposes every setting shown in the
+[preview](#app-preview) above.
+
+### Pre-built binary (CLI)
+
+Prefer a headless server? Download the archive for your platform from the
 [Releases](https://github.com/PiliPili-Team/etlp/releases) page, extract it,
 and place the `etlp` binary somewhere on your `PATH`.
 
