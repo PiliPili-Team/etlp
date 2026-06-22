@@ -279,7 +279,13 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
 
     // In playlist mode use --playlist=<file> so that --playlist-start=N
     // indexes into the expanded entries rather than the unexpanded sub-playlist.
-    let mut cmd: Vec<String> = if args.playlist_start.is_some() {
+    //
+    // iina-cli is the exception: it opens media given as positional `[files]`
+    // and treats a bare `--mpv-playlist=` as just an mpv option, so passing the
+    // playlist that way launches IINA with no file to open (no window). The
+    // playlist path is therefore passed positionally for iina — mpv still
+    // auto-detects the `.m3u8` as a playlist and honors `--playlist-start`.
+    let mut cmd: Vec<String> = if args.playlist_start.is_some() && !is_iina {
         vec![format!("--playlist={}", args.media_path)]
     } else {
         vec![args.media_path.clone()]
@@ -949,6 +955,25 @@ mod tests {
         assert!(!flat.contains("--force-media-title="));
         assert!(!flat.contains("--osd-playing-msg="));
         assert!(flat.contains("--pause"));
+    }
+
+    #[test]
+    fn build_args_iina_playlist_passes_file_positionally() {
+        // iina-cli opens files positionally; a bare --mpv-playlist= would open
+        // no window. The playlist path must be the positional file, and the
+        // start index must still be forwarded (as --mpv-playlist-start).
+        let mut args = default_launch();
+        args.exe = "/Applications/IINA.app/Contents/MacOS/iina-cli".into();
+        args.media_path = "/tmp/etlp_playlist_0.m3u8".into();
+        args.is_multiple_episodes = true;
+        args.playlist_start = Some(8);
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(cmd.iter().any(|s| s == "/tmp/etlp_playlist_0.m3u8"));
+        assert!(!flat.contains("--mpv-playlist=/tmp/etlp_playlist_0.m3u8"));
+        assert!(!flat.contains("--playlist=/tmp/etlp_playlist_0.m3u8"));
+        assert!(flat.contains("--mpv-playlist-start=8"));
     }
 
     #[test]
