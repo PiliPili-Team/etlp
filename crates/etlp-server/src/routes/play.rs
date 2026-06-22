@@ -1056,15 +1056,19 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             );
         }
 
-        // Scrobble the just-watched item. ≥ 90 % stops at 100 % so Trakt marks
-        // it watched; below that we pause at the real progress so it surfaces as
-        // "currently watching" / Up Next without being marked watched.
+        // Report the just-watched item with a single `stop` at the real
+        // progress. Trakt itself decides the outcome: at ≥ 80 % it scrobbles the
+        // item watched and writes history; between 1 % and 79 % it saves the
+        // position to `/sync/playback` so it can be resumed. `start`/`pause` are
+        // deliberately not used — `start` would first wipe any existing resume
+        // point (data loss if the terminal call then fails), and `stop` already
+        // subsumes `pause` for a partial view.
         //
         // Episodes are matched by show ids + season/number (see
         // `build_trakt_item`); an id-only item additionally resolves its numeric
-        // Trakt id first so the match does not 404. If the scrobble still fails
-        // and the item is finished, fall back to the history API so the watch is
-        // at least recorded.
+        // Trakt id first so the match does not 404. If the scrobble fails and the
+        // item is finished, fall back to the history API so the watch is at least
+        // recorded.
         if real_watch
             && let Some(mut item) = build_trakt_item(state, kind, data).await
         {
@@ -1076,24 +1080,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
                     "trakt: resolved numeric id for id-only item"
                 );
             }
-            let (action, progress) = if entry.completed {
-                (ScrobbleAction::Stop, 100.0)
-            } else {
-                (ScrobbleAction::Pause, entry.progress)
-            };
-
-            // Open the watching session first so Trakt registers a proper
-            // start → pause/stop lifecycle (a lone terminal scrobble can leave
-            // the resume point unregistered). Best-effort: Trakt auto-expires
-            // the status by runtime, so a failure here never blocks the
-            // terminal action below. No periodic re-send is needed.
-            if let Err(e) =
-                api.scrobble(ScrobbleAction::Start, &item, progress).await
-            {
-                debug!("trakt scrobble start (non-fatal): {e}");
-            }
-
-            match api.scrobble(action, &item, progress).await {
+            // Floor at 1 %: Trakt rejects a stop below 1 % with HTTP 422.
+            let progress = entry.progress.max(1.0);
+            match api.scrobble(ScrobbleAction::Stop, &item, progress).await {
                 Ok(_) => info!(
                     item = %data.media_title,
                     progress,
@@ -1101,9 +1090,8 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
                     "trakt: scrobbled"
                 ),
 
-                // An in-progress item is reported on every stop, so marking it
-                // watched here would spam duplicate history entries — only the
-                // finished item falls back to the history API.
+                // Only the finished item falls back to the history API; a
+                // partial view is left as the saved resume position.
                 Err(e) if entry.completed => {
                     warn!("trakt scrobble error: {e}; falling back to history");
                     if let Err(e2) = sync_history(&api, vec![item]).await {

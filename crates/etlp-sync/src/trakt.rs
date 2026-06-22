@@ -102,19 +102,15 @@ pub struct TraktHistoryItem {
     pub watched_at: Option<String>,
 }
 
-/// Realtime playback action reported to Trakt's scrobble endpoints.
+/// Playback action reported to Trakt's scrobble endpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScrobbleAction {
-    /// `POST /scrobble/start` — open the watching session at the given progress.
-    /// Trakt auto-advances and expires the status by the runtime, so it never
-    /// needs re-sending. Sent before a terminal action to mimic the real
-    /// player lifecycle (start → pause/stop).
-    Start,
-    /// `POST /scrobble/pause` — keep the item in the in-progress / "currently
-    /// watching" state, never marking it watched regardless of progress.
+    /// `POST /scrobble/pause` — save the playback position without ever marking
+    /// the item watched, regardless of progress.
     Pause,
-    /// `POST /scrobble/stop` — at ≥ 80 % Trakt marks the item watched and adds
-    /// it to history; below that it is treated as a pause.
+    /// `POST /scrobble/stop` — Trakt decides by progress: at ≥ 80 % it marks the
+    /// item watched and writes history; between 1 % and 79 % it saves the
+    /// position to `/sync/playback` for resume; below 1 % it returns 422.
     Stop,
 }
 
@@ -578,7 +574,6 @@ impl TraktApi {
     /// Report playback for one movie/episode via the scrobble API.
     ///
     /// `progress` is the watched percentage (`0.0..=100.0`).
-    /// [`ScrobbleAction::Start`] opens the watching session;
     /// [`ScrobbleAction::Stop`] at ≥ 80 % makes Trakt mark the item watched and
     /// add it to history; [`ScrobbleAction::Pause`] always leaves it in the
     /// in-progress / "currently watching" state so it surfaces under Up Next.
@@ -592,7 +587,6 @@ impl TraktApi {
         progress: f64,
     ) -> Result<serde_json::Value> {
         let path = match action {
-            ScrobbleAction::Start => "scrobble/start",
             ScrobbleAction::Pause => "scrobble/pause",
             ScrobbleAction::Stop => "scrobble/stop",
         };
@@ -1126,43 +1120,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.get("action").and_then(|a| a.as_str()), Some("pause"));
-    }
-
-    #[tokio::test]
-    async fn scrobble_start_posts_to_start_endpoint() {
-        let server = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/scrobble/start"))
-            .and(wiremock::matchers::body_partial_json(serde_json::json!({
-                "progress": 12.0,
-                "show": { "ids": { "tvdb": 121 } },
-                "episode": { "season": 1, "number": 3 },
-            })))
-            .respond_with(ResponseTemplate::new(201).set_body_json(
-                serde_json::json!({ "action": "start", "progress": 12.0 }),
-            ))
-            .mount(&server)
-            .await;
-
-        let mut api = make_api(&server).await;
-        api.token = Some(test_token());
-        let item = TraktHistoryItem {
-            kind: TraktItemKind::Episode,
-            ids: TraktIds {
-                tvdb: Some(121),
-                ..Default::default()
-            },
-            episode: Some(TraktEpisode {
-                season: 1,
-                number: 3,
-            }),
-            watched_at: None,
-        };
-        let resp = api
-            .scrobble(ScrobbleAction::Start, &item, 12.0)
-            .await
-            .unwrap();
-        assert_eq!(resp.get("action").and_then(|a| a.as_str()), Some("start"));
     }
 
     #[tokio::test]
