@@ -1845,8 +1845,7 @@ function SystemSection({
                     max={LOG_MAX_FILES_MAX}
                     onCommit={(v) => update("dev", "log_max_files", v)}
                     onClamp={(bound) => {
-                        if (bound === "max")
-                            addToast(t("sys_log_max_files_capped"));
+                        if (bound === "max") addToast(t("sys_log_max_files_capped"));
                     }}
                 />
                 <ToggleRow
