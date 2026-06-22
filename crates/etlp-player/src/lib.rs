@@ -6,6 +6,7 @@
 //! per-player launch/playlist/progress orchestration.
 
 pub mod dandan;
+pub mod executable;
 pub mod mpc;
 pub mod mpv;
 pub mod player_manager;
@@ -15,6 +16,7 @@ pub mod transport;
 pub mod vlc;
 
 pub use dandan::{DanDanConfig, DanDanError, DanDanHandle};
+pub use executable::resolve_player_executable;
 pub use mpc::{MpcError, MpcHandle};
 pub use mpv::{
     IpcPath, LaunchArgs, LoadMode, LoadOptions, MpvHandle, MpvPlaylistEntry,
