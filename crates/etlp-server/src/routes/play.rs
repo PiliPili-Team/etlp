@@ -471,6 +471,38 @@ async fn run_player_chain(
         }
     }
 
+    // For VLC: the launch URL plays the current episode; enqueue every later
+    // episode through the HTTP control interface so playback continues across
+    // the season. VLC advances the playlist on its own and `--play-and-exit`
+    // quits after the final item. Resume (`:start-time`) stays on the current
+    // episode; later episodes start from the beginning.
+    if play_multiple && let PlayerHandle::Vlc(ref h) = mgr.handle {
+        let cur_idx = episode_list
+            .iter()
+            .position(|e| {
+                e.item_id == data.item_id
+                    || e.media_source_id == data.media_source_id
+            })
+            .unwrap_or_else(|| {
+                warn!(
+                    item_id = %data.item_id,
+                    "vlc: current episode not found; enqueueing from start"
+                );
+                0
+            });
+        let after: Vec<&PlaybackData> = episode_list
+            .iter()
+            .skip(cur_idx + 1)
+            .take(cfg.playlist_limit)
+            .collect();
+        debug!(after_count = after.len(), "vlc: enqueueing later episodes");
+        for ep in &after {
+            if let Err(e) = h.playlist_add(&ep.stream_url).await {
+                warn!("vlc enqueue {:?}: {e}", ep.media_title);
+            }
+        }
+    }
+
     // Register all episodes for progress tracking.
     for ep in &episode_list {
         mgr.register_playlist(ep.media_title.clone(), ep.clone());
