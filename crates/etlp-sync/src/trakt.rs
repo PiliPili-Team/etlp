@@ -550,13 +550,13 @@ impl TraktApi {
             "shows":    shows,
         });
 
-        let resp = self
-            .http
-            .post(self.url("sync/history"))
-            .headers(self.auth_headers())
-            .json(&payload)
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .post(self.url("sync/history"))
+                .headers(self.auth_headers())
+                .json(&payload),
+        )
+        .await?;
         debug!(
             status = resp.status().as_u16(),
             "trakt: /sync/history response"
@@ -611,13 +611,13 @@ impl TraktApi {
         };
 
         debug!(path, progress, "trakt: POST /{path}");
-        let resp = self
-            .http
-            .post(self.url(path))
-            .headers(self.auth_headers())
-            .json(&payload)
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .post(self.url(path))
+                .headers(self.auth_headers())
+                .json(&payload),
+        )
+        .await?;
         let status = resp.status();
         if status.as_u16() == 409 {
             debug!("trakt: scrobble conflict (already in flight), ignoring");
@@ -646,12 +646,10 @@ impl TraktApi {
             "users/{}/history/{}s/{}",
             self.user_id, item_type, trakt_id
         );
-        let resp = self
-            .http
-            .get(self.url(&path))
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http.get(self.url(&path)).headers(self.auth_headers()),
+        )
+        .await?;
 
         if resp.status().as_u16() == 404 {
             return Ok(Vec::new());
@@ -681,12 +679,10 @@ impl TraktApi {
                 url = format!("{}?type={}", url, t);
             }
         }
-        let resp = self
-            .http
-            .get(&url)
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http.get(&url).headers(self.auth_headers()),
+        )
+        .await?;
 
         if resp.status().as_u16() == 404 {
             return Ok(Vec::new());

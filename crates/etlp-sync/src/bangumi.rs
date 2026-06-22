@@ -398,12 +398,10 @@ impl BangumiApi {
     /// regenerate the token.
     pub async fn verify_token(&self) -> Result<()> {
         debug!(user = %self.username, "bangumi: GET /me (verify token)");
-        let resp = self
-            .http
-            .get(self.url("me"))
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http.get(self.url("me")).headers(self.auth_headers()),
+        )
+        .await?;
         let status = resp.status().as_u16();
         debug!(status, "bangumi: /me response");
         if resp.status().is_success() {
@@ -468,14 +466,14 @@ impl BangumiApi {
             "keyword": keyword,
             "filter": filter,
         });
-        let resp = self
-            .http
-            .post(self.url("search/subjects"))
-            .headers(self.auth_headers())
-            .query(&[("limit", limit)])
-            .json(&body)
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .post(self.url("search/subjects"))
+                .headers(self.auth_headers())
+                .query(&[("limit", limit)])
+                .json(&body),
+        )
+        .await?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -501,12 +499,12 @@ impl BangumiApi {
 
     /// Fetch subject metadata by ID.
     pub async fn get_subject(&self, subject_id: u64) -> Result<BangumiSubject> {
-        let resp = self
-            .http
-            .get(self.url(&format!("subjects/{subject_id}")))
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .get(self.url(&format!("subjects/{subject_id}")))
+                .headers(self.auth_headers()),
+        )
+        .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
@@ -521,13 +519,13 @@ impl BangumiApi {
         subject_id: u64,
     ) -> Result<BangumiEpisodeList> {
         debug!(subject_id, "bangumi: GET /episodes");
-        let resp = self
-            .http
-            .get(self.url("episodes"))
-            .headers(self.auth_headers())
-            .query(&[("subject_id", subject_id), ("type", 0)])
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .get(self.url("episodes"))
+                .headers(self.auth_headers())
+                .query(&[("subject_id", subject_id), ("type", 0)]),
+        )
+        .await?;
         debug!(
             subject_id,
             status = resp.status().as_u16(),
@@ -546,12 +544,12 @@ impl BangumiApi {
         &self,
         subject_id: u64,
     ) -> Result<Vec<BangumiRelated>> {
-        let resp = self
-            .http
-            .get(self.url(&format!("subjects/{subject_id}/subjects")))
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .get(self.url(&format!("subjects/{subject_id}/subjects")))
+                .headers(self.auth_headers()),
+        )
+        .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
             let body = resp.text().await.unwrap_or_default();
@@ -720,15 +718,15 @@ impl BangumiApi {
             user = %self.username,
             "bangumi: GET subject collection"
         );
-        let resp = self
-            .http
-            .get(self.url(&format!(
-                "users/{}/collections/{}",
-                self.username, subject_id
-            )))
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .get(self.url(&format!(
+                    "users/{}/collections/{}",
+                    self.username, subject_id
+                )))
+                .headers(self.auth_headers()),
+        )
+        .await?;
         debug!(
             subject_id,
             status = resp.status().as_u16(),
@@ -763,13 +761,13 @@ impl BangumiApi {
             "type":    state as u8,
             "private": self.private,
         });
-        let resp = self
-            .http
-            .post(self.url(&format!("users/-/collections/{subject_id}")))
-            .headers(self.auth_headers())
-            .json(&body)
-            .send()
-            .await?;
+        let resp = crate::curl::send_logged(
+            self.http
+                .post(self.url(&format!("users/-/collections/{subject_id}")))
+                .headers(self.auth_headers())
+                .json(&body),
+        )
+        .await?;
         debug!(
             subject_id,
             status = resp.status().as_u16(),
@@ -832,15 +830,15 @@ impl BangumiApi {
                 .ok_or(SyncError::MissingField { field: "ep_id" })?;
             let body =
                 serde_json::json!({ "type": CollectionState::Watched as u8 });
-            let resp =
+            let resp = crate::curl::send_logged(
                 self.http
                     .put(self.url(&format!(
                         "users/-/collections/-/episodes/{ep_id}"
                     )))
                     .headers(self.auth_headers())
-                    .json(&body)
-                    .send()
-                    .await?;
+                    .json(&body),
+            )
+            .await?;
             if resp.status().is_success() || resp.status().as_u16() == 204 {
                 return Ok(());
             }
@@ -854,14 +852,15 @@ impl BangumiApi {
             "episode_id": ep_ids,
             "type":        CollectionState::Watched as u8,
         });
-        let resp = self
-            .http
-            .patch(
-                self.url(&format!("users/-/collections/{subject_id}/episodes")),
+        let resp =
+            crate::curl::send_logged(
+                self.http
+                    .patch(self.url(&format!(
+                        "users/-/collections/{subject_id}/episodes"
+                    )))
+                    .headers(self.auth_headers())
+                    .json(&body),
             )
-            .headers(self.auth_headers())
-            .json(&body)
-            .send()
             .await?;
         if resp.status().is_success() || resp.status().as_u16() == 204 {
             return Ok(());
@@ -876,13 +875,14 @@ impl BangumiApi {
         &self,
         subject_id: u64,
     ) -> Result<HashMap<u64, EpCollectionState>> {
-        let resp = self
-            .http
-            .get(
-                self.url(&format!("users/-/collections/{subject_id}/episodes")),
+        let resp =
+            crate::curl::send_logged(
+                self.http
+                    .get(self.url(&format!(
+                        "users/-/collections/{subject_id}/episodes"
+                    )))
+                    .headers(self.auth_headers()),
             )
-            .headers(self.auth_headers())
-            .send()
             .await?;
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
