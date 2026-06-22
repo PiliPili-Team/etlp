@@ -1276,6 +1276,9 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
 /// directory and would otherwise be missed.
 fn font_directories() -> Vec<std::path::PathBuf> {
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    // Only macOS/Linux derive per-user font paths from the home directory;
+    // Windows uses %LOCALAPPDATA% instead, so binding it there is unused.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let home = dirs::home_dir();
 
     #[cfg(target_os = "macos")]
