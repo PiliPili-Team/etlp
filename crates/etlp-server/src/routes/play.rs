@@ -867,80 +867,12 @@ fn trakt_item_from_ids(
     })
 }
 
-/// Build the best-matching Trakt item for the just-watched entry.
-///
-/// For an Emby/Jellyfin episode it prefers the **show's** ids plus the
-/// season/episode number — the match Trakt resolves most reliably — by fetching
-/// the series' `ProviderIds` from the media server. It falls back to the item's
-/// own ids (movies, or when the show ids / season / episode number are missing).
-/// Returns `None` when no usable id can be found, so the caller skips the item
-/// instead of sending a request that would 404.
-async fn build_trakt_item(
-    state: &SharedState,
-    kind: etlp_sync::TraktItemKind,
-    data: &PlaybackData,
-) -> Option<etlp_sync::TraktHistoryItem> {
-    if kind == etlp_sync::TraktItemKind::Episode
-        && data.server.is_emby_like()
-        && !data.series_id.is_empty()
-        && let (Some(season), Some(number)) = (data.season_number, data.index)
-        && let (Ok(season), Ok(number)) =
-            (u32::try_from(season), u32::try_from(number))
-        && let Some(show_ids) = fetch_series_trakt_ids(state, data).await
-    {
-        debug!(
-            item = %data.media_title,
-            season, number,
-            "trakt: matched episode by show ids + season/number"
-        );
-        return Some(etlp_sync::TraktHistoryItem {
-            kind,
-            ids: show_ids,
-            episode: Some(etlp_sync::TraktEpisode { season, number }),
-            watched_at: None,
-        });
-    }
-    let item = trakt_item_from_ids(kind, &data.provider_ids);
-    match &item {
-        Some(_) => debug!(
-            item = %data.media_title,
-            "trakt: matched by the item's own provider ids"
-        ),
-        None => warn!(
-            item = %data.media_title,
-            item_type = %data.item_type,
-            "trakt: no usable tmdb/imdb/tvdb id, cannot sync this item"
-        ),
-    }
-    item
-}
-
-/// Fetch the series' Trakt ids from the media server, or `None` when the series
-/// item cannot be read or carries no usable external id.
-async fn fetch_series_trakt_ids(
-    state: &SharedState,
-    data: &PlaybackData,
-) -> Option<etlp_sync::TraktIds> {
-    let base_url = format!("{}://{}", data.scheme, data.netloc);
-    let emby = EmbyClient::new(
-        state.http_client.clone(),
-        &base_url,
-        &data.api_key,
-        &data.user_id,
-    );
-    let series = emby.item(&data.series_id).await.ok()?;
-    let ids = trakt_ids_from_provider_map(&series.provider_ids);
-    has_any_trakt_id(&ids).then_some(ids)
-}
-
 /// Sync all completed entries to Trakt.tv when configured.
 ///
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
 /// skips when either is absent or the netloc does not match `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
-    use etlp_sync::{
-        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind, sync_history,
-    };
+    use etlp_sync::{TraktApi, TraktHistoryItem, TraktItemKind, sync_history};
 
     if entries.is_empty() {
         debug!("trakt: no watched entries to sync, skip");
@@ -1017,8 +949,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         }
     }
 
-    // Earlier already-watched episodes are batched into a single history call;
-    // the just-watched item is scrobbled so partial views show as in-progress.
+    // Every finished item (the just-watched one plus any earlier episodes the
+    // server already marks played) is batched into a single `/sync/history`
+    // call. Nothing is scrobbled: a partial view is simply not synced.
     let mut items: Vec<TraktHistoryItem> = Vec::new();
     for entry in entries {
         let data = entry.data;
@@ -1043,71 +976,39 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Drop a momentary open of the just-watched item: under the real-watch
-        // floor it is treated as noise and not reported (matching Bangumi). The
-        // backfill of earlier, server-confirmed episodes below is unaffected.
-        let watched_secs = (entry.stop_sec - data.start_sec).unsigned_abs();
-        let real_watch = watched_secs >= MIN_REAL_WATCH_SECS;
-        if !real_watch {
+        // Mark the just-watched item watched only when it was actually finished
+        // (≥ the completion threshold). Like the reference implementation, the
+        // item's own episode-/movie-level Trakt id is resolved and added to
+        // `/sync/history` (which de-duplicates), rather than scrobbling — a
+        // partial view is simply not synced.
+        if entry.completed {
+            match trakt_item_from_ids(kind, &data.provider_ids) {
+                Some(mut item) => {
+                    item.ids.trakt =
+                        api.resolve_trakt_id(kind, &item.ids).await;
+                    info!(
+                        item = %data.media_title,
+                        "trakt: queued watched item for history"
+                    );
+                    items.push(item);
+                }
+                None => warn!(
+                    item = %data.media_title,
+                    item_type = %data.item_type,
+                    "trakt: no usable tmdb/imdb/tvdb id, cannot sync this item"
+                ),
+            }
+        } else {
             info!(
                 item = %data.media_title,
-                watched_secs,
-                "trakt: watched too short (< {MIN_REAL_WATCH_SECS}s), \
-                 skip scrobble"
+                progress = entry.progress,
+                "trakt: not finished (< completion threshold), not marked watched"
             );
         }
 
-        // Report the just-watched item with a single `stop` at the real
-        // progress. Trakt itself decides the outcome: at ≥ 80 % it scrobbles the
-        // item watched and writes history; between 1 % and 79 % it saves the
-        // position to `/sync/playback` so it can be resumed. `start`/`pause` are
-        // deliberately not used — `start` would first wipe any existing resume
-        // point (data loss if the terminal call then fails), and `stop` already
-        // subsumes `pause` for a partial view.
-        //
-        // Episodes are matched by show ids + season/number (see
-        // `build_trakt_item`); an id-only item additionally resolves its numeric
-        // Trakt id first so the match does not 404. If the scrobble fails and the
-        // item is finished, fall back to the history API so the watch is at least
-        // recorded.
-        if real_watch
-            && let Some(mut item) = build_trakt_item(state, kind, data).await
-        {
-            if item.episode.is_none() && item.ids.trakt.is_none() {
-                item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
-                debug!(
-                    item = %data.media_title,
-                    trakt_id = ?item.ids.trakt,
-                    "trakt: resolved numeric id for id-only item"
-                );
-            }
-            // Floor at 1 %: Trakt rejects a stop below 1 % with HTTP 422.
-            let progress = entry.progress.max(1.0);
-            match api.scrobble(ScrobbleAction::Stop, &item, progress).await {
-                Ok(_) => info!(
-                    item = %data.media_title,
-                    progress,
-                    completed = entry.completed,
-                    "trakt: scrobbled"
-                ),
-
-                // Only the finished item falls back to the history API; a
-                // partial view is left as the saved resume position.
-                Err(e) if entry.completed => {
-                    warn!("trakt scrobble error: {e}; falling back to history");
-                    if let Err(e2) = sync_history(&api, vec![item]).await {
-                        warn!("trakt history fallback error: {e2}");
-                    }
-                }
-
-                Err(e) => warn!("trakt scrobble error: {e}"),
-            }
-        }
-
-        // Backfill earlier episodes already finished in the client. These are
-        // de-duplicated against the existing Trakt history by resolving each
-        // one's Trakt id first, so finishing later episodes never re-marks the
-        // ones already synced.
+        // Backfill earlier episodes the server already marks played, so the
+        // first sync of a season records everything finished in the client.
+        // sync_history resolves and de-duplicates each against the history.
         if kind == TraktItemKind::Episode {
             let cur_index = data.index.unwrap_or_default();
             for ep in &emby_played_backfill(state, data).await {
@@ -1128,13 +1029,25 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         }
     }
 
-    debug!(items = items.len(), "trakt: built backfill history items");
+    // De-duplicate within this batch: the same episode can be queued by more
+    // than one entry (its own watch plus a later episode's backfill) when a
+    // playlist is binged, which would otherwise add it to history several times.
+    // Items whose Trakt id could not be resolved are kept (sync_history then
+    // de-duplicates them against the existing history server-side).
+    let mut seen: std::collections::HashSet<(bool, u64)> =
+        std::collections::HashSet::new();
+    items.retain(|item| match item.ids.trakt {
+        Some(id) => seen.insert((item.kind == TraktItemKind::Movie, id)),
+        None => true,
+    });
+
+    debug!(items = items.len(), "trakt: built history items");
     if items.is_empty() {
         return;
     }
 
     match sync_history(&api, items).await {
-        Ok(n) => info!("trakt: backfilled {n} item(s)"),
+        Ok(n) => info!("trakt: synced {n} item(s) to history"),
         Err(e) => warn!("trakt sync error: {e}"),
     }
 }

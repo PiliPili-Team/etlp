@@ -2318,15 +2318,16 @@ function TraktSection({
 
             <div className="settings-group">
                 <div className="settings-note">
-                    {t("sys_trakt_sync_note")}
-                    <div className="settings-note-copy">
-                        <button
-                            className="btn"
-                            onClick={() => void openUrl(TRAKT_DASHBOARD_URL)}
-                        >
-                            {t("sys_trakt_dashboard")}
-                        </button>
-                    </div>
+                    {t("sys_trakt_sync_note")}{" "}
+                    <a
+                        href={TRAKT_DASHBOARD_URL}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            void openUrl(TRAKT_DASHBOARD_URL);
+                        }}
+                    >
+                        {t("sys_trakt_dashboard")}
+                    </a>
                 </div>
             </div>
 
