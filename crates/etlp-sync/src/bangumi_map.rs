@@ -297,6 +297,18 @@ impl SubjectMapping {
         }
         self.season.unwrap_or(1) == season.unwrap_or(1)
     }
+
+    /// Whether applying this mapping's offset to a local episode `index` yields
+    /// a usable (positive) Bangumi episode number.
+    ///
+    /// Movies and an unknown index are always usable. A non-positive result
+    /// (e.g. `E-59` while watching episode 1) means the offset is too large for
+    /// this episode, so the caller should skip the mapping and fall back to the
+    /// normal id/title resolution instead of producing an invalid episode.
+    #[must_use]
+    pub fn yields_positive_episode(&self, index: Option<i64>) -> bool {
+        self.is_movie || index.is_none_or(|idx| idx + self.ep_offset > 0)
+    }
 }
 
 /// Find the first mapping that applies to an item carrying the given
@@ -328,6 +340,20 @@ mod tests {
         assert_eq!(m.season, Some(4));
         assert_eq!(m.subject_id, 20000);
         assert_eq!(m.ep_offset, 59);
+    }
+
+    #[test]
+    fn parses_tv_without_offset() {
+        // A TV mapping with no `E±N` means the episode numbers correspond
+        // directly (offset 0); local ep N → subject ep N.
+        let m =
+            parse_mapping("tmdb:10000|type:tv|S4 -> bgm:20000").expect("valid");
+        assert!(!m.is_movie);
+        assert_eq!(m.season, Some(4));
+        assert_eq!(m.subject_id, 20000);
+        assert_eq!(m.ep_offset, 0);
+        // Canonical form drops the zero offset.
+        assert_eq!(m.to_canonical(), "tmdb:10000|type:tv|S4 -> bgm:20000");
     }
 
     #[test]
@@ -454,6 +480,23 @@ mod tests {
         let m = parse_mapping("imdb:tt1 -> bgm:5").expect("ok");
         assert!(m.matches(MapProvider::Imdb, "tt1", true, None));
         assert!(!m.matches(MapProvider::Imdb, "tt1", false, Some(1)));
+    }
+
+    #[test]
+    fn positive_episode_gate() {
+        // E-59 while watching episode 1 → -58, unusable.
+        let neg = parse_mapping("tmdb:1|S4 -> bgm:2|E-59").expect("ok");
+        assert!(!neg.yields_positive_episode(Some(1)));
+        // Same mapping with a later episode lands on a positive sort.
+        assert!(neg.yields_positive_episode(Some(60)));
+        // An unknown index cannot be ruled out, so it stays usable.
+        assert!(neg.yields_positive_episode(None));
+        // A zero-offset mapping is usable from episode 1.
+        let zero = parse_mapping("tmdb:1|S4 -> bgm:2").expect("ok");
+        assert!(zero.yields_positive_episode(Some(1)));
+        // Movies ignore the episode entirely.
+        let movie = parse_mapping("tmdb:1|type:movie -> bgm:2").expect("ok");
+        assert!(movie.yields_positive_episode(Some(0)));
     }
 
     #[test]

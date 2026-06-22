@@ -1211,15 +1211,28 @@ async fn resolve_bangumi_subject(
     })
     .collect();
     if let Some(m) = match_mapping(mappings, &ids, is_movie, season_u32) {
-        info!(
+        // For TV, the offset must land the current episode on a positive
+        // Bangumi sort. A non-positive result (e.g. `E-59` while watching ep 1)
+        // means the mapping cannot serve this episode: skip it and fall back to
+        // id/title resolution rather than erroring.
+        if m.yields_positive_episode(data.index) {
+            info!(
+                subject_id = m.subject_id,
+                ep_offset = m.ep_offset,
+                "bangumi: subject from user mapping"
+            );
+            return Some(BangumiTarget {
+                subject_id: m.subject_id,
+                ep_offset: m.ep_offset,
+            });
+        }
+        warn!(
             subject_id = m.subject_id,
             ep_offset = m.ep_offset,
-            "bangumi: subject from user mapping"
+            episode = data.index.unwrap_or_default(),
+            "bangumi: mapping offset yields a non-positive episode; \
+             skipping mapping and falling back to query"
         );
-        return Some(BangumiTarget {
-            subject_id: m.subject_id,
-            ep_offset: m.ep_offset,
-        });
     }
 
     if let Some(id_str) = data.provider_ids.get("Bangumi") {
