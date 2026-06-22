@@ -502,8 +502,8 @@ const DEFAULT_CONFIG_TOML: &str = "\
 
 [dev]
 # log_level = \"info\"
-# log_max_size_mb = 50   # rotate the log once it exceeds this many megabytes
-# log_max_files = 7      # number of rotated log files to keep
+# log_max_size_mb = 50   # rotate once the log exceeds this size (20–200 MB)
+# log_max_files = 7      # number of rotated log files to keep (1–14)
 # kill_process_at_start = true
 # pretty_title = true
 # user_agent = \"etlp\"   # custom User-Agent for normal requests; download/prefetch UAs are fixed

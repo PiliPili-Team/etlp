@@ -259,6 +259,12 @@ function InputRow({
     );
 }
 
+// Log-rotation bounds, mirroring etlp_logging::rotate (the backend clamps to
+// the same range as a defensive backstop for a hand-edited config).
+const LOG_MAX_SIZE_MIN = 20;
+const LOG_MAX_SIZE_MAX = 200;
+const LOG_MAX_FILES_MAX = 14;
+
 function NumberRow({
     label,
     desc,
@@ -266,6 +272,7 @@ function NumberRow({
     min,
     max,
     onCommit,
+    onClamp,
 }: {
     label: string;
     desc?: string;
@@ -273,6 +280,8 @@ function NumberRow({
     min?: number;
     max?: number;
     onCommit: (v: number) => void;
+    /** Called when out-of-range input is corrected, so the caller can warn. */
+    onClamp?: (bound: "min" | "max") => void;
 }) {
     const [local, setLocal] = useState(String(value));
     const [prevNumValue, setPrevNumValue] = useState(value);
@@ -302,8 +311,16 @@ function NumberRow({
                         }
                         // Clamp into [min, max] so out-of-range input (e.g. a
                         // negative episode cap) is corrected instead of saved.
-                        if (min !== undefined && n < min) n = min;
-                        if (max !== undefined && n > max) n = max;
+                        // onClamp fires on every correction — even when the
+                        // clamped value equals the current one — so the warning
+                        // still shows if the user re-enters an out-of-range value.
+                        if (min !== undefined && n < min) {
+                            n = min;
+                            onClamp?.("min");
+                        } else if (max !== undefined && n > max) {
+                            n = max;
+                            onClamp?.("max");
+                        }
                         setLocal(String(n));
                         if (n !== value) onCommit(n);
                     }}
@@ -1809,15 +1826,28 @@ function SystemSection({
                     label={t("sys_log_max_size")}
                     desc={t("sys_log_max_size_desc")}
                     value={cfg.log_max_size_mb}
-                    min={1}
+                    min={LOG_MAX_SIZE_MIN}
+                    max={LOG_MAX_SIZE_MAX}
                     onCommit={(v) => update("dev", "log_max_size_mb", v)}
+                    onClamp={(bound) =>
+                        addToast(
+                            bound === "max"
+                                ? t("sys_log_max_size_capped")
+                                : t("sys_log_max_size_floored"),
+                        )
+                    }
                 />
                 <NumberRow
                     label={t("sys_log_max_files")}
                     desc={t("sys_log_max_files_desc")}
                     value={cfg.log_max_files}
                     min={1}
+                    max={LOG_MAX_FILES_MAX}
                     onCommit={(v) => update("dev", "log_max_files", v)}
+                    onClamp={(bound) => {
+                        if (bound === "max")
+                            addToast(t("sys_log_max_files_capped"));
+                    }}
                 />
                 <ToggleRow
                     label={t("sys_log_mask")}

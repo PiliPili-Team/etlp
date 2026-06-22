@@ -16,14 +16,24 @@ use std::path::{Path, PathBuf};
 /// Default per-file size budget, in mebibytes (50 MiB).
 pub const DEFAULT_MAX_SIZE_MB: u64 = 50;
 
+/// Smallest accepted per-file size budget, in mebibytes.
+pub const MIN_MAX_SIZE_MB: u64 = 20;
+
+/// Largest accepted per-file size budget, in mebibytes.
+pub const MAX_MAX_SIZE_MB: u64 = 200;
+
 /// Default number of rotated files kept on disk (the active file plus six
 /// historical ones).
 pub const DEFAULT_MAX_FILES: usize = 7;
 
+/// Largest accepted number of rotated files.
+pub const MAX_MAX_FILES: usize = 14;
+
 /// Rotation policy: the per-file size budget and how many files to keep.
 ///
-/// Construct with [`LogRotation::from_mb`] so the megabyte unit and the safety
-/// floors (at least 1 MiB per file, at least 1 file kept) are applied once.
+/// Construct with [`LogRotation::from_mb`] so the megabyte unit and the
+/// supported ranges (size in `[MIN_MAX_SIZE_MB, MAX_MAX_SIZE_MB]`, file count
+/// in `[1, MAX_MAX_FILES]`) are applied once.
 #[derive(Debug, Clone, Copy)]
 pub struct LogRotation {
     /// Maximum size of a single log file, in bytes.
@@ -40,13 +50,17 @@ impl Default for LogRotation {
 
 impl LogRotation {
     /// Build a policy from a size in mebibytes and a file count, clamping both
-    /// to safe minimums (≥ 1 MiB per file, ≥ 1 file kept) so a misconfigured
-    /// value can never make the writer rotate on every line.
+    /// into the supported ranges (size to `[MIN_MAX_SIZE_MB, MAX_MAX_SIZE_MB]`,
+    /// file count to `[1, MAX_MAX_FILES]`). The GUI clamps and warns before it
+    /// gets here; this is the defensive backstop for a hand-edited config, so a
+    /// misconfigured value can neither rotate on every line nor balloon on disk.
     #[must_use]
     pub fn from_mb(max_size_mb: u64, max_files: usize) -> Self {
         Self {
-            max_size_bytes: max_size_mb.max(1) * 1024 * 1024,
-            max_files: max_files.max(1),
+            max_size_bytes: max_size_mb.clamp(MIN_MAX_SIZE_MB, MAX_MAX_SIZE_MB)
+                * 1024
+                * 1024,
+            max_files: max_files.clamp(1, MAX_MAX_FILES),
         }
     }
 }
@@ -188,11 +202,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn from_mb_clamps_to_safe_minimums() {
+    fn from_mb_clamps_into_supported_range() {
+        // Below the floor: size rises to 20 MiB, count to 1.
         let r = LogRotation::from_mb(0, 0);
-        assert_eq!(r.max_size_bytes, 1024 * 1024);
+        assert_eq!(r.max_size_bytes, 20 * 1024 * 1024);
         assert_eq!(r.max_files, 1);
 
+        // Above the ceiling: size caps at 200 MiB, count at 14.
+        let r = LogRotation::from_mb(1000, 99);
+        assert_eq!(r.max_size_bytes, 200 * 1024 * 1024);
+        assert_eq!(r.max_files, 14);
+
+        // In range: passed through unchanged.
         let r = LogRotation::from_mb(50, 7);
         assert_eq!(r.max_size_bytes, 50 * 1024 * 1024);
         assert_eq!(r.max_files, 7);
