@@ -1049,10 +1049,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         let watched_secs = (entry.stop_sec - data.start_sec).unsigned_abs();
         let real_watch = watched_secs >= MIN_REAL_WATCH_SECS;
         if !real_watch {
-            debug!(
+            info!(
                 item = %data.media_title,
                 watched_secs,
-                "trakt: watched < {MIN_REAL_WATCH_SECS}s, skip scrobble"
+                "trakt: watched too short (< {MIN_REAL_WATCH_SECS}s), \
+                 skip scrobble"
             );
         }
 
@@ -1287,9 +1288,17 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // any *real watch* of the current episode — one past the same floor the
         // progress write-back uses — is marked watched here, even below the 90 %
         // completion threshold.
-        let current_real_watch = (entry.stop_sec - data.start_sec)
-            .unsigned_abs()
-            >= MIN_REAL_WATCH_SECS;
+        let current_watched_secs =
+            (entry.stop_sec - data.start_sec).unsigned_abs();
+        let current_real_watch = current_watched_secs >= MIN_REAL_WATCH_SECS;
+        if !current_real_watch {
+            info!(
+                item = %data.media_title,
+                watched_secs = current_watched_secs,
+                "bangumi: watched too short (< {MIN_REAL_WATCH_SECS}s), \
+                 current episode not marked"
+            );
+        }
 
         // Collect the episodes to mark watched: every earlier one the client
         // already finished, plus the current episode when it was a real watch.
