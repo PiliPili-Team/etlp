@@ -37,12 +37,39 @@ fn logs_full_body(method: &Method) -> bool {
     matches!(*method, Method::GET | Method::POST)
 }
 
+/// How a response should be logged, decided from the method and body.
+#[derive(Debug, PartialEq, Eq)]
+enum ResponseLog {
+    /// Log only the status code: a non-GET/POST verb, or an empty body.
+    StatusOnly,
+    /// GET/POST with a JSON body — dump it verbatim at debug.
+    JsonBody,
+    /// GET/POST with a non-empty, non-JSON body — flag it as an error.
+    NonJson,
+}
+
+/// Classify how to log a response.
+///
+/// The method is checked before the body so a non-GET/POST reply is always
+/// status-only — an empty `204` can never be mistaken for a non-JSON payload.
+/// An empty body is status-only for every verb, since there is nothing to dump.
+fn classify(method: &Method, body: &str) -> ResponseLog {
+    if !logs_full_body(method) || body.trim().is_empty() {
+        ResponseLog::StatusOnly
+    } else if serde_json::from_str::<serde_json::Value>(body).is_ok() {
+        ResponseLog::JsonBody
+    } else {
+        ResponseLog::NonJson
+    }
+}
+
 /// Read a response body and log it according to the request method.
 ///
-/// For GET/POST the raw JSON is logged at debug when the body parses as JSON;
-/// for other verbs only the status code is logged. A body that is not JSON (a
-/// gateway/proxy can answer with an HTML page, e.g. on a 5xx) is logged as an
-/// `error` line regardless of method.
+/// For other verbs (PUT/DELETE/PATCH) only the status code is logged — the
+/// method is checked first, so an empty body (e.g. a `204 No Content`) is never
+/// mistaken for a non-JSON payload. For GET/POST the raw JSON is logged at debug
+/// when the body parses as JSON, or an `error` line when it does not (a
+/// gateway/proxy can answer with an HTML page, e.g. on a 5xx).
 ///
 /// `label` (e.g. `"trakt"`/`"bangumi"`) prefixes the log line. The body is
 /// logged verbatim so the exact API reply is visible while diagnosing; it is
@@ -56,18 +83,26 @@ pub(crate) async fn read_logged(
     let LoggedResponse { method, resp } = logged;
     let status = resp.status();
     let body = resp.text().await?;
-    let is_json = serde_json::from_str::<serde_json::Value>(&body).is_ok();
-    if !is_json {
-        let preview: String = body.chars().take(NON_JSON_LOG_LIMIT).collect();
-        tracing::error!(
-            "{label}: non-JSON response {}: {preview}",
-            status.as_u16()
-        );
-    } else if logs_full_body(&method) {
-        tracing::debug!("{label}: response {} body: {body}", status.as_u16());
-    } else {
-        // PUT/DELETE/PATCH: log only the status, omitting the JSON body.
-        tracing::debug!("{label}: {method} response {}", status.as_u16());
+    match classify(&method, &body) {
+        ResponseLog::StatusOnly => {
+            tracing::debug!("{label}: {method} response {}", status.as_u16());
+        }
+
+        ResponseLog::JsonBody => {
+            tracing::debug!(
+                "{label}: response {} body: {body}",
+                status.as_u16()
+            );
+        }
+
+        ResponseLog::NonJson => {
+            let preview: String =
+                body.chars().take(NON_JSON_LOG_LIMIT).collect();
+            tracing::error!(
+                "{label}: non-JSON response {}: {preview}",
+                status.as_u16()
+            );
+        }
     }
     Ok((status, body))
 }
@@ -227,5 +262,32 @@ mod tests {
         assert!(!logs_full_body(&Method::PUT));
         assert!(!logs_full_body(&Method::DELETE));
         assert!(!logs_full_body(&Method::PATCH));
+    }
+
+    #[test]
+    fn classify_routes_by_method_then_body() {
+        // GET/POST: JSON bodies are dumped, other payloads are errors.
+        assert_eq!(classify(&Method::GET, r#"{"a":1}"#), ResponseLog::JsonBody);
+        assert_eq!(
+            classify(&Method::POST, r#"{"ok":true}"#),
+            ResponseLog::JsonBody
+        );
+        assert_eq!(
+            classify(&Method::GET, "<html>oops</html>"),
+            ResponseLog::NonJson
+        );
+
+        // Non GET/POST verbs are status-only regardless of the body — a PUT
+        // returning an empty 204 must never be flagged as a non-JSON error.
+        assert_eq!(classify(&Method::PUT, ""), ResponseLog::StatusOnly);
+        assert_eq!(
+            classify(&Method::PUT, r#"{"type":2}"#),
+            ResponseLog::StatusOnly
+        );
+        assert_eq!(classify(&Method::DELETE, "x"), ResponseLog::StatusOnly);
+
+        // An empty body is status-only even for GET/POST: nothing to dump.
+        assert_eq!(classify(&Method::POST, ""), ResponseLog::StatusOnly);
+        assert_eq!(classify(&Method::GET, "   "), ResponseLog::StatusOnly);
     }
 }
