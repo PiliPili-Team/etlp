@@ -29,14 +29,25 @@ pub struct TraktToken {
 }
 
 impl TraktToken {
-    /// Returns `true` if the access token is valid for at least 7 more days.
+    /// Refresh this many seconds before the real expiry, so a sync started just
+    /// before the deadline still completes on the current token.
+    ///
+    /// Must stay well below a token's lifetime. Trakt cut access tokens from 90
+    /// days to 24 hours in 2025; the old 7-day margin then exceeded the whole
+    /// 24h lifetime, so `is_valid` was always false and every playback forced a
+    /// refresh ("token expired, attempting refresh" on a token that had just
+    /// been refreshed and saved).
+    const EXPIRY_MARGIN_SECS: u64 = 300;
+
+    /// Returns `true` while the access token is still usable (i.e. not yet
+    /// within the small pre-expiry refresh buffer).
     #[must_use]
     pub fn is_valid(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        self.created_at + self.expires_in > now + 7 * 86_400
+        self.created_at + self.expires_in > now + Self::EXPIRY_MARGIN_SECS
     }
 }
 
@@ -828,6 +839,25 @@ mod tests {
             created_at: 0,
         };
         assert!(!tok.is_valid());
+    }
+
+    #[test]
+    fn fresh_24h_token_is_valid() {
+        // Trakt's 2025 switch to 24-hour access tokens: a just-issued one must
+        // count as valid. The old 7-day refresh margin exceeded the 24h
+        // lifetime and reported it expired, forcing a refresh on every check.
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let tok = TraktToken {
+            access_token: "x".into(),
+            token_type: "Bearer".into(),
+            expires_in: 86_400,
+            refresh_token: "y".into(),
+            created_at: now,
+        };
+        assert!(tok.is_valid());
     }
 
     // ── save / load token ─────────────────────────────────────────────────────
