@@ -340,6 +340,7 @@ pub async fn get_config() -> Result<ConfigDto, String> {
 /// `value` is a JSON value that is converted to the appropriate TOML type.
 #[tauri::command]
 pub async fn update_config_field(
+    state: State<'_, GuiState>,
     section: String,
     key: String,
     value: serde_json::Value,
@@ -365,6 +366,17 @@ pub async fn update_config_field(
                 key = %key,
                 "config field saved"
             );
+            // A log-level change takes effect immediately — the logging
+            // subscriber uses a reload handle, so no restart is needed.
+            if section == "dev"
+                && key == "log_level"
+                && let Some(level) = value.as_str()
+                && let Ok(guard) = state.log_handle.lock()
+                && let Some(handle) = guard.as_ref()
+            {
+                handle.set_level(level);
+                info!(level, "log level applied live");
+            }
             Ok(())
         }
         Err(e) => {
