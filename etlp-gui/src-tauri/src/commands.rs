@@ -1533,20 +1533,32 @@ pub async fn set_autostart(
     if enabled {
         app.autolaunch()
             .enable()
-            .map_err(|e| format!("enable autostart: {e}"))
+            .map_err(|e| format!("enable autostart: {e}"))?;
     } else {
         app.autolaunch()
             .disable()
-            .map_err(|e| format!("disable autostart: {e}"))
+            .map_err(|e| format!("disable autostart: {e}"))?;
     }
+    // Persist the choice: the macOS backend cannot read its own state back
+    // reliably, so the saved value — not `is_enabled()` — is what the UI loads.
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    let path = etlp_config::existing_config_path(&cfg_dir)
+        .unwrap_or_else(|| cfg_dir.join("config.toml"));
+    if !path.exists() {
+        write_default_config(&path)?;
+    }
+    patch_field(&path, "gui", "autostart", &serde_json::json!(enabled))
 }
 
 #[tauri::command]
-pub async fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
-    use tauri_plugin_autostart::ManagerExt;
-    app.autolaunch()
-        .is_enabled()
-        .map_err(|e| format!("query autostart: {e}"))
+pub async fn get_autostart() -> Result<bool, String> {
+    // Read the persisted preference rather than querying the OS: the macOS
+    // autostart backend's `is_enabled()` is unreliable and reports `false` even
+    // when launch-at-login is registered, which reset the toggle every reopen.
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    Ok(load_or_default_config(&cfg_dir)?.gui.autostart)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
