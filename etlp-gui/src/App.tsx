@@ -324,6 +324,23 @@ export interface UpdateInfo {
 // newer release appears.
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
 
+// Whether dotted-numeric version `a` is strictly newer than `b`. Mirrors the
+// backend `version_gt`: compared component by component, non-numeric suffixes
+// ignored, missing trailing components count as zero. Used for the dismiss gate
+// so a lingering (or differently formatted) dismissed tag can never hide a
+// genuinely newer release the way an exact-string match would.
+function isVersionNewer(a: string, b: string): boolean {
+    const parse = (s: string) => s.split(".").map((p) => parseInt(p, 10) || 0);
+    const av = parse(a);
+    const bv = parse(b);
+    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+        const x = av[i] ?? 0;
+        const y = bv[i] ?? 0;
+        if (x !== y) return x > y;
+    }
+    return false;
+}
+
 // Module-level guard so the automatic update check fires at most once per app
 // process, regardless of how many times AppInner mounts. An empty-deps effect
 // already runs once per mount, but StrictMode's double-invoke in dev and any
@@ -367,7 +384,12 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 if (!cfg.check_update) return;
                 const info = await invoke<UpdateInfo>("check_update");
                 if (cancelled || !info.has_update) return;
-                if (localStorage.getItem(UPDATE_DISMISS_KEY) === info.latest) return;
+                // Re-surface whenever the release is strictly newer than the one
+                // the user last dismissed (semver compare, not exact-string
+                // match — an older or differently formatted dismissed tag must
+                // never hide a genuinely newer release).
+                const dismissed = localStorage.getItem(UPDATE_DISMISS_KEY);
+                if (dismissed && !isVersionNewer(info.latest, dismissed)) return;
                 setUpdate(info);
             } catch {
                 /* offline or rate-limited — silently skip */
