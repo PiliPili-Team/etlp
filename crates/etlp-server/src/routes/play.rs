@@ -968,6 +968,15 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     }
 }
 
+/// Minimum watched duration, in seconds, for the current episode to count as a
+/// "real watch" on Bangumi.
+///
+/// Mirrors the guard `update_progress` applies before writing back progress
+/// (`|stop_sec - start_sec| >= 20`), so a momentary open-and-quit never marks an
+/// episode watched. Bangumi has no per-episode progress, so any watch above this
+/// floor is recorded as watched even below the 90 % completion threshold.
+const BANGUMI_MIN_WATCH_SECS: u64 = 20;
+
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
 /// Reads `[bangumi]` from the config. Silently skips when `access_token` is
@@ -1102,22 +1111,30 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 .filter(|s| *s > 0)
         };
 
+        // Bangumi has no per-episode progress, so it cannot represent a partial
+        // view of an episode. Unlike Trakt (which pauses at the real progress),
+        // any *real watch* of the current episode — one past the same floor the
+        // progress write-back uses — is marked watched here, even below the 90 %
+        // completion threshold.
+        let current_real_watch = (entry.stop_sec - data.start_sec)
+            .unsigned_abs()
+            >= BANGUMI_MIN_WATCH_SECS;
+
         // Collect the episodes to mark watched: every earlier one the client
-        // already finished, plus the current episode only when it reached the
-        // completion threshold (≥ 90 %). A partial view of the current episode
-        // is dropped here so it is not marked watched.
+        // already finished, plus the current episode when it was a real watch.
+        // A momentary open of the current episode is dropped so it is not marked.
         let backfill = emby_played_backfill(state, data).await;
         let mut eps: Vec<(u32, Option<String>)> = backfill
             .iter()
-            .filter(|p| entry.completed || p.index != ep_index)
+            .filter(|p| current_real_watch || p.index != ep_index)
             .filter_map(|p| {
                 to_bgm_sort(p.index).map(|s| (s, p.premiere_date.clone()))
             })
             .collect();
         // Non-Emby servers report no backfill; fall back to the current episode
-        // only when it was actually completed.
+        // when it was a real watch.
         if eps.is_empty()
-            && entry.completed
+            && current_real_watch
             && let Some(s) = to_bgm_sort(ep_index)
         {
             eps.push((s, data.premiere_date.clone()));
@@ -1125,9 +1142,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         eps.sort_by_key(|(s, _)| *s);
         eps.dedup_by_key(|(s, _)| *s);
 
-        // Nothing watched to mark (the current episode is still in progress and
-        // there is no earlier history): just register the subject as "watching"
-        // so the season shows up as in-progress on Bangumi.
+        // Nothing watched to mark (only a momentary open of the current episode
+        // and no earlier history): just register the subject as "watching" so
+        // the season still shows up as in-progress on Bangumi.
         if eps.is_empty() {
             match api.ensure_collected_watching(subject_id).await {
                 Ok(()) => info!(
