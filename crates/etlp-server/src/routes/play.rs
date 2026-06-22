@@ -1049,45 +1049,34 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Resolve the just-watched item once (build_trakt_item logs the reason
-        // when it yields None).
-        let mut current_item = build_trakt_item(state, kind, data).await;
-
-        // Primary: mark the item watched only when finished (≥ the completion
-        // threshold), matching the reference implementation — the
-        // `/sync/history` API has no progress concept, so a partial view is not
-        // added to history.
+        // Two APIs, split by progress so each does its own job and a watch is
+        // never recorded twice:
+        // - Finished (≥ the completion threshold): add to `/sync/history`, the
+        //   reliable "watched" mark (matches the reference implementation).
+        // - Not finished: a single `scrobble/stop` at the real progress, which
+        //   `/sync/history` cannot express — Trakt still scrobbles it watched
+        //   at ≥ 80 %, or saves the resume position between 1 % and 79 %.
+        //   Progress is floored to 1 % so Trakt does not reject it (HTTP 422).
+        // build_trakt_item logs the reason when it yields None.
         if entry.completed {
-            if let Some(item) = current_item.clone() {
+            if let Some(item) = build_trakt_item(state, kind, data).await {
                 info!(
                     item = %data.media_title,
                     "trakt: queued watched item for history"
                 );
                 current_items.push(item);
             }
-        } else {
-            info!(
-                item = %data.media_title,
-                progress = entry.progress,
-                "trakt: not finished, not added to history"
-            );
-        }
-
-        // Double insurance: also fire a `scrobble/stop` at the real progress so
-        // Trakt registers the watch a second way — at ≥ 80 % it scrobbles to
-        // history, between 1 % and 79 % it saves the resume position. Progress
-        // is floored to 1 % because Trakt rejects a stop below 1 % with HTTP
-        // 422. (A completed item is therefore recorded by both paths.)
-        if let Some(ref mut item) = current_item {
+        } else if let Some(mut item) = build_trakt_item(state, kind, data).await
+        {
             if item.episode.is_none() && item.ids.trakt.is_none() {
                 item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
             }
             let progress = entry.progress.max(1.0);
-            match api.scrobble(ScrobbleAction::Stop, item, progress).await {
+            match api.scrobble(ScrobbleAction::Stop, &item, progress).await {
                 Ok(_) => info!(
                     item = %data.media_title,
                     progress,
-                    "trakt: scrobbled stop (double insurance)"
+                    "trakt: scrobbled stop (in-progress)"
                 ),
                 Err(e) => warn!("trakt scrobble stop error: {e}"),
             }
