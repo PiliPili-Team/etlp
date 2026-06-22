@@ -211,6 +211,10 @@ pub struct GuiSection {
     pub silent_start: bool,
     /// Periodically check GitHub for a newer release and surface an update hint.
     pub check_update: bool,
+    /// Whether launch-at-login is enabled. Persisted as the source of truth for
+    /// the UI because the macOS autostart backend's own state query is
+    /// unreliable; the OS registration is still driven through the plugin.
+    pub autostart: bool,
 }
 
 impl Default for GuiSection {
@@ -220,6 +224,7 @@ impl Default for GuiSection {
             server_cache_path: None,
             silent_start: false,
             check_update: true,
+            autostart: false,
         }
     }
 }

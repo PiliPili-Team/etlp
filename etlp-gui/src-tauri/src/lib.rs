@@ -244,6 +244,13 @@ pub fn run() {
         .as_ref()
         .map(|c| c.gui.silent_start)
         .unwrap_or(false);
+    // Saved launch-at-login preference; reconciled against the OS in `setup` so
+    // the persisted value stays the source of truth even if the registration
+    // drifted (e.g. the macOS backend that cannot read its own state back).
+    let want_autostart = initial_config
+        .as_ref()
+        .map(|c| c.gui.autostart)
+        .unwrap_or(false);
 
     let masker = etlp_logging::Masker::new(false);
     let log_handle = etlp_logging::init(
@@ -294,6 +301,22 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(gui_state)
         .setup(move |app| {
+            // Reconcile OS launch-at-login with the saved preference so the
+            // persisted value is the source of truth (best-effort; a failure
+            // must not block startup).
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let launcher = app.autolaunch();
+                let res = if want_autostart {
+                    launcher.enable()
+                } else {
+                    launcher.disable()
+                };
+                if let Err(e) = res {
+                    eprintln!("[etlp] autostart reconcile failed: {e}");
+                }
+            }
+
             // ── Tray icon ──────────────────────────────────────────────────────
             let menu = build_tray_menu(app.handle(), &labels, false)?;
 
