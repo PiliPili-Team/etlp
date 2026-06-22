@@ -1001,7 +1001,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     };
 
     match api.ensure_auth().await {
-        Ok(true) => debug!("trakt: token valid"),
+        Ok(true) => {}
         Ok(false) => {
             // No token yet (or refresh failed): open the OAuth authorize page
             // so the user can grant access. The /trakt_auth callback then
@@ -1043,6 +1043,19 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
+        // Drop a momentary open of the just-watched item: under the real-watch
+        // floor it is treated as noise and not reported (matching Bangumi). The
+        // backfill of earlier, server-confirmed episodes below is unaffected.
+        let watched_secs = (entry.stop_sec - data.start_sec).unsigned_abs();
+        let real_watch = watched_secs >= MIN_REAL_WATCH_SECS;
+        if !real_watch {
+            debug!(
+                item = %data.media_title,
+                watched_secs,
+                "trakt: watched < {MIN_REAL_WATCH_SECS}s, skip scrobble"
+            );
+        }
+
         // Scrobble the just-watched item. ≥ 90 % stops at 100 % so Trakt marks
         // it watched; below that we pause at the real progress so it surfaces as
         // "currently watching" / Up Next without being marked watched.
@@ -1052,7 +1065,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // Trakt id first so the match does not 404. If the scrobble still fails
         // and the item is finished, fall back to the history API so the watch is
         // at least recorded.
-        if let Some(mut item) = build_trakt_item(state, kind, data).await {
+        if real_watch
+            && let Some(mut item) = build_trakt_item(state, kind, data).await
+        {
             if item.episode.is_none() && item.ids.trakt.is_none() {
                 item.ids.trakt = api.resolve_trakt_id(kind, &item.ids).await;
                 debug!(
@@ -1124,13 +1139,13 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
 }
 
 /// Minimum watched duration, in seconds, for the current episode to count as a
-/// "real watch" on Bangumi.
+/// "real watch" worth syncing to a third-party service.
 ///
 /// Mirrors the guard `update_progress` applies before writing back progress
-/// (`|stop_sec - start_sec| >= 20`), so a momentary open-and-quit never marks an
-/// episode watched. Bangumi has no per-episode progress, so any watch above this
-/// floor is recorded as watched even below the 90 % completion threshold.
-const BANGUMI_MIN_WATCH_SECS: u64 = 20;
+/// (`|stop_sec - start_sec| >= 20`), so a momentary open-and-quit is treated as
+/// noise: Bangumi does not mark such an episode watched, and Trakt does not even
+/// report it as in-progress. Shared by both sync paths so the floor is identical.
+const MIN_REAL_WATCH_SECS: u64 = 20;
 
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
@@ -1274,7 +1289,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // completion threshold.
         let current_real_watch = (entry.stop_sec - data.start_sec)
             .unsigned_abs()
-            >= BANGUMI_MIN_WATCH_SECS;
+            >= MIN_REAL_WATCH_SECS;
 
         // Collect the episodes to mark watched: every earlier one the client
         // already finished, plus the current episode when it was a real watch.

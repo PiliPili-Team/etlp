@@ -11,6 +11,10 @@ use crate::error::Result;
 
 /// Send `builder`, first logging the equivalent `curl` command at debug level.
 ///
+/// Kept at `debug`: the line carries the full Bearer token / api key, so it
+/// belongs to the diagnostic level the user opts into, not the default. The
+/// sync *outcome* (`scrobbled`, skip reasons) is logged at info separately.
+///
 /// The request is cloned only for logging; the original is sent unchanged. A
 /// body that cannot be cloned (e.g. a stream) is still sent — just without a
 /// logged line. Use this for data endpoints only, never for OAuth/token

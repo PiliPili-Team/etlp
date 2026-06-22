@@ -167,7 +167,7 @@ export const zhTW: typeof zhCN = {
         "預先載入與下載模式由瀏覽器油猴腳本的指令觸發，不在此處開關：腳本發起「邊播邊快取」即為預先載入，發起「僅下載」即為下載模式；其中下載模式還要求你的媒體伺服器帳號本身具備資源下載權限",
     sys_trakt: "Trakt.tv 播放記錄同步",
     sys_trakt_sync_note:
-        "播放結束後自動同步：本集看到 90% 及以上標記為已觀看並寫入記錄，未達 90% 則依真實進度記錄為「正在觀看」，可在 Trakt 的 Up Next 繼續；媒體伺服器中此前已看完的本季劇集會一併補記",
+        "播放結束後自動同步：本集需有效觀看（約 20 秒以上、非誤點即退）才會上報；看到 90% 及以上標記為已觀看並寫入記錄，未達 90% 則依真實進度記錄為「正在觀看」，可在 Trakt 的 Up Next 繼續；媒體伺服器中此前已看完的本季劇集會一併補記",
     sys_trakt_setup_title: "設定步驟",
     sys_trakt_setup_step1: "1. 在 Trakt 建立應用程式：",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
