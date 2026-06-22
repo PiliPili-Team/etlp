@@ -164,9 +164,7 @@ export default function Logs({ active }: { active: boolean }) {
     const [filter, setFilter] = useState("");
     const [source, setSource] = useState<LogSource>("app");
     // Display-only anonymous mode; persisted so it survives a tab switch.
-    const [anon, setAnon] = useState(
-        () => localStorage.getItem("logs_anon") === "1",
-    );
+    const [anon, setAnon] = useState(() => localStorage.getItem("logs_anon") === "1");
     const [paths, setPaths] = useState<LogPaths | null>(null);
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [hasOlder, setHasOlder] = useState(false);
@@ -478,10 +476,7 @@ export default function Logs({ active }: { active: boolean }) {
                             onClick={() => {
                                 const next = !anon;
                                 setAnon(next);
-                                localStorage.setItem(
-                                    "logs_anon",
-                                    next ? "1" : "0",
-                                );
+                                localStorage.setItem("logs_anon", next ? "1" : "0");
                             }}
                         >
                             {t("logs_anon")}
