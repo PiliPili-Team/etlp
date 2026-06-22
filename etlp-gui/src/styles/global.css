@@ -544,6 +544,21 @@ html[data-center-nav="true"] .sidebar {
     line-height: 1.4;
 }
 
+/* ── Inline field validation status ──────────────────────────────────── */
+.field-status {
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.field-status.ok {
+    color: var(--green);
+}
+
+.field-status.err {
+    color: var(--red);
+}
+
 /* ── Toggle ──────────────────────────────────────────────────────────── */
 .toggle {
     position: relative;

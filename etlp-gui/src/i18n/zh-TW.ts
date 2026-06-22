@@ -102,6 +102,8 @@ export const zhTW: typeof zhCN = {
     vp_filter: "版本篩選正規表示式",
     vp_filter_desc: "只有匹配該正規表示式的版本才會加入播放清單（留空不篩選）",
     vp_filter_placeholder: "例：|VCB-Studio|ANi|繁體",
+    vp_filter_valid: "正規表示式有效",
+    vp_filter_invalid: "正規表示式無效",
 
     // Network
     page_network: "網路",

@@ -487,6 +487,7 @@ pub fn run() {
             commands::set_autostart,
             commands::get_autostart,
             commands::validate_bangumi_mapping,
+            commands::validate_regex,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

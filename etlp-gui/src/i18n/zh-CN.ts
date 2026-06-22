@@ -99,6 +99,8 @@ export const zhCN = {
     vp_filter: "版本过滤正则",
     vp_filter_desc: "只有匹配该正则的版本才会加入播放列表（留空不过滤）",
     vp_filter_placeholder: "例：|VCB-Studio|ANi|简体",
+    vp_filter_valid: "正则有效",
+    vp_filter_invalid: "正则无效",
 
     // Network
     page_network: "网络",

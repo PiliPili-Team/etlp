@@ -1104,6 +1104,7 @@ dependencies = [
  "etlp-server",
  "etlp-sync",
  "image",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

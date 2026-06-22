@@ -106,6 +106,8 @@ export const en: typeof zhCN = {
     vp_filter_desc:
         "Only versions matching this regex are added to the playlist (empty = no filter)",
     vp_filter_placeholder: "e.g. |VCB-Studio|ANi|Simplified",
+    vp_filter_valid: "Valid regex",
+    vp_filter_invalid: "Invalid regex",
 
     // Network
     page_network: "Network",

@@ -563,25 +563,50 @@ function TagListRow({
     );
 }
 
+interface FieldStatus {
+    ok: boolean;
+    text: string;
+}
+
 function TextareaRow({
     label,
     desc,
     value,
     placeholder,
     onCommit,
+    validate,
 }: {
     label: string;
     desc?: string;
     value: string;
     placeholder?: string;
     onCommit: (v: string) => void;
+    /** Optional async validator; returns a status to show, or null to clear. */
+    validate?: (v: string) => Promise<FieldStatus | null>;
 }) {
     const [local, setLocal] = useState(value);
     const [prevTextValue, setPrevTextValue] = useState(value);
+    const [status, setStatus] = useState<FieldStatus | null>(null);
     if (prevTextValue !== value) {
         setPrevTextValue(value);
         setLocal(value);
     }
+
+    // Debounce validation so it runs as the user pauses, not on every keystroke.
+    useEffect(() => {
+        if (!validate) return;
+        let cancelled = false;
+        const handle = setTimeout(() => {
+            void validate(local).then((s) => {
+                if (!cancelled) setStatus(s);
+            });
+        }, 300);
+        return () => {
+            cancelled = true;
+            clearTimeout(handle);
+        };
+    }, [local, validate]);
+
     return (
         <div
             className="row"
@@ -613,6 +638,11 @@ function TextareaRow({
                     if (local !== value) onCommit(local);
                 }}
             />
+            {status && (
+                <div className={`field-status${status.ok ? " ok" : " err"}`}>
+                    {status.text}
+                </div>
+            )}
         </div>
     );
 }
@@ -1114,6 +1144,21 @@ function VersionPreferSection({
                     value={cfg.version_filter}
                     placeholder={t("vp_filter_placeholder")}
                     onCommit={(v) => update("playlist", "version_filter", v)}
+                    validate={async (v) => {
+                        if (!v.trim()) return null;
+                        try {
+                            await invoke("validate_regex", { pattern: v });
+                            return { ok: true, text: t("vp_filter_valid") };
+                        } catch (e) {
+                            const detail = typeof e === "string" ? e : "";
+                            return {
+                                ok: false,
+                                text: detail
+                                    ? `${t("vp_filter_invalid")}: ${detail}`
+                                    : t("vp_filter_invalid"),
+                            };
+                        }
+                    }}
                 />
             </div>
         </>

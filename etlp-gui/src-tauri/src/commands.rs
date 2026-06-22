@@ -405,6 +405,18 @@ pub fn validate_bangumi_mapping(
     Ok(parsed.to_canonical())
 }
 
+/// Validate a `version_filter` regular expression against the same engine the
+/// server uses (the Rust `regex` crate, which—unlike JS—has no lookaround or
+/// backreferences). Newlines are stripped first to mirror `version_filter`'s
+/// own preprocessing. Returns `Ok(())` when valid, or the engine's error detail.
+#[tauri::command]
+pub fn validate_regex(pattern: String) -> Result<(), String> {
+    let single_line: String = pattern.split('\n').collect();
+    regex::Regex::new(&single_line)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Reload the in-memory config from disk and push to a running server.
 ///
 /// Also applies any log-level change immediately so the new level takes
