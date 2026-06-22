@@ -86,6 +86,17 @@ pub struct TraktHistoryItem {
     pub watched_at: Option<String>,
 }
 
+/// Realtime playback action reported to Trakt's scrobble endpoints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScrobbleAction {
+    /// `POST /scrobble/pause` — keep the item in the in-progress / "currently
+    /// watching" state, never marking it watched regardless of progress.
+    Pause,
+    /// `POST /scrobble/stop` — at ≥ 80 % Trakt marks the item watched and adds
+    /// it to history; below that it is treated as a pause.
+    Stop,
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Build the Trakt OAuth authorization URL the user opens to grant access.
@@ -516,6 +527,57 @@ impl TraktApi {
         Ok(resp.json().await?)
     }
 
+    /// Report realtime playback for one movie/episode via the scrobble API.
+    ///
+    /// `progress` is the watched percentage (`0.0..=100.0`). A
+    /// [`ScrobbleAction::Stop`] at ≥ 80 % makes Trakt mark the item watched and
+    /// add it to history; [`ScrobbleAction::Pause`] always leaves it in the
+    /// in-progress / "currently watching" state so it surfaces under Up Next.
+    ///
+    /// A `409 Conflict` (an identical scrobble still in flight) is treated as a
+    /// successful no-op rather than an error.
+    pub async fn scrobble(
+        &self,
+        action: ScrobbleAction,
+        item: &TraktHistoryItem,
+        progress: f64,
+    ) -> Result<serde_json::Value> {
+        let path = match action {
+            ScrobbleAction::Pause => "scrobble/pause",
+            ScrobbleAction::Stop => "scrobble/stop",
+        };
+        let key = match item.kind {
+            TraktItemKind::Movie => "movie",
+            TraktItemKind::Episode => "episode",
+        };
+        let payload = serde_json::json!({
+            key: { "ids": item.ids },
+            "progress": progress.clamp(0.0, 100.0),
+        });
+
+        debug!(path, progress, "trakt: POST /{path}");
+        let resp = self
+            .http
+            .post(self.url(path))
+            .headers(self.auth_headers())
+            .json(&payload)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.as_u16() == 409 {
+            debug!("trakt: scrobble conflict (already in flight), ignoring");
+            return Ok(serde_json::json!({ "ignored": "conflict" }));
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        Ok(resp.json().await?)
+    }
+
     /// Query a user's watch history for a specific item.
     ///
     /// `item_type` is `"movie"`, `"episode"`, `"show"`, or `"season"`.
@@ -938,6 +1000,101 @@ mod tests {
             .and_then(|a| a.get("movies"))
             .and_then(|m| m.as_u64());
         assert_eq!(added_movies, Some(1));
+    }
+
+    // ── scrobble ──────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn scrobble_stop_posts_progress_to_stop_endpoint() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/scrobble/stop"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "progress": 100.0,
+                "episode": { "ids": { "tvdb": 42 } },
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(
+                serde_json::json!({ "action": "scrobble", "progress": 100.0 }),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let item = TraktHistoryItem {
+            kind: TraktItemKind::Episode,
+            ids: TraktIds {
+                tvdb: Some(42),
+                ..Default::default()
+            },
+            watched_at: None,
+        };
+        let resp = api
+            .scrobble(ScrobbleAction::Stop, &item, 100.0)
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.get("action").and_then(|a| a.as_str()),
+            Some("scrobble")
+        );
+    }
+
+    #[tokio::test]
+    async fn scrobble_pause_uses_pause_endpoint() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/scrobble/pause"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(
+                serde_json::json!({ "action": "pause", "progress": 45.0 }),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let item = TraktHistoryItem {
+            kind: TraktItemKind::Episode,
+            ids: TraktIds {
+                tvdb: Some(7),
+                ..Default::default()
+            },
+            watched_at: None,
+        };
+        let resp = api
+            .scrobble(ScrobbleAction::Pause, &item, 45.0)
+            .await
+            .unwrap();
+        assert_eq!(resp.get("action").and_then(|a| a.as_str()), Some("pause"));
+    }
+
+    #[tokio::test]
+    async fn scrobble_conflict_is_treated_as_noop() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/scrobble/stop"))
+            .respond_with(ResponseTemplate::new(409))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let item = TraktHistoryItem {
+            kind: TraktItemKind::Movie,
+            ids: TraktIds {
+                imdb: Some("tt1".into()),
+                ..Default::default()
+            },
+            watched_at: None,
+        };
+        // A 409 (scrobble already in flight) must resolve to Ok, not an error.
+        let resp = api
+            .scrobble(ScrobbleAction::Stop, &item, 100.0)
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.get("ignored").and_then(|v| v.as_str()),
+            Some("conflict")
+        );
     }
 
     // ── get_watch_history ─────────────────────────────────────────────────────
