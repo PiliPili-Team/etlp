@@ -352,8 +352,11 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         cmd.push("--pause".into());
     }
 
-    // iina passes mpv args with a `--mpv-` prefix instead of `--`.
-    if is_darwin && is_iina {
+    // iina passes mpv args with a `--mpv-` prefix instead of `--`. Gated on the
+    // exe name alone (not the OS): iina-cli only ships on macOS, so `is_iina` is
+    // a sufficient and platform-independent signal — keeping the arg shape (and
+    // these tests) deterministic everywhere.
+    if is_iina {
         cmd = cmd
             .into_iter()
             .map(|s| {
