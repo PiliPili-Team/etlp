@@ -15,6 +15,9 @@ use tracing::{debug, info, warn};
 
 use crate::error::{Result, SyncError};
 
+/// Log label for this provider's HTTP send/retry/response lines.
+const DOMAIN: &str = "trakt";
+
 // ── OAuth token ───────────────────────────────────────────────────────────────
 
 /// A persisted Trakt OAuth token (both access and refresh).
@@ -205,6 +208,7 @@ impl TraktApi {
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(etlp_core::UA_ETLP)
+            .timeout(Duration::from_secs(30))
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {
@@ -438,13 +442,17 @@ impl TraktApi {
             "grant_type":    "refresh_token",
         });
 
-        let resp = self
-            .http
-            .post(self.url("oauth/token"))
-            .headers(self.base_headers())
-            .json(&body)
-            .send()
-            .await?;
+        // Routed through the shared retry helper (not `send_logged`: this body
+        // carries the client secret and must never be logged), so a transient
+        // 504 from Trakt's edge does not abandon the refresh.
+        let resp = crate::curl::send_retrying(
+            DOMAIN,
+            self.http
+                .post(self.url("oauth/token"))
+                .headers(self.base_headers())
+                .json(&body),
+        )
+        .await?;
 
         if !resp.status().is_success() {
             let status = resp.status().as_u16();
@@ -563,23 +571,14 @@ impl TraktApi {
         });
 
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .post(self.url("sync/history"))
                 .headers(self.auth_headers())
                 .json(&payload),
         )
         .await?;
-        debug!(
-            status = resp.status().as_u16(),
-            "trakt: /sync/history response"
-        );
-
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        Ok(resp.json().await?)
+        crate::curl::json_logged(DOMAIN, resp).await
     }
 
     /// Report playback for one movie/episode via the scrobble API.
@@ -624,25 +623,25 @@ impl TraktApi {
 
         debug!(path, progress, "trakt: POST /{path}");
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .post(self.url(path))
                 .headers(self.auth_headers())
                 .json(&payload),
         )
         .await?;
-        let status = resp.status();
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
         if status.as_u16() == 409 {
             debug!("trakt: scrobble conflict (already in flight), ignoring");
             return Ok(serde_json::json!({ "ignored": "conflict" }));
         }
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
             return Err(SyncError::Api {
                 status: status.as_u16(),
                 body,
             });
         }
-        Ok(resp.json().await?)
+        serde_json::from_str(&body).map_err(SyncError::Json)
     }
 
     /// Query a user's watch history for a specific item.
@@ -659,19 +658,22 @@ impl TraktApi {
             self.user_id, item_type, trakt_id
         );
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http.get(self.url(&path)).headers(self.auth_headers()),
         )
         .await?;
 
-        if resp.status().as_u16() == 404 {
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        if status.as_u16() == 404 {
             return Ok(Vec::new());
         }
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
+        if !status.is_success() {
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body,
+            });
         }
-        Ok(resp.json().await?)
+        serde_json::from_str(&body).map_err(SyncError::Json)
     }
 
     /// Look up an item by an external provider ID.
@@ -692,19 +694,22 @@ impl TraktApi {
             }
         }
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http.get(&url).headers(self.auth_headers()),
         )
         .await?;
 
-        if resp.status().as_u16() == 404 {
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        if status.as_u16() == 404 {
             return Ok(Vec::new());
         }
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
+        if !status.is_success() {
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body,
+            });
         }
-        Ok(resp.json().await?)
+        serde_json::from_str(&body).map_err(SyncError::Json)
     }
 
     /// Resolve the numeric Trakt id for a movie/episode from its external

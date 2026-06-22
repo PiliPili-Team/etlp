@@ -13,6 +13,9 @@ use tracing::{debug, info};
 
 use crate::error::{Result, SyncError};
 
+/// Log label for this provider's HTTP send/retry/response lines.
+const DOMAIN: &str = "bangumi";
+
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 /// User's relationship to a subject (collection state).
@@ -380,6 +383,7 @@ impl BangumiApi {
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(etlp_core::UA_ETLP)
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(SyncError::Http)?;
         Ok(Self {
@@ -399,18 +403,18 @@ impl BangumiApi {
     pub async fn verify_token(&self) -> Result<()> {
         debug!(user = %self.username, "bangumi: GET /me (verify token)");
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http.get(self.url("me")).headers(self.auth_headers()),
         )
         .await?;
-        let status = resp.status().as_u16();
-        debug!(status, "bangumi: /me response");
-        if resp.status().is_success() {
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        let status = status.as_u16();
+        if (200..300).contains(&status) {
             return Ok(());
         }
         if status == 401 || status == 403 {
             return Err(SyncError::Unauthorized);
         }
-        let body = resp.text().await.unwrap_or_default();
         Err(SyncError::Api { status, body })
     }
 
@@ -467,6 +471,7 @@ impl BangumiApi {
             "filter": filter,
         });
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .post(self.url("search/subjects"))
                 .headers(self.auth_headers())
@@ -475,12 +480,8 @@ impl BangumiApi {
         )
         .await?;
 
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        let raw: serde_json::Value = resp.json().await?;
+        let raw: serde_json::Value =
+            crate::curl::json_logged(DOMAIN, resp).await?;
         let data = raw
             .get("data")
             .and_then(|d| d.as_array())
@@ -500,17 +501,13 @@ impl BangumiApi {
     /// Fetch subject metadata by ID.
     pub async fn get_subject(&self, subject_id: u64) -> Result<BangumiSubject> {
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .get(self.url(&format!("subjects/{subject_id}")))
                 .headers(self.auth_headers()),
         )
         .await?;
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        Ok(resp.json().await?)
+        crate::curl::json_logged(DOMAIN, resp).await
     }
 
     /// Fetch all episodes for a subject (type 0 = main episodes).
@@ -520,23 +517,14 @@ impl BangumiApi {
     ) -> Result<BangumiEpisodeList> {
         debug!(subject_id, "bangumi: GET /episodes");
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .get(self.url("episodes"))
                 .headers(self.auth_headers())
                 .query(&[("subject_id", subject_id), ("type", 0)]),
         )
         .await?;
-        debug!(
-            subject_id,
-            status = resp.status().as_u16(),
-            "bangumi: /episodes response"
-        );
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        Ok(resp.json().await?)
+        crate::curl::json_logged(DOMAIN, resp).await
     }
 
     /// Fetch subjects related to `subject_id` (e.g. sequels `続集`).
@@ -545,17 +533,13 @@ impl BangumiApi {
         subject_id: u64,
     ) -> Result<Vec<BangumiRelated>> {
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .get(self.url(&format!("subjects/{subject_id}/subjects")))
                 .headers(self.auth_headers()),
         )
         .await?;
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        Ok(resp.json().await?)
+        crate::curl::json_logged(DOMAIN, resp).await
     }
 
     // ── Subject resolution by title ───────────────────────────────────────────
@@ -719,6 +703,7 @@ impl BangumiApi {
             "bangumi: GET subject collection"
         );
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .get(self.url(&format!(
                     "users/{}/collections/{}",
@@ -727,18 +712,13 @@ impl BangumiApi {
                 .headers(self.auth_headers()),
         )
         .await?;
-        debug!(
-            subject_id,
-            status = resp.status().as_u16(),
-            "bangumi: subject collection response"
-        );
-        match resp.status().as_u16() {
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        match status.as_u16() {
             404 => Ok(None),
-            200 => Ok(Some(resp.json().await?)),
-            status => {
-                let body = resp.text().await.unwrap_or_default();
-                Err(SyncError::Api { status, body })
+            200 => {
+                Ok(Some(serde_json::from_str(&body).map_err(SyncError::Json)?))
             }
+            status => Err(SyncError::Api { status, body }),
         }
     }
 
@@ -762,24 +742,22 @@ impl BangumiApi {
             "private": self.private,
         });
         let resp = crate::curl::send_logged(
+            DOMAIN,
             self.http
                 .post(self.url(&format!("users/-/collections/{subject_id}")))
                 .headers(self.auth_headers())
                 .json(&body),
         )
         .await?;
-        debug!(
-            subject_id,
-            status = resp.status().as_u16(),
-            "bangumi: add/update collection response"
-        );
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
         // 200/202/204 all count as success.
-        if resp.status().is_success() || resp.status().as_u16() == 204 {
+        if status.is_success() {
             return Ok(());
         }
-        let status = resp.status().as_u16();
-        let body = resp.text().await.unwrap_or_default();
-        Err(SyncError::Api { status, body })
+        Err(SyncError::Api {
+            status: status.as_u16(),
+            body,
+        })
     }
 
     /// Ensure the subject sits in the user's collection, adding it as
@@ -831,6 +809,7 @@ impl BangumiApi {
             let body =
                 serde_json::json!({ "type": CollectionState::Watched as u8 });
             let resp = crate::curl::send_logged(
+                DOMAIN,
                 self.http
                     .put(self.url(&format!(
                         "users/-/collections/-/episodes/{ep_id}"
@@ -839,12 +818,14 @@ impl BangumiApi {
                     .json(&body),
             )
             .await?;
-            if resp.status().is_success() || resp.status().as_u16() == 204 {
+            let (status, text) = crate::curl::read_logged(DOMAIN, resp).await?;
+            if status.is_success() {
                 return Ok(());
             }
-            let status = resp.status().as_u16();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body: text });
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body: text,
+            });
         }
 
         // Bulk update.
@@ -854,6 +835,7 @@ impl BangumiApi {
         });
         let resp =
             crate::curl::send_logged(
+                DOMAIN,
                 self.http
                     .patch(self.url(&format!(
                         "users/-/collections/{subject_id}/episodes"
@@ -862,12 +844,14 @@ impl BangumiApi {
                     .json(&body),
             )
             .await?;
-        if resp.status().is_success() || resp.status().as_u16() == 204 {
+        let (status, text) = crate::curl::read_logged(DOMAIN, resp).await?;
+        if status.is_success() {
             return Ok(());
         }
-        let status = resp.status().as_u16();
-        let text = resp.text().await.unwrap_or_default();
-        Err(SyncError::Api { status, body: text })
+        Err(SyncError::Api {
+            status: status.as_u16(),
+            body: text,
+        })
     }
 
     /// Return a map of `sort_number → EpCollectionState` for a subject.
@@ -877,6 +861,7 @@ impl BangumiApi {
     ) -> Result<HashMap<u64, EpCollectionState>> {
         let resp =
             crate::curl::send_logged(
+                DOMAIN,
                 self.http
                     .get(self.url(&format!(
                         "users/-/collections/{subject_id}/episodes"
@@ -884,12 +869,8 @@ impl BangumiApi {
                     .headers(self.auth_headers()),
             )
             .await?;
-        if !resp.status().is_success() {
-            let status = resp.status().as_u16();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(SyncError::Api { status, body });
-        }
-        let raw: serde_json::Value = resp.json().await?;
+        let raw: serde_json::Value =
+            crate::curl::json_logged(DOMAIN, resp).await?;
         let mut map = HashMap::new();
         if let Some(arr) = raw.get("data").and_then(|d| d.as_array()) {
             for item in arr {
