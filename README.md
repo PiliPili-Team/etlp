@@ -16,7 +16,7 @@ playlist construction, progress write-back, and optional watch-history sync.
 
 - Supports **mpv · iina · vlc · mpc-hc · potplayer · dandanplay**
 - Playlist management with version/subtitle preference filtering
-- Progress write-back to Emby / Jellyfin / Plex
+- Progress write-back to Emby (Jellyfin / Plex: **experimental, untested**)
 - Trakt.tv and Bangumi.tv watch-history sync
 - Concurrent download manager with pause / resume and rate limiting
 - Native GUI for macOS and Windows (Tauri, vibrancy on macOS)
