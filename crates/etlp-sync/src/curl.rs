@@ -9,6 +9,7 @@
 
 use std::time::Duration;
 
+use reqwest::Method;
 use serde::de::DeserializeOwned;
 
 use crate::error::{Result, SyncError};
@@ -16,9 +17,32 @@ use crate::error::{Result, SyncError};
 /// Longest non-JSON error body to log (an HTML gateway page can be huge).
 const NON_JSON_LOG_LIMIT: usize = 500;
 
-/// Read a response body and log it: the raw JSON at debug when the body parses
-/// as JSON, otherwise an `error` line (a gateway/proxy can answer with an HTML
-/// page, e.g. on a 5xx, which is not worth dumping as JSON).
+/// A response paired with the request method that produced it.
+///
+/// `reqwest::Response` does not carry the request method, but the logging
+/// policy depends on it (GET/POST dump the JSON body; other verbs log only the
+/// status code), so [`send_logged`] captures the method up-front and threads it
+/// through to [`read_logged`].
+pub(crate) struct LoggedResponse {
+    method: Method,
+    resp: reqwest::Response,
+}
+
+/// Whether a response body is dumped in full for `method`.
+///
+/// GET/POST replies carry the data we usually want to inspect (collections,
+/// search results, scrobble echoes); other verbs (PUT/DELETE/PATCH) are writes
+/// whose body rarely matters, so only their status code is logged.
+fn logs_full_body(method: &Method) -> bool {
+    matches!(*method, Method::GET | Method::POST)
+}
+
+/// Read a response body and log it according to the request method.
+///
+/// For GET/POST the raw JSON is logged at debug when the body parses as JSON;
+/// for other verbs only the status code is logged. A body that is not JSON (a
+/// gateway/proxy can answer with an HTML page, e.g. on a 5xx) is logged as an
+/// `error` line regardless of method.
 ///
 /// `label` (e.g. `"trakt"`/`"bangumi"`) prefixes the log line. The body is
 /// logged verbatim so the exact API reply is visible while diagnosing; it is
@@ -27,18 +51,23 @@ const NON_JSON_LOG_LIMIT: usize = 500;
 /// the status and body for the caller to interpret.
 pub(crate) async fn read_logged(
     label: &str,
-    resp: reqwest::Response,
+    logged: LoggedResponse,
 ) -> Result<(reqwest::StatusCode, String)> {
+    let LoggedResponse { method, resp } = logged;
     let status = resp.status();
     let body = resp.text().await?;
-    if serde_json::from_str::<serde_json::Value>(&body).is_ok() {
-        tracing::debug!("{label}: response {} body: {body}", status.as_u16());
-    } else {
+    let is_json = serde_json::from_str::<serde_json::Value>(&body).is_ok();
+    if !is_json {
         let preview: String = body.chars().take(NON_JSON_LOG_LIMIT).collect();
         tracing::error!(
             "{label}: non-JSON response {}: {preview}",
             status.as_u16()
         );
+    } else if logs_full_body(&method) {
+        tracing::debug!("{label}: response {} body: {body}", status.as_u16());
+    } else {
+        // PUT/DELETE/PATCH: log only the status, omitting the JSON body.
+        tracing::debug!("{label}: {method} response {}", status.as_u16());
     }
     Ok((status, body))
 }
@@ -49,9 +78,9 @@ pub(crate) async fn read_logged(
 /// that fails to deserialize maps to [`SyncError::Json`].
 pub(crate) async fn json_logged<T: DeserializeOwned>(
     label: &str,
-    resp: reqwest::Response,
+    logged: LoggedResponse,
 ) -> Result<T> {
-    let (status, body) = read_logged(label, resp).await?;
+    let (status, body) = read_logged(label, logged).await?;
     if !status.is_success() {
         return Err(SyncError::Api {
             status: status.as_u16(),
@@ -82,14 +111,23 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(1);
 pub(crate) async fn send_logged(
     label: &str,
     builder: reqwest::RequestBuilder,
-) -> Result<reqwest::Response> {
+) -> Result<LoggedResponse> {
+    // Capture the method now: the response will not carry it, yet read_logged
+    // needs it to decide whether to dump the JSON body. Building a clone is the
+    // only way to read the verb off a RequestBuilder; a non-cloneable
+    // (streaming) body falls back to GET, which simply keeps the old "dump the
+    // body" behaviour for that rare case.
+    let built = builder.try_clone().and_then(|c| c.build().ok());
+    let method = built
+        .as_ref()
+        .map_or(Method::GET, |req| req.method().clone());
     if tracing::enabled!(tracing::Level::DEBUG)
-        && let Some(clone) = builder.try_clone()
-        && let Ok(req) = clone.build()
+        && let Some(req) = built.as_ref()
     {
-        tracing::debug!("{}", curl_command(&req));
+        tracing::debug!("{}", curl_command(req));
     }
-    send_retrying(label, builder).await
+    let resp = send_retrying(label, builder).await?;
+    Ok(LoggedResponse { method, resp })
 }
 
 /// Send a request, retrying up to [`MAX_RETRIES`] times on transient failures.
@@ -179,5 +217,15 @@ mod tests {
         assert!(line.contains("https://api.trakt.tv/scrobble/pause"));
         assert!(line.contains("-H 'authorization: Bearer secret-token'"));
         assert!(line.contains("-d '{\"progress\":35.0}'"));
+    }
+
+    #[test]
+    fn full_body_is_logged_only_for_get_and_post() {
+        // GET/POST replies carry data worth inspecting; writes do not.
+        assert!(logs_full_body(&Method::GET));
+        assert!(logs_full_body(&Method::POST));
+        assert!(!logs_full_body(&Method::PUT));
+        assert!(!logs_full_body(&Method::DELETE));
+        assert!(!logs_full_body(&Method::PATCH));
     }
 }
