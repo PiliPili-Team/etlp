@@ -174,6 +174,7 @@ export const en: typeof zhCN = {
     sys_trakt: "Trakt.tv Scrobbling",
     sys_trakt_sync_note:
         'Synced automatically when playback ends: the episode is only reported after a real watch (roughly 20s or more, not a momentary open); watching 90% or more marks it watched and adds it to history; below 90% it is recorded at the real progress as "currently watching" so it surfaces under Up Next. Earlier episodes of the season already finished in your media server are backfilled too',
+    sys_trakt_dashboard: "Open Trakt dashboard",
     sys_trakt_setup_title: "Setup",
     sys_trakt_setup_step1: "1. Create an app on Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",

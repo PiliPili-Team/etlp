@@ -2239,6 +2239,7 @@ function BangumiSection({
  *  the `/trakt_auth` callback the local server serves on the default port. */
 const TRAKT_REDIRECT_URI = "http://localhost:58000/trakt_auth";
 const TRAKT_APPS_URL = "https://trakt.tv/oauth/applications";
+const TRAKT_DASHBOARD_URL = "https://trakt.tv/dashboard";
 
 /** Inline setup instructions for creating a Trakt application: a link to the
  *  Trakt apps page and the redirect URI to register, with a copy button. */
@@ -2315,7 +2316,17 @@ function TraktSection({
             />
 
             <div className="settings-group">
-                <div className="settings-note">{t("sys_trakt_sync_note")}</div>
+                <div className="settings-note">
+                    {t("sys_trakt_sync_note")}
+                    <div className="settings-note-copy">
+                        <button
+                            className="btn"
+                            onClick={() => void openUrl(TRAKT_DASHBOARD_URL)}
+                        >
+                            {t("sys_trakt_dashboard")}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div className="settings-group-title" style={{ marginTop: 0 }}>

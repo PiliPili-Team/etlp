@@ -165,6 +165,7 @@ export const zhCN = {
     sys_trakt: "Trakt.tv 播放记录同步",
     sys_trakt_sync_note:
         "播放结束后自动同步：本集需有效观看（约 20 秒以上、非误点即退）才会上报；看到 90% 及以上标记为已观看并写入历史，未达 90% 则按真实进度记录为「正在观看」，可在 Trakt 的 Up Next 继续；媒体服务器中此前已看完的本季剧集会一并补记",
+    sys_trakt_dashboard: "打开 Trakt 面板",
     sys_trakt_setup_title: "配置步骤",
     sys_trakt_setup_step1: "1. 在 Trakt 创建应用：",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
