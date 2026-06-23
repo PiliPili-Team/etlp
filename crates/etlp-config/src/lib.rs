@@ -7,6 +7,7 @@
 pub mod matching;
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -61,6 +62,18 @@ impl Default for EmbySection {
         }
     }
 }
+
+/// Bounds for `[dev] log_max_size_mb` (in mebibytes). These mirror the clamps
+/// `etlp-logging`'s `LogRotation::from_mb` applies at consumption; keep the two
+/// in sync. Enforced again at load time so a hand-edited config can never push
+/// an out-of-range value into the app state or the GUI.
+pub const LOG_MAX_SIZE_MB_MIN: u64 = 20;
+pub const LOG_MAX_SIZE_MB_MAX: u64 = 200;
+
+/// Bounds for `[dev] log_max_files` (the active file included). Mirror
+/// `etlp-logging`'s `MAX_MAX_FILES`; see [`LOG_MAX_SIZE_MB_MIN`].
+pub const LOG_MAX_FILES_MIN: usize = 1;
+pub const LOG_MAX_FILES_MAX: usize = 14;
 
 /// `[dev]` section — developer / advanced options.
 #[derive(Debug, Clone, Deserialize)]
@@ -166,6 +179,11 @@ impl Default for DevSection {
     }
 }
 
+/// Upper bound for `[playlist] item_limit`; mirrors the GUI's maximum. `0` keeps
+/// its special "no limit" meaning and is preserved as-is when clamping. Enforced
+/// at load time so a hand-edited config cannot exceed the supported cap.
+pub const ITEM_LIMIT_MAX: u32 = 100;
+
 /// `[playlist]` section — playlist assembly options.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -239,6 +257,20 @@ fn default_redirect_uri() -> String {
     "http://localhost:58000/trakt_auth".to_owned()
 }
 
+/// Lower bound (seconds) for the repeated-mark throttle window. Any configured
+/// value below this — migrated from an old config or hand-edited — is clamped
+/// up to it on read, so a too-short window can never defeat de-duplication.
+pub const MIN_DUPLICATE_THROTTLE_SECS: u64 = 120;
+
+/// Throttle window (seconds) used when the key is absent, e.g. a config written
+/// before the field existed (older versions hard-coded 600s; migrated installs
+/// adopt this shorter, configurable default).
+pub const DEFAULT_DUPLICATE_THROTTLE_SECS: u64 = 300;
+
+fn default_duplicate_throttle_secs() -> u64 {
+    DEFAULT_DUPLICATE_THROTTLE_SECS
+}
+
 /// `[trakt]` section — Trakt.tv scrobble integration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -258,6 +290,25 @@ pub struct TraktSection {
     /// to the Trakt history. Backfill of earlier episodes is always
     /// de-duplicated against the existing history regardless of this flag.
     pub allow_duplicate: bool,
+    /// Throttle window, in seconds, for de-duplicating repeated marks of the
+    /// same item while `allow_duplicate` is `false`: finishing the same item
+    /// again within this window is recorded only once. Configs predating this
+    /// field migrate to [`DEFAULT_DUPLICATE_THROTTLE_SECS`]; the stored value is
+    /// clamped up to [`MIN_DUPLICATE_THROTTLE_SECS`] by [`Self::duplicate_throttle`].
+    #[serde(default = "default_duplicate_throttle_secs")]
+    pub duplicate_throttle_secs: u64,
+}
+
+impl TraktSection {
+    /// Effective repeated-mark throttle window, clamped to at least
+    /// [`MIN_DUPLICATE_THROTTLE_SECS`] so a too-small configured value can never
+    /// shrink the de-duplication window below the supported floor.
+    pub fn duplicate_throttle(&self) -> Duration {
+        Duration::from_secs(
+            self.duplicate_throttle_secs
+                .max(MIN_DUPLICATE_THROTTLE_SECS),
+        )
+    }
 }
 
 impl Default for TraktSection {
@@ -269,6 +320,7 @@ impl Default for TraktSection {
             redirect_uri: default_redirect_uri(),
             enable_host: String::new(),
             allow_duplicate: false,
+            duplicate_throttle_secs: DEFAULT_DUPLICATE_THROTTLE_SECS,
         }
     }
 }
@@ -476,13 +528,34 @@ impl Config {
     }
 
     fn from_raw(raw: RawConfig, path: PathBuf) -> Self {
+        // Clamp every range-bounded field at the single load boundary that all
+        // entry points (file, reload, in-memory defaults) funnel through, so a
+        // hand-edited config can never bypass a GUI-enforced limit: the stored
+        // values the rest of the app and the GUI observe are always in range.
+        let mut dev = raw.dev;
+        dev.log_max_size_mb = dev
+            .log_max_size_mb
+            .clamp(LOG_MAX_SIZE_MB_MIN, LOG_MAX_SIZE_MB_MAX);
+        dev.log_max_files = dev
+            .log_max_files
+            .clamp(LOG_MAX_FILES_MIN, LOG_MAX_FILES_MAX);
+
+        let mut playlist = raw.playlist;
+        // `0` means "no limit", so only the upper bound is enforced.
+        playlist.item_limit = playlist.item_limit.min(ITEM_LIMIT_MAX);
+
+        let mut trakt = raw.trakt;
+        trakt.duplicate_throttle_secs = trakt
+            .duplicate_throttle_secs
+            .max(MIN_DUPLICATE_THROTTLE_SECS);
+
         Self {
             emby: raw.emby,
-            dev: raw.dev,
-            playlist: raw.playlist,
+            dev,
+            playlist,
             dandan: raw.dandan,
             gui: raw.gui,
-            trakt: raw.trakt,
+            trakt,
             bangumi: raw.bangumi,
             path_map: raw.path_map,
             path,
@@ -570,11 +643,75 @@ speed_dummy = 1.5
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
         assert!(cfg.trakt.user_name.is_empty());
+        // A config predating the field migrates to the default window.
+        assert_eq!(
+            cfg.trakt.duplicate_throttle_secs,
+            DEFAULT_DUPLICATE_THROTTLE_SECS
+        );
         // bangumi defaults
         assert!(cfg.bangumi.enable_host.is_empty());
         assert!(cfg.bangumi.access_token.is_empty());
         assert!(cfg.bangumi.private);
         assert_eq!(cfg.bangumi.genres, "动画|anime");
+    }
+
+    #[test]
+    fn duplicate_throttle_clamped_on_load() {
+        let dir = tempdir().expect("tempdir");
+        // A hand-edited value below the floor is normalised at load time, so
+        // the stored field itself — not just the derived window — is clamped.
+        // This prevents bypassing the minimum by editing the config file, and
+        // ensures the GUI never displays a sub-floor value.
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[trakt]\nduplicate_throttle_secs = 30\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(
+            cfg.trakt.duplicate_throttle_secs,
+            MIN_DUPLICATE_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg.trakt.duplicate_throttle().as_secs(),
+            MIN_DUPLICATE_THROTTLE_SECS
+        );
+
+        // A value at or above the floor is honoured as-is.
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[trakt]\nduplicate_throttle_secs = 900\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.trakt.duplicate_throttle_secs, 900);
+        assert_eq!(cfg.trakt.duplicate_throttle().as_secs(), 900);
+    }
+
+    #[test]
+    fn numeric_bounds_clamped_on_load() {
+        let dir = tempdir().expect("tempdir");
+        // Out-of-range values a user could only set by hand-editing the file are
+        // pulled back into the supported range at load time, so they cannot
+        // bypass the limits the GUI enforces on these same fields.
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[dev]\n\
+             log_max_size_mb = 99999\n\
+             log_max_files = 0\n\
+             [playlist]\n\
+             item_limit = 5000\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.dev.log_max_size_mb, LOG_MAX_SIZE_MB_MAX);
+        assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
+        assert_eq!(cfg.playlist.item_limit, ITEM_LIMIT_MAX);
+
+        // `item_limit = 0` keeps its "no limit" meaning rather than being raised.
+        write_config(dir.path(), "config.toml", "[playlist]\nitem_limit = 0\n");
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.playlist.item_limit, 0);
     }
 
     #[test]

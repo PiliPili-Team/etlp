@@ -66,11 +66,8 @@ impl AppState {
         }
     }
 
-    /// Throttle window for repeated third-party syncs of the same item.
-    const SYNC_THROTTLE: Duration = Duration::from_secs(600);
-
     /// Whether syncing `key` should be skipped because it was already synced
-    /// within [`Self::SYNC_THROTTLE`].
+    /// within the configured throttle window ([`Self::sync_throttle`]).
     ///
     /// On a `false` return (not throttled) the call records `key`'s timestamp,
     /// so an immediate repeat for the same item is throttled. Stale entries are
@@ -78,15 +75,28 @@ impl AppState {
     /// open (returns `false`) so a lock error never blocks legitimate syncs.
     pub fn sync_recently_done(&self, key: &str) -> bool {
         let now = Instant::now();
+        let throttle = self.sync_throttle();
         let Ok(mut map) = self.recent_syncs.write() else {
             return false;
         };
-        map.retain(|_, t| now.duration_since(*t) < Self::SYNC_THROTTLE);
+        map.retain(|_, t| now.duration_since(*t) < throttle);
         if map.contains_key(key) {
             return true;
         }
         map.insert(key.to_owned(), now);
         false
+    }
+
+    /// Repeated-sync throttle window, read from the live config and clamped to
+    /// the supported minimum. Falls back to the built-in default when the config
+    /// lock is poisoned, so a lock error never disables de-duplication entirely.
+    fn sync_throttle(&self) -> Duration {
+        self.config
+            .read()
+            .map(|c| c.trakt.duplicate_throttle())
+            .unwrap_or(Duration::from_secs(
+                etlp_config::DEFAULT_DUPLICATE_THROTTLE_SECS,
+            ))
     }
 }
 

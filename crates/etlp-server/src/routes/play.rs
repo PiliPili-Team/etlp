@@ -1269,14 +1269,14 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     }
 }
 
-/// Minimum watched duration, in seconds, for the current episode to count as a
-/// "real watch" worth syncing to a third-party service.
+/// Minimum watched percentage for the current episode to be marked watched on
+/// Bangumi.
 ///
-/// Mirrors the guard `update_progress` applies before writing back progress
-/// (`|stop_sec - start_sec| >= 20`), so a momentary open-and-quit is treated as
-/// noise: Bangumi does not mark such an episode watched, and Trakt does not even
-/// report it as in-progress. Shared by both sync paths so the floor is identical.
-const MIN_REAL_WATCH_SECS: u64 = 20;
+/// Bangumi has no per-episode progress, so an episode is either marked watched
+/// or not at all. Only playback that passes this threshold counts as finished;
+/// below it the current episode is left unmarked rather than recorded on a
+/// partial view.
+const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
 
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
@@ -1414,37 +1414,34 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         };
 
         // Bangumi has no per-episode progress, so it cannot represent a partial
-        // view of an episode. Unlike Trakt (which pauses at the real progress),
-        // any *real watch* of the current episode — one past the same floor the
-        // progress write-back uses — is marked watched here, even below the 90 %
-        // completion threshold.
-        let current_watched_secs =
-            (entry.stop_sec - data.start_sec).unsigned_abs();
-        let current_real_watch = current_watched_secs >= MIN_REAL_WATCH_SECS;
-        if !current_real_watch {
+        // view of an episode: the current episode is marked watched only once
+        // playback passes the completion threshold, and left unmarked below it
+        // rather than recorded on a brief sample.
+        let current_watched = entry.progress >= BANGUMI_WATCHED_PERCENT;
+        if !current_watched {
             info!(
                 item = %data.media_title,
-                watched_secs = current_watched_secs,
-                "bangumi: watched too short (< {MIN_REAL_WATCH_SECS}s), \
+                progress = entry.progress as i64,
+                "bangumi: progress below {BANGUMI_WATCHED_PERCENT:.0}%, \
                  current episode not marked"
             );
         }
 
         // Collect the episodes to mark watched: every earlier one the client
-        // already finished, plus the current episode when it was a real watch.
-        // A momentary open of the current episode is dropped so it is not marked.
+        // already finished, plus the current episode when it passed the watched
+        // threshold. An unfinished current episode is dropped so it is not marked.
         let backfill = emby_played_backfill(state, data).await;
         let mut eps: Vec<(u32, Option<String>)> = backfill
             .iter()
-            .filter(|p| current_real_watch || p.index != ep_index)
+            .filter(|p| current_watched || p.index != ep_index)
             .filter_map(|p| {
                 to_bgm_sort(p.index).map(|s| (s, p.premiere_date.clone()))
             })
             .collect();
         // Non-Emby servers report no backfill; fall back to the current episode
-        // when it was a real watch.
+        // when it passed the watched threshold.
         if eps.is_empty()
-            && current_real_watch
+            && current_watched
             && let Some(s) = to_bgm_sort(ep_index)
         {
             eps.push((s, data.premiere_date.clone()));

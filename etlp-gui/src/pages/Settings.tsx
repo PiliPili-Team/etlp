@@ -39,6 +39,7 @@ interface ConfigDto {
     trakt_user_name: string;
     trakt_enable_host: string;
     trakt_allow_duplicate: boolean;
+    trakt_duplicate_throttle_secs: number;
     bangumi_access_token: string;
     bangumi_enable_host: string;
     bangumi_username: string;
@@ -261,6 +262,7 @@ function InputRow({
 
 // Log-rotation bounds, mirroring etlp_logging::rotate (the backend clamps to
 // the same range as a defensive backstop for a hand-edited config).
+const DUP_THROTTLE_MIN = 120;
 const LOG_MAX_SIZE_MIN = 20;
 const LOG_MAX_SIZE_MAX = 200;
 const LOG_MAX_FILES_MAX = 14;
@@ -2435,6 +2437,17 @@ function TraktSection({
                     desc={t("sys_trakt_dup_desc")}
                     checked={cfg.trakt_allow_duplicate}
                     onChange={(v) => update("trakt", "allow_duplicate", v)}
+                />
+                <NumberRow
+                    label={t("sys_trakt_dup_throttle")}
+                    desc={t("sys_trakt_dup_throttle_desc")}
+                    value={cfg.trakt_duplicate_throttle_secs}
+                    min={DUP_THROTTLE_MIN}
+                    onCommit={(v) => update("trakt", "duplicate_throttle_secs", v)}
+                    onClamp={(bound) => {
+                        if (bound === "min")
+                            addToast(t("sys_trakt_dup_throttle_floored"));
+                    }}
                 />
                 <ButtonRow
                     label={t("sync_test")}
