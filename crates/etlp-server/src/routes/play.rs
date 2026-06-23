@@ -751,8 +751,6 @@ struct PlayedEpisode {
     index: i64,
     /// Air date, used as the primary key for Bangumi episode matching.
     premiere_date: Option<String>,
-    /// External ids (Imdb/Tmdb/Tvdb), used to build Trakt history items.
-    provider_ids: std::collections::BTreeMap<String, String>,
 }
 
 /// Episodes of `data`'s season the user already watched, up to and including the
@@ -820,7 +818,6 @@ async fn emby_played_backfill(
         out.push(PlayedEpisode {
             index: idx,
             premiere_date: item.premiere_date.clone(),
-            provider_ids: item.provider_ids.clone(),
         });
     }
     debug!(
@@ -971,6 +968,113 @@ async fn fetch_series_trakt_ids(
     has_any_trakt_id(&ids).then_some(ids)
 }
 
+/// A stable string key for a show's external ids, used to de-duplicate backfill
+/// across entries (the same show can appear in several playlist items).
+fn trakt_ids_signature(ids: &etlp_sync::TraktIds) -> String {
+    format!(
+        "imdb:{}|tmdb:{}|tvdb:{}",
+        ids.imdb.as_deref().unwrap_or(""),
+        ids.tmdb.map(|v| v.to_string()).unwrap_or_default(),
+        ids.tvdb.map(|v| v.to_string()).unwrap_or_default(),
+    )
+}
+
+/// Queue the season's backfill episodes for one just-watched episode entry.
+///
+/// Marks every earlier episode the media server reports watched that Trakt is
+/// still missing, addressed by the **show's** ids + season/number (the media
+/// server rarely stores reliable per-episode ids). The already-watched set comes
+/// from a single whole-show progress query; the gap is queued in ascending
+/// episode order. Both the media-server and Trakt watch histories are logged.
+///
+/// Independent of the current item's throttle, and skipped (rather than blindly
+/// marking) when the season, the show ids, or the show on Trakt cannot be
+/// resolved — so a transient gap never floods Trakt with duplicates.
+async fn backfill_trakt_episodes(
+    state: &SharedState,
+    api: &etlp_sync::TraktApi,
+    data: &PlaybackData,
+    seen_seasons: &mut std::collections::HashSet<(String, i64)>,
+    out: &mut Vec<etlp_sync::TraktHistoryItem>,
+) {
+    use etlp_sync::{TraktEpisode, TraktHistoryItem, TraktItemKind};
+
+    let cur_index = data.index.unwrap_or_default();
+    let Some(season_i) = data.season_number else {
+        return;
+    };
+    let Ok(season) = u32::try_from(season_i) else {
+        return;
+    };
+
+    // Show-level ids drive both the watched lookup and the mark payload.
+    let Some(show_ids) = fetch_series_trakt_ids(state, data).await else {
+        debug!(item = %data.media_title, "trakt: no show ids, skip backfill");
+        return;
+    };
+
+    // Process each (show, season) at most once across all entries.
+    if !seen_seasons.insert((trakt_ids_signature(&show_ids), season_i)) {
+        return;
+    }
+
+    // Episodes the media server reports watched for this season, minus the
+    // current one (handled by the direct /sync/history path above). The query
+    // also emits the media-server watch-history debug line.
+    let ms_watched: std::collections::BTreeSet<u32> =
+        emby_played_backfill(state, data)
+            .await
+            .iter()
+            .filter(|p| p.index != cur_index)
+            .filter_map(|p| u32::try_from(p.index).ok())
+            .collect();
+
+    // The show's episodes already on Trakt (one whole-show progress query).
+    let Some(show_id) = api.resolve_show_trakt_id(&show_ids).await else {
+        debug!(item = %data.media_title, "trakt: show unresolved, skip backfill");
+        return;
+    };
+    let trakt_watched: std::collections::BTreeSet<u32> = api
+        .show_watched_episodes(show_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|e| e.season == season)
+        .map(|e| e.number)
+        .collect();
+    debug!(
+        "trakt: show \"{}\", {} already watched on Trakt: {}",
+        data.media_title,
+        season_label(data.season_number),
+        format_season_episodes(
+            data.season_number,
+            trakt_watched.iter().map(|n| i64::from(*n)).collect(),
+        ),
+    );
+
+    // Gap = media-server watched − Trakt watched, ascending (BTreeSet order).
+    let to_mark: Vec<u32> =
+        ms_watched.difference(&trakt_watched).copied().collect();
+    debug!(
+        "trakt: show \"{}\", {} to backfill: {}",
+        data.media_title,
+        season_label(data.season_number),
+        format_season_episodes(
+            data.season_number,
+            to_mark.iter().map(|n| i64::from(*n)).collect(),
+        ),
+    );
+
+    for number in to_mark {
+        out.push(TraktHistoryItem {
+            kind: TraktItemKind::Episode,
+            ids: show_ids.clone(),
+            episode: Some(TraktEpisode { season, number }),
+            watched_at: None,
+        });
+    }
+}
+
 /// Sync all completed entries to Trakt.tv when configured.
 ///
 /// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
@@ -1058,12 +1162,15 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     // Two batches, both added via `/sync/history` (no scrobble):
     // - `current_items`: the just-watched items, added directly with **no**
     //   history de-dup, so re-watching an episode records a fresh entry. The
-    //   throttle above is the only gate (bypassed by `allow_duplicate`).
-    // - `backfill_items`: earlier episodes the server already marks played,
-    //   added through `sync_history` which de-duplicates against the existing
-    //   history so they are never re-marked.
+    //   per-item throttle is the only gate (bypassed by `allow_duplicate`).
+    // - `backfill_items`: earlier episodes the server already marks played that
+    //   Trakt does not yet have, addressed by the show's ids + season/number.
     let mut current_items: Vec<TraktHistoryItem> = Vec::new();
     let mut backfill_items: Vec<TraktHistoryItem> = Vec::new();
+    // De-dup backfill across entries: a binged playlist re-queues the same
+    // (show signature, season) several times; the first one wins.
+    let mut backfilled_seasons: std::collections::HashSet<(String, i64)> =
+        std::collections::HashSet::new();
     for entry in entries {
         let data = entry.data;
         if !host_enabled(&data.netloc, &enable_host) {
@@ -1077,15 +1184,13 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         };
 
-        // Throttle a finished item: re-watching it within the window is skipped
-        // unless `allow_duplicate` is on (then every completion is reported
-        // again, so re-watching e.g. episode 6 re-marks it).
+        // Throttle the current item: a re-watch within the window is skipped
+        // unless `allow_duplicate` is on. This gates only the just-watched item,
+        // not the backfill below (which de-dups against the Trakt history).
         let key = format!("trakt:{}:{}", data.netloc, data.item_id);
-        if entry.completed && !allow_duplicate && state.sync_recently_done(&key)
-        {
-            debug!(item = %data.media_title, "trakt: throttled, skip");
-            continue;
-        }
+        let throttled = entry.completed
+            && !allow_duplicate
+            && state.sync_recently_done(&key);
 
         // Two APIs, split by progress so each does its own job and a watch is
         // never recorded twice:
@@ -1096,7 +1201,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         //   at ≥ 80 %, or saves the resume position between 1 % and 79 %.
         //   Progress is floored to 1 % so Trakt does not reject it (HTTP 422).
         // build_trakt_item logs the reason when it yields None.
-        if entry.completed {
+        if throttled {
+            debug!(item = %data.media_title, "trakt: throttled, current skip");
+        } else if entry.completed {
             if let Some(item) = build_trakt_item(state, kind, data).await {
                 info!(
                     item = %data.media_title,
@@ -1120,70 +1227,20 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             }
         }
 
-        // Backfill earlier episodes the server already marks played, so the
-        // first sync of a season records everything finished in the client.
+        // Backfill earlier episodes the server already marks played but Trakt is
+        // still missing. Runs independently of the current-item throttle so a
+        // re-watch of the current episode still backfills the rest of the season.
         if kind == TraktItemKind::Episode {
-            let cur_index = data.index.unwrap_or_default();
-            // Split the earlier played episodes by whether Trakt already has
-            // them, so only the genuine gap is re-marked and both sets are
-            // logged for diagnosis.
-            let mut already: Vec<i64> = Vec::new();
-            let mut to_mark: Vec<i64> = Vec::new();
-            for ep in &emby_played_backfill(state, data).await {
-                if ep.index == cur_index {
-                    continue;
-                }
-                let Some(mut item) = trakt_item_from_ids(
-                    TraktItemKind::Episode,
-                    &ep.provider_ids,
-                ) else {
-                    continue;
-                };
-                item.ids.trakt = api
-                    .resolve_trakt_id(TraktItemKind::Episode, &item.ids)
-                    .await;
-                // An episode already in the Trakt history needs no re-mark; one
-                // without a resolved id is added unconditionally (a 404 history
-                // lookup is treated as "not watched").
-                let on_trakt = match item.ids.trakt {
-                    Some(id) => api
-                        .get_watch_history("episode", id)
-                        .await
-                        .map(|h| !h.is_empty())
-                        .unwrap_or(false),
-                    None => false,
-                };
-                if on_trakt {
-                    already.push(ep.index);
-                } else {
-                    to_mark.push(ep.index);
-                    backfill_items.push(item);
-                }
-            }
-            debug!(
-                "trakt: show \"{}\", {} already watched on Trakt: {}",
-                data.media_title,
-                season_label(data.season_number),
-                format_season_episodes(data.season_number, already),
-            );
-            debug!(
-                "trakt: show \"{}\", {} to backfill: {}",
-                data.media_title,
-                season_label(data.season_number),
-                format_season_episodes(data.season_number, to_mark),
-            );
+            backfill_trakt_episodes(
+                state,
+                &api,
+                data,
+                &mut backfilled_seasons,
+                &mut backfill_items,
+            )
+            .await;
         }
     }
-
-    // De-duplicate the backfill batch (a binged playlist can queue the same
-    // earlier episode from several entries). Items with no resolved Trakt id are
-    // kept; `sync_history` then de-duplicates them against the history.
-    let mut seen: std::collections::HashSet<(bool, u64)> =
-        std::collections::HashSet::new();
-    backfill_items.retain(|item| match item.ids.trakt {
-        Some(id) => seen.insert((item.kind == TraktItemKind::Movie, id)),
-        None => true,
-    });
 
     debug!(
         current = current_items.len(),
