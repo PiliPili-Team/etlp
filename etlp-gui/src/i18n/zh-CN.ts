@@ -220,7 +220,7 @@ export const zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID 映射",
     sys_bangumi_map_desc:
-        "把 tmdb/imdb/tvdb 的剧集或电影手动钉到指定 Bangumi 条目，优先级最高。格式：tmdb:10000|type:tv|S4 -> bgm:20000|E+59，表示该剧第 4 季每集 +59 偏移映射到条目 20000；电影写 tmdb:10001|type:movie -> bgm:20001。不写 type 时按是否带季数推断（带季为剧集，否则电影）",
+        "把 tmdb/imdb/tvdb 的剧集或电影手动钉到指定 Bangumi 条目，优先级最高。支持三种季内写法：整季（S4）、集号闭区间（S5E106~S5E157，仅 106～157 集）、开区间（S5E158++，第 158 集起至季末）。右侧 E±N 为 Bangumi 排序号偏移。示例：tmdb:10000|type:tv|S4 -> bgm:20000|E+59（整季偏移）；tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001（分段闭区间）；tmdb:10000|type:tv|S5E51++ -> bgm:20002（分段开区间）；tmdb:10001|type:movie -> bgm:30000。不写 type 时按是否带季数推断（带季为剧集，否则电影）",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "检查并添加",
     map_remove: "删除",
@@ -230,6 +230,8 @@ export const zhCN = {
     map_err_provider_id: "ID 格式有误（tmdb/tvdb 为数字，imdb 以 tt 开头）",
     map_err_type: "type 仅支持 tv 或 movie",
     map_err_season: "季数有误，应为正整数，如 S4",
+    map_err_ep_range:
+        "集号区间有误，应为 S5E106~S5E157（闭区间）或 S5E158++（开区间），且起始不能大于结束",
     map_err_subject: "Bangumi 条目 ID 有误，应为正整数",
     map_err_offset: "集偏移有误，应为整数，如 E+59 或 E-3",
     map_err_movie_season: "电影不能带季数或集偏移",

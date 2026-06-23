@@ -245,7 +245,7 @@ export const de: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID-Zuordnung",
     sys_bangumi_map_desc:
-        "Eine tmdb-/imdb-/tvdb-Serie oder einen Film an ein genaues Bangumi-Subjekt binden; hat höchste Priorität. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 ordnet Staffel 4 dem Subjekt 20000 mit einem Episoden-Offset von +59 zu; ein Film ist tmdb:10001|type:movie -> bgm:20001. Ohne type wird er aus der Staffel abgeleitet (eine Staffel bedeutet TV, sonst Film)",
+        "Eine tmdb-/imdb-/tvdb-Serie oder einen Film an ein genaues Bangumi-Subjekt binden; hat höchste Priorität. Drei Staffelformate: ganze Staffel (S4), geschlossener Episodenbereich (S5E1~S5E50, nur Episoden 1–50), offener Bereich (S5E51++, ab Episode 51). E±N rechts verschiebt den lokalen Episodenindex auf die Bangumi-Sortiernummer. Beispiele: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Ohne type wird er aus der Staffel abgeleitet (eine Staffel bedeutet TV, sonst Film)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Prüfen & hinzufügen",
     map_remove: "Entfernen",
@@ -255,6 +255,8 @@ export const de: typeof zhCN = {
     map_err_provider_id: "Ungültige ID (tmdb/tvdb numerisch, imdb beginnt mit tt)",
     map_err_type: "type muss tv oder movie sein",
     map_err_season: "Ungültige Staffel; erwartet eine positive Ganzzahl wie S4",
+    map_err_ep_range:
+        "Ungültiger Episodenbereich; verwende S5E106~S5E157 (geschlossen) oder S5E158++ (offen); Start darf nicht größer als Ende sein",
     map_err_subject: "Ungültige Bangumi-Subjekt-ID; erwartet eine positive Ganzzahl",
     map_err_offset:
         "Ungültiger Episoden-Offset; erwartet eine Ganzzahl wie E+59 oder E-3",

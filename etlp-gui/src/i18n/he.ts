@@ -229,7 +229,7 @@ export const he: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "מיפוי ID",
     sys_bangumi_map_desc:
-        "נעץ סדרה או סרט מ-tmdb/imdb/tvdb לאובייקט Bangumi מדויק; בעל העדיפות הגבוהה ביותר. פורמט: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 ממפה עונה 4 לאובייקט 20000 עם קיזוז פרקים +59; סרט הוא tmdb:10001|type:movie -> bgm:20001. ללא type מסיק מהעונה (נוכחות עונה = TV, אחרת סרט)",
+        "נעץ סדרה או סרט מ-tmdb/imdb/tvdb לאובייקט Bangumi מדויק; בעל העדיפות הגבוהה ביותר. שלושה פורמטים של עונה: עונה שלמה (S4), טווח פרקים סגור (S5E1~S5E50, פרקים 1–50 בלבד), טווח פתוח (S5E51++, מפרק 51 ואילך). E±N מימין מזיז את האינדקס המקומי למספר המיון של Bangumi. דוגמאות: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. ללא type מסיק מהעונה (נוכחות עונה = TV, אחרת סרט)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "בדוק והוסף",
     map_remove: "הסר",
@@ -239,6 +239,8 @@ export const he: typeof zhCN = {
     map_err_provider_id: "ID שגוי (tmdb/tvdb מספרי, imdb מתחיל ב-tt)",
     map_err_type: "type חייב להיות tv או movie",
     map_err_season: "עונה שגויה; מספר שלם חיובי צפוי, כמו S4",
+    map_err_ep_range:
+        "טווח פרקים שגוי; השתמש ב-S5E106~S5E157 (סגור) או S5E158++ (פתוח); ההתחלה לא יכולה לעלות על הסוף",
     map_err_subject: "ID אובייקט Bangumi שגוי; מספר שלם חיובי צפוי",
     map_err_offset: "קיזוז פרקים שגוי; מספר שלם צפוי כמו E+59 או E-3",
     map_err_movie_season: "לסרט אין קיזוז עונה או פרק",

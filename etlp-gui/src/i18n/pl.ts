@@ -245,7 +245,7 @@ export const pl: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "Mapowanie ID",
     sys_bangumi_map_desc:
-        "Przypnij serial lub film z tmdb/imdb/tvdb do dokładnego obiektu Bangumi; ma najwyższy priorytet. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 mapuje sezon 4 na obiekt 20000 z przesunięciem odcinków +59; film to tmdb:10001|type:movie -> bgm:20001. Bez type wnioskuje z sezonu (obecność sezonu = TV, inaczej film)",
+        "Przypnij serial lub film z tmdb/imdb/tvdb do dokładnego obiektu Bangumi; ma najwyższy priorytet. Trzy formaty sezonu: cały sezon (S4), zamknięty zakres odcinków (S5E1~S5E50, tylko odcinki 1–50), otwarty zakres (S5E51++, od odcinka 51 włącznie). E±N po prawej przesuwa lokalny indeks odcinka na numer sortowania Bangumi. Przykłady: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Bez type wnioskuje z sezonu (obecność sezonu = TV, inaczej film)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Sprawdź i dodaj",
     map_remove: "Usuń",
@@ -256,6 +256,8 @@ export const pl: typeof zhCN = {
         "Nieprawidłowe ID (tmdb/tvdb numeryczne, imdb zaczyna się od tt)",
     map_err_type: "type musi być tv lub movie",
     map_err_season: "Nieprawidłowy sezon; oczekiwana dodatnia liczba całkowita, np. S4",
+    map_err_ep_range:
+        "Nieprawidłowy zakres odcinków; użyj S5E106~S5E157 (zamknięty) lub S5E158++ (otwarty); początek nie może być większy niż koniec",
     map_err_subject:
         "Nieprawidłowe ID obiektu Bangumi; oczekiwana dodatnia liczba całkowita",
     map_err_offset:

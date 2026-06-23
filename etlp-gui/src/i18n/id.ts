@@ -241,7 +241,7 @@ export const id: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "Pemetaan ID",
     sys_bangumi_map_desc:
-        "Sematkan serial atau film dari tmdb/imdb/tvdb ke objek Bangumi yang tepat; memiliki prioritas tertinggi. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 memetakan musim 4 ke objek 20000 dengan offset episode +59; film adalah tmdb:10001|type:movie -> bgm:20001. Tanpa type disimpulkan dari musim (kehadiran musim = TV, jika tidak film)",
+        "Sematkan serial atau film dari tmdb/imdb/tvdb ke objek Bangumi yang tepat; memiliki prioritas tertinggi. Tiga format musim: seluruh musim (S4), rentang episode tertutup (S5E1~S5E50, hanya episode 1–50), rentang terbuka (S5E51++, dari episode 51 dan seterusnya). E±N di sisi kanan menggeser indeks episode lokal ke nomor urut Bangumi. Contoh: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Tanpa type disimpulkan dari musim (kehadiran musim = TV, jika tidak film)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Periksa dan Tambah",
     map_remove: "Hapus",
@@ -251,6 +251,8 @@ export const id: typeof zhCN = {
     map_err_provider_id: "ID salah (tmdb/tvdb numerik, imdb dimulai dengan tt)",
     map_err_type: "type harus tv atau movie",
     map_err_season: "Musim salah; bilangan bulat positif seperti S4 diharapkan",
+    map_err_ep_range:
+        "Rentang episode tidak valid; gunakan S5E106~S5E157 (tertutup) atau S5E158++ (terbuka); awal tidak boleh lebih besar dari akhir",
     map_err_subject: "ID objek Bangumi salah; bilangan bulat positif diharapkan",
     map_err_offset:
         "Offset episode salah; bilangan bulat seperti E+59 atau E-3 diharapkan",
