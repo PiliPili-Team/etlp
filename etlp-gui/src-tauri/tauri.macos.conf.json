@@ -1,0 +1,25 @@
+{
+  "bundle": {
+    "resources": {
+      "locales/zh-Hans.lproj/InfoPlist.strings": "zh-Hans.lproj/InfoPlist.strings",
+      "locales/zh-Hant.lproj/InfoPlist.strings": "zh-Hant.lproj/InfoPlist.strings",
+      "locales/ja.lproj/InfoPlist.strings": "ja.lproj/InfoPlist.strings",
+      "locales/ko.lproj/InfoPlist.strings": "ko.lproj/InfoPlist.strings",
+      "locales/de.lproj/InfoPlist.strings": "de.lproj/InfoPlist.strings",
+      "locales/it.lproj/InfoPlist.strings": "it.lproj/InfoPlist.strings",
+      "locales/fr.lproj/InfoPlist.strings": "fr.lproj/InfoPlist.strings",
+      "locales/ar.lproj/InfoPlist.strings": "ar.lproj/InfoPlist.strings",
+      "locales/es.lproj/InfoPlist.strings": "es.lproj/InfoPlist.strings",
+      "locales/ru.lproj/InfoPlist.strings": "ru.lproj/InfoPlist.strings",
+      "locales/pt.lproj/InfoPlist.strings": "pt.lproj/InfoPlist.strings",
+      "locales/sk.lproj/InfoPlist.strings": "sk.lproj/InfoPlist.strings",
+      "locales/uk.lproj/InfoPlist.strings": "uk.lproj/InfoPlist.strings",
+      "locales/sr.lproj/InfoPlist.strings": "sr.lproj/InfoPlist.strings",
+      "locales/tr.lproj/InfoPlist.strings": "tr.lproj/InfoPlist.strings",
+      "locales/he.lproj/InfoPlist.strings": "he.lproj/InfoPlist.strings",
+      "locales/th.lproj/InfoPlist.strings": "th.lproj/InfoPlist.strings",
+      "locales/pl.lproj/InfoPlist.strings": "pl.lproj/InfoPlist.strings",
+      "locales/id.lproj/InfoPlist.strings": "id.lproj/InfoPlist.strings"
+    }
+  }
+}

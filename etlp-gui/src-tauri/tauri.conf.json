@@ -33,10 +33,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "locales/zh-Hans.lproj/InfoPlist.strings": "zh-Hans.lproj/InfoPlist.strings",
-      "locales/zh-Hant.lproj/InfoPlist.strings": "zh-Hant.lproj/InfoPlist.strings"
-    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -49,7 +45,9 @@
       "signingIdentity": null
     },
     "windows": {
-      "nsis": {}
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
+      }
     },
     "linux": {
       "appimage": {}

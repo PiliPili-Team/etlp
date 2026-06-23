@@ -9,7 +9,68 @@ export type AccentColor =
     | "green";
 
 export type ThemeMode = "system" | "light" | "dark";
-export type LangMode = "system" | "zh-CN" | "zh-TW" | "en";
+export type LangMode =
+    | "system"
+    | "zh-CN"
+    | "zh-TW"
+    | "en"
+    | "ja"
+    | "ko"
+    | "de"
+    | "it"
+    | "fr"
+    | "ar"
+    | "es"
+    | "ru"
+    | "pt"
+    | "sk"
+    | "uk"
+    | "sr"
+    | "tr"
+    | "he"
+    | "th"
+    | "pl"
+    | "id";
+
+/** Locales rendered right-to-left; drive `dir="rtl"` and mirrored layout. */
+export const RTL_LOCALES: ReadonlySet<string> = new Set(["ar", "he"]);
+
+/**
+ * Resolve a concrete locale code from the chosen language mode, mapping
+ * `system` onto the closest supported locale via the browser language tag.
+ */
+export function resolveLocale(lang: LangMode): string {
+    if (lang !== "system") return lang;
+    const sys = navigator.language.toLowerCase();
+    if (/^zh-(tw|hk|mo)/.test(sys)) return "zh-TW";
+    if (sys.startsWith("zh")) return "zh-CN";
+    if (sys.startsWith("he") || sys.startsWith("iw")) return "he";
+    if (sys.startsWith("id") || sys.startsWith("in")) return "id";
+    const base = sys.split("-")[0];
+    const supported = [
+        "ja",
+        "ko",
+        "de",
+        "it",
+        "fr",
+        "ar",
+        "es",
+        "ru",
+        "pt",
+        "sk",
+        "uk",
+        "sr",
+        "tr",
+        "th",
+        "pl",
+    ];
+    return supported.includes(base) ? base : "en";
+}
+
+/** Whether the chosen language resolves to a right-to-left locale. */
+export function isRTL(lang: LangMode): boolean {
+    return RTL_LOCALES.has(resolveLocale(lang));
+}
 
 export interface DisplaySettings {
     theme: ThemeMode;
@@ -60,6 +121,7 @@ export function applyDisplay(s: DisplaySettings) {
     const root = document.documentElement;
     // Light mode is not yet ready; force dark unconditionally.
     root.setAttribute("data-theme", "dark");
+    root.setAttribute("dir", isRTL(s.lang) ? "rtl" : "ltr");
     root.style.setProperty("--base-font-size", `${s.fontSize}px`);
     root.style.setProperty("--app-zoom", String(s.zoom));
     root.style.setProperty(

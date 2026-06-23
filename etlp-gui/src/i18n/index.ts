@@ -1,8 +1,26 @@
 import { createContext, useContext } from "react";
 import type { LangMode } from "../App";
+import { resolveLocale } from "../display";
 import { zhCN } from "./zh-CN";
 import { zhTW } from "./zh-TW";
 import { en } from "./en";
+import { ja } from "./ja";
+import { ko } from "./ko";
+import { de } from "./de";
+import { it } from "./it";
+import { fr } from "./fr";
+import { ar } from "./ar";
+import { es } from "./es";
+import { ru } from "./ru";
+import { pt } from "./pt";
+import { sk } from "./sk";
+import { uk } from "./uk";
+import { sr } from "./sr";
+import { tr } from "./tr";
+import { he } from "./he";
+import { th } from "./th";
+import { pl } from "./pl";
+import { id } from "./id";
 
 export type Messages = typeof zhCN;
 export type I18nKey = keyof Messages;
@@ -12,15 +30,24 @@ const MESSAGES: Record<string, Messages> = {
     "zh-CN": zhCN,
     "zh-TW": zhTW,
     en,
+    ja,
+    ko,
+    de,
+    it,
+    fr,
+    ar,
+    es,
+    ru,
+    pt,
+    sk,
+    uk,
+    sr,
+    tr,
+    he,
+    th,
+    pl,
+    id,
 };
-
-function resolveLocale(lang: LangMode): string {
-    if (lang !== "system") return lang;
-    const sys = navigator.language;
-    if (/^zh-(TW|HK|MO)/i.test(sys)) return "zh-TW";
-    if (/^zh/i.test(sys)) return "zh-CN";
-    return "en";
-}
 
 export function makeT(lang: LangMode): T {
     const locale = resolveLocale(lang);

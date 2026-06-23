@@ -1,0 +1,375 @@
+import { zhCN } from "./zh-CN";
+
+export const sk: typeof zhCN = {
+    ...zhCN,
+
+    // App
+    app_name: "Genshin",
+
+    // Nav
+    nav_overview: "Prehľad",
+    nav_player: "Prehrávač",
+    nav_version_prefer: "Verzia",
+    nav_network: "Sieť",
+    nav_config: "Konfigurácia",
+    nav_system: "Systém",
+    nav_logs: "Záznamy",
+    nav_sec_play: "Prehrávanie",
+    nav_sec_settings: "Nastavenia",
+    nav_sec_sync: "Synchronizácia",
+    nav_bangumi: "Bangumi",
+    nav_trakt: "Trakt",
+    nav_sec_debug: "Ladenie",
+
+    // Common
+    add: "Pridať",
+    add_placeholder: "Napíšte a stlačte Enter na pridanie",
+    open_dir: "Otvoriť priečinok",
+    loading: "Načítava sa konfigurácia…",
+
+    // Overview
+    page_overview: "Prehľad",
+    ov_service: "Lokálna služba",
+    ov_running: "Beží",
+    ov_stopped: "Zastavená",
+    ov_port: "Port",
+    ov_port_desc: "Lokálna adresa počúvania",
+    ov_uptime: "Doba behu",
+    ov_uptime_desc: "Od spustenia služby",
+    ov_address: "Adresa",
+    ov_address_desc: "Iba localhost",
+    ov_config: "Nastavenia",
+    ov_config_file: "Konfiguračný súbor",
+    ov_config_file_desc: "Zobraziť alebo otvoriť v externom editore",
+    ov_edit_config: "Upraviť konfiguráciu",
+    ov_restart: "Reštartovať službu",
+    ov_restart_desc:
+        "Zastaviť službu, uvoľniť zdroje a reštartovať s najnovšou konfiguráciou",
+    ov_about: "O aplikácii",
+    ov_about_desc: "Informácie o verzii a poďakovania open source",
+    ov_view: "Zobraziť",
+    ov_start: "Spustiť",
+    ov_stop: "Zastaviť",
+
+    // Toasts
+    toast_started: "Služba spustená na porte {port}",
+    toast_stopped: "Služba zastavená",
+    toast_restarted: "Služba reštartovaná na porte {port}",
+    toast_start_failed: "Službu sa nepodarilo spustiť",
+    toast_stop_failed: "Službu sa nepodarilo zastaviť",
+    toast_restart_failed: "Službu sa nepodarilo reštartovať",
+    toast_open_failed: "Nepodarilo sa otvoriť",
+    sync_not_configured: "Ešte nie je nakonfigurované — najprv vyplňte polia",
+
+    // Player
+    page_player: "Prehrávač",
+    pl_type: "Typ prehrávača",
+    pl_type_desc: "Vyberte lokálny prehrávač médií",
+    pl_startup: "Možnosti spustenia",
+    pl_fullscreen: "Celá obrazovka",
+    pl_fullscreen_desc: "Spustiť prehrávač v režime celej obrazovky",
+    pl_mute: "Spustiť stlmené",
+    pl_mute_desc: "Spustiť s vypnutým zvukom (mpv --no-audio)",
+    pl_pretty_title: "Pekný názov",
+    pl_pretty_title_desc: "Pridať názov servera pred názov okna prehrávača",
+    pl_kill_start: "Ukončiť pri spustení",
+    pl_kill_start_desc: "Ukončiť existujúce procesy prehrávača pri spustení",
+    pl_path: "Cesta k prehrávaču",
+    pl_path_desc:
+        "Voliteľné — nechajte prázdne na použitie prehrávača zo systémovej PATH",
+    pl_browse: "Prehľadávať…",
+    pl_path_error: "Cesta sa nenašla — skontrolujte zadanie",
+    pl_progress_support:
+        "Hlásenie priebehu: mpv / IINA sú plne podporované — živé aktualizácie počas prehrávania, zápis pozície pokračovania pri ukončení, označenie ako pozreté, synchronizácia s Trakt / Bangumi a sledovanie podľa epizód. Ostatné prehrávače zapisujú iba konečnú pozíciu a synchronizujú pri ukončení, bez živého hlásenia počas prehrávania; VLC prehráva celú sériu súvisle, MPC a dandanplay sú pre jednu epizódu a spätné načítanie pozície v PotPlayer je iba pre Windows",
+
+    // Version prefer
+    page_vp: "Preferencia verzie",
+    vp_priority: "Priorita verzie",
+    vp_keywords: "Kľúčové slová verzie",
+    vp_keywords_desc:
+        "Zhodovať kľúčové slová verzie média v poradí — skoršie položky vyhrávajú",
+    vp_keywords_placeholder: "napr. VCB-Studio, ANi, DBD-Raws",
+    vp_playlist: "Použiť na zoznam skladieb",
+    vp_playlist_desc: "Použiť prioritu verzie pri vytváraní zoznamu skladieb",
+    vp_subtitle: "Preferencia titulkov",
+    vp_sub_priority: "Priorita titulkov",
+    vp_sub_priority_desc: "Zhodovať kľúčové slová stôp titulkov v poradí",
+    vp_sub_priority_placeholder: "napr. Zjednodušená, CHS",
+    vp_sub_extract: "Extrakcia titulkov medzi verziami",
+    vp_sub_extract_desc:
+        "Extrahovať titulky z iných verzií, keď sa v aktuálnej nenašli žiadne",
+    vp_sub_extract_placeholder: "napr. CHS, Zjednodušená",
+    vp_limits: "Limity zoznamu skladieb",
+    vp_max_eps: "Max. epizód na reláciu",
+    vp_max_eps_desc:
+        "Epizódy sa po dosiahnutí tohto limitu odrežú; 0 alebo prázdne znamená neobmedzene (odporúčané: 10 – 100)",
+    vp_last_ep: "Zakázať pri poslednej epizóde",
+    vp_last_ep_desc:
+        "Zapnuté: pri prehrávaní poslednej epizódy série sa nevytvorí žiadny zoznam skladieb a otvorí sa iba tá epizóda (nič za ňou nenasleduje); Vypnuté: zoznam skladieb sa vytvorí vždy (aktuálna + neskoršie epizódy)",
+    vp_filter: "Regulárny výraz filtra verzie",
+    vp_filter_desc:
+        "Do zoznamu skladieb sa pridajú iba verzie zodpovedajúce tomuto regulárnemu výrazu (prázdne = bez filtra)",
+    vp_filter_placeholder: "napr. |VCB-Studio|ANi|Zjednodušená",
+    vp_filter_valid: "Platný regulárny výraz",
+    vp_filter_invalid: "Neplatný regulárny výraz",
+
+    // Network
+    page_network: "Sieť",
+    net_proxy: "HTTP proxy",
+    net_proxy_desc: "Formát: host:port (nechajte prázdne na zakázanie)",
+    net_skip_tls: "Preskočiť overenie TLS",
+    net_skip_tls_desc: "Pre samopodpísané servery Emby — nezabezpečené",
+    net_redirect: "Detekcia presmerovaní",
+    net_redirect_hosts: "Hostitelia na sondovanie presmerovaní",
+    net_redirect_hosts_desc:
+        "URL streamu týchto hostiteľov sa pred odovzdaním prehrávaču sondujú na presmerovania 30x (predvolene prázdne)",
+
+    // System
+    page_system: "Systém",
+    sys_appearance: "Vzhľad",
+    sys_theme: "Motív",
+    sys_theme_desc: "Svetlý, tmavý alebo podľa systému",
+    sys_lang: "Jazyk",
+    sys_lang_desc: "Jazyk zobrazenia rozhrania",
+    sys_theme_system: "Systém",
+    sys_theme_light: "Svetlý",
+    sys_theme_dark: "Tmavý",
+    sys_lang_system: "Systém",
+    sys_display: "Zobrazenie",
+    sys_font_size: "Veľkosť písma",
+    sys_font_size_desc: "Upraviť veľkosť textu rozhrania",
+    sys_zoom: "Mierka rozhrania",
+    sys_zoom_desc:
+        "Celkové priblíženie HiDPI / vysokého rozlíšenia — aktuálny DPR: {dpr}",
+    sys_font: "Písmo rozhrania",
+    sys_font_desc: "Vyberte písmo rozhrania",
+    sys_font_default: "Predvolené (system-ui)",
+    sys_startup: "Spustenie",
+    sys_autostart: "Spustiť pri prihlásení",
+    sys_autostart_desc: "Automaticky spustiť aplikáciu po prihlásení",
+    sys_silent_start: "Tiché spustenie",
+    sys_silent_start_desc:
+        "Spustiť skryté v paneli úloh bez zobrazenia hlavného okna (tichšie spolu so spustením pri prihlásení)",
+    sys_logs_title: "Záznamy",
+    sys_log_level: "Úroveň záznamu",
+    sys_log_level_desc: "Nastavte na Debug pre podrobnejší výstup pri riešení problémov",
+    sys_log_max_size: "Max. veľkosť záznamu (MB)",
+    sys_log_max_size_desc:
+        "Prejsť na nový súbor, keď aktuálny prekročí túto veľkosť (20 – 200 MB)",
+    sys_log_max_size_capped: "Obmedzené na maximum 200 MB",
+    sys_log_max_size_floored: "Zvýšené na minimum 20 MB",
+    sys_log_max_files: "Max. súborov záznamu",
+    sys_log_max_files_desc:
+        "Počet rotovaných súborov záznamu na uchovanie (1 – 14); najstarší sa odstráni",
+    sys_log_max_files_capped: "Obmedzené na maximum 14 súborov",
+    sys_log_mask: "Maskovať citlivé tokeny",
+    sys_log_mask_desc: "Nahradiť citlivý text v záznamoch zástupnými symbolmi",
+    sys_cache: "Vyrovnávacia pamäť",
+    sys_cache_size: "Aktuálna veľkosť vyrovnávacej pamäte",
+    sys_cache_size_desc:
+        "Miesto na disku použité záznamami a inou vyrovnávacou pamäťou počas behu",
+    sys_cache_clear: "Vymazať vyrovnávaciu pamäť",
+    sys_cache_clear_desc: "Vyprázdniť súbory záznamu na uvoľnenie miesta na disku",
+    cache_confirm_title: "Vymazať vyrovnávaciu pamäť",
+    cache_confirm_message:
+        "Pred vymazaním vyrovnávacej pamäte sa musí služba zastaviť, inak môžu byť práve zapisované záznamy nekonzistentné. Potvrdzujete, že služba je zastavená, a pokračujete?",
+    cache_confirm_ok: "Vymazať",
+    cache_confirm_cancel: "Zrušiť",
+    cache_stop_first: "Pred vymazaním vyrovnávacej pamäte zastavte službu",
+    cache_cleared: "Vyrovnávacia pamäť vymazaná, uvoľnené {size}",
+    sys_general: "Všeobecné",
+    sys_about: "O aplikácii",
+    sys_about_desc: "Informácie o verzii a poďakovania open source",
+    sys_download: "Sťahovania",
+    sys_speed_limit: "Limit rýchlosti (MiB/s)",
+    sys_speed_limit_desc:
+        "Obmedzuje šírku pásma použitú sťahovaním a vyrovnávacou pamäťou predbežného načítania (MiB/s); 0 = neobmedzene",
+    sys_download_note:
+        "Predbežné načítanie a režim sťahovania spúšťajú príkazy používateľského skriptu prehliadača, neprepínajú sa tu: „ukladať do vyrovnávacej pamäte počas prehrávania“ v skripte je predbežné načítanie a „iba stiahnuť“ je režim sťahovania; režim sťahovania tiež vyžaduje, aby účet vášho mediálneho servera povoľoval sťahovanie zdrojov",
+    sys_trakt: "Scrobbling Trakt.tv",
+    sys_trakt_sync_note:
+        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Trakt: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Pod 80 % sa vaša pozícia zapamätá, aby ste mohli pokračovať neskôr, a ďalšia epizóda sa zobrazí v sekcii „Pokračovať v sledovaní“; opätovné pozretie tej istej epizódy ju zaznamená znova — či je povolený krátky časový odstup, riadi prepínač „povoliť duplikáty“ nižšie.",
+    sys_trakt_dashboard: "Otvoriť panel Trakt",
+    sys_trakt_setup_title: "Nastavenie",
+    sys_trakt_setup_step1: "1. Vytvorte aplikáciu na Trakt: ",
+    sys_trakt_setup_link: "trakt.tv/oauth/applications",
+    sys_trakt_setup_step2: "2. Nastavte „Redirect uri“ aplikácie na adresu nižšie:",
+    sys_trakt_setup_copy: "Kopírovať",
+    sys_trakt_setup_copied: "URI presmerovania skopírované",
+    sys_trakt_setup_copy_failed: "Kopírovanie zlyhalo — vyberte a skopírujte ručne",
+    sys_trakt_id: "Client ID",
+    sys_trakt_id_desc:
+        "Získané po vytvorení aplikácie na trakt.tv — nechajte prázdne na zakázanie",
+    sys_trakt_id_placeholder: "Nechajte prázdne na zakázanie Trakt",
+    sys_trakt_secret: "Client Secret",
+    sys_trakt_secret_desc:
+        "Získané po vytvorení aplikácie na trakt.tv — nechajte prázdne na zakázanie",
+    sys_trakt_secret_placeholder: "Nechajte prázdne na zakázanie Trakt",
+    sys_trakt_user: "Používateľské meno",
+    sys_trakt_user_desc: "Vaše používateľské meno na Trakt (nie zobrazovaná prezývka)",
+    sys_trakt_user_placeholder: "napr. your_trakt_user",
+    sys_trakt_host: "Povoliť hostiteľa",
+    sys_trakt_host_desc:
+        "Kľúčové slová hostiteľov oddelené čiarkami; nechajte prázdne na zakázanie, jedna bodka povolí všetkých",
+    sys_trakt_host_placeholder: "napr. localhost, 192.168., emby.example.com",
+    sys_trakt_dup: "Povoliť duplicitné označovanie",
+    sys_trakt_dup_desc:
+        "Keď je zapnuté, každé dokončenie znova označí tú istú epizódu/film; keď je vypnuté, použije sa odstránenie duplikátov s obmedzením: tá istá položka dokončená znova v rámci okna obmedzenia nastaveného nižšie sa označí iba raz (dodatočne doplnené skoršie epizódy sa vždy deduplikujú)",
+    sys_trakt_dup_throttle: "Obmedzenie duplicitného označovania (sekundy)",
+    sys_trakt_dup_throttle_desc:
+        "Účinné, keď je „Povoliť duplicitné označovanie“ vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s; konfigurácie aktualizované zo starších verzií predvolene používajú 300 s",
+    sys_trakt_dup_throttle_floored:
+        "Obmedzenie nemôže byť nižšie ako 120 sekúnd; opravené na 120",
+    sys_bangumi: "Sledovanie Bangumi.tv",
+    sys_bangumi_sync_note:
+        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Označenie ako pozreté tiež nastaví dielo na „pozerám“.",
+    sys_bangumi_host: "Povoliť hostiteľa",
+    sys_bangumi_host_desc:
+        "Kľúčové slová hostiteľov oddelené čiarkami; nechajte prázdne na zakázanie, jedna bodka povolí všetkých",
+    sys_bangumi_host_placeholder: "napr. localhost, 192.168., emby.example.com",
+    sys_bangumi_user: "Používateľské meno / UID",
+    sys_bangumi_user_desc: "Používateľské meno bgm.tv alebo číslice v bgm.tv/user/123456",
+    sys_bangumi_user_placeholder: "napr. 123456",
+    sys_bangumi_token: "Prístupový token",
+    sys_bangumi_token_desc:
+        "Vygenerovaný na next.bgm.tv/demo/access-token — nechajte prázdne na zakázanie",
+    sys_bangumi_token_placeholder: "Nechajte prázdne na zakázanie Bangumi",
+    sys_bangumi_private: "Súkromná zbierka",
+    sys_bangumi_private_desc:
+        "Skryť novo synchronizované položky z vášho verejného profilu",
+    sys_bangumi_genres: "Filter žánrov",
+    sys_bangumi_genres_desc:
+        "Regulárny výraz porovnávaný so žánrami seriálu; synchronizujú sa iba zodpovedajúce seriály",
+    sys_bangumi_genres_placeholder: "动画|anime",
+    sys_bangumi_map: "Mapovanie ID",
+    sys_bangumi_map_desc:
+        "Pripnúť seriál alebo film tmdb/imdb/tvdb na presný predmet Bangumi; má najvyššiu prioritu. Formát: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 mapuje 4. sériu na predmet 20000 s posunom epizód +59; film je tmdb:10001|type:movie -> bgm:20001. Bez type sa odvodí zo série (séria znamená TV, inak film)",
+    map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
+    map_check: "Skontrolovať a pridať",
+    map_remove: "Odstrániť",
+    map_err_empty: "Zadajte mapovanie",
+    map_err_format: "Chybný formát — očakávané „LHS -> RHS“",
+    map_err_provider: "Neznámy zdroj; podporované sú iba tmdb / imdb / tvdb",
+    map_err_provider_id: "Nesprávne ID (tmdb/tvdb číselné, imdb začína na tt)",
+    map_err_type: "type musí byť tv alebo movie",
+    map_err_season: "Nesprávna séria; očakávané kladné celé číslo ako S4",
+    map_err_subject: "Nesprávne ID predmetu Bangumi; očakávané kladné celé číslo",
+    map_err_offset: "Nesprávny posun epizód; očakávané celé číslo ako E+59 alebo E-3",
+    map_err_movie_season: "Film nemôže mať posun série ani epizódy",
+    map_err_duplicate: "Identické mapovanie už existuje",
+    sync_refresh: "Obnoviť autorizáciu",
+    sync_refreshing: "Obnovuje sa…",
+    sync_authorize_opened: "Stránka autorizácie otvorená — dokončite ju v prehliadači",
+    sync_auth_valid: "Autorizácia je platná",
+    sync_start_service_first: "Najprv spustite službu",
+    sync_refresh_confirm_title: "Obnoviť autorizáciu",
+    sync_refresh_confirm_message:
+        "Obnoviť autorizáciu manuálne teraz? Ak je aktuálny token neplatný, stránka autorizácie sa otvorí vo vašom prehliadači.",
+    sync_refresh_confirm_ok: "Obnoviť",
+    sync_test: "Skontrolovať autorizáciu",
+    sync_test_desc: "Skontrolovať, či aktuálne prihlasovacie údaje fungujú",
+    sync_testing: "Kontroluje sa…",
+    sync_test_ok: "Autorizácia funguje",
+    sync_test_fail:
+        "Autorizácia zlyhala — konfigurácia môže byť nesprávna alebo ešte nie je autorizovaná. Kliknite na „Obnoviť autorizáciu“ vpravo hore.",
+    sync_incomplete: "Konfigurácia je neúplná — pred kontrolou vyplňte povinné polia",
+
+    // Config tab (config file + backup / restore / reset / update)
+    page_config: "Konfigurácia",
+    cfg_file_title: "Konfiguračný súbor",
+    cfg_backup_title: "Zálohovanie a obnova",
+    cfg_backup_now: "Zálohovať teraz",
+    cfg_backup_now_desc:
+        "Zabaliť aktuálnu konfiguráciu do zálohy zip s časovou pečiatkou",
+    cfg_backup_done: "Konfigurácia zálohovaná",
+    cfg_backup_list: "Zálohy",
+    cfg_backup_list_desc: "Uchováva sa až 5 záloh — teraz {count}",
+    cfg_backup_empty: "Zatiaľ žiadne zálohy",
+    cfg_view: "Zobraziť",
+    cfg_restore: "Obnoviť",
+    cfg_delete: "Odstrániť",
+    cfg_import: "Importovať zálohu",
+    cfg_import_desc: "Importovať a obnoviť konfiguráciu z externého súboru zip",
+    cfg_restore_done: "Konfigurácia obnovená",
+    cfg_restore_confirm_title: "Obnoviť konfiguráciu",
+    cfg_restore_confirm_message:
+        "Prepísať aktuálnu konfiguráciu zálohou „{name}“? Toto sa nedá vrátiť späť.",
+    cfg_import_confirm_title: "Importovať a obnoviť konfiguráciu",
+    cfg_import_confirm_message:
+        "Importovať túto zálohu a prepísať aktuálnu konfiguráciu? Toto sa nedá vrátiť späť.",
+    cfg_delete_confirm_title: "Odstrániť zálohu",
+    cfg_delete_confirm_message: "Odstrániť zálohu „{name}“?",
+    cfg_reset_title: "Obnovenie",
+    cfg_reset: "Obnoviť predvolené",
+    cfg_reset_desc: "Obnoviť všetky nastavenia na predvolené hodnoty",
+    cfg_reset_done: "Konfigurácia obnovená na predvolené",
+    cfg_reset_confirm_title: "Obnoviť konfiguráciu",
+    cfg_reset_confirm_message:
+        "Obnoviť na predvolenú konfiguráciu? Aktuálna konfigurácia sa prepíše — toto sa nedá vrátiť späť.",
+    cfg_update_title: "Aktualizácia",
+    cfg_update_auto: "Automaticky kontrolovať aktualizácie",
+    cfg_update_auto_desc:
+        "Pri spustení skontrolovať nové vydania na GitHub a zobraziť tip v prehľade",
+    cfg_update_check: "Skontrolovať teraz",
+    cfg_update_check_desc: "Skontrolovať novšiu verziu na GitHub práve teraz",
+    cfg_update_checking: "Kontroluje sa…",
+    cfg_update_available: "Nájdená nová verzia v{version} — otvára sa stránka vydania",
+    cfg_update_latest: "Máte najnovšiu verziu v{version}",
+
+    // Update banner (overview)
+    ov_update_available: "Dostupná nová verzia v{version}",
+    ov_update_action: "Aktualizovať",
+    ov_update_dismiss: "Ignorovať túto verziu",
+    sys_privacy: "Súkromie",
+    sys_no_progress: "Zakázať hlásenie priebehu",
+    sys_no_progress_desc: "Nehlásiť priebeh prehrávania serveru Emby/Jellyfin",
+    sys_accent: "Farba zvýraznenia",
+    sys_accent_desc:
+        "Farba zvýraznenia rozhrania — ovplyvňuje tlačidlá, aktívne stavy a odznaky",
+    sys_center_nav: "Vycentrovať bočný panel",
+    sys_center_nav_desc: "Vertikálne vycentrovať karty bočného panela ako skupinu",
+
+    // Log levels
+    log_error: "Error — iba pády",
+    log_warn: "Warn — abnormálne stavy",
+    log_info: "Info — predvolené, bežná prevádzka",
+    log_debug: "Debug — riešenie problémov",
+    log_trace: "Trace — úplné detaily",
+
+    // Logs page
+    page_logs: "Záznamy",
+    logs_app: "Záznam aplikácie",
+    logs_mpv: "Záznam mpv",
+    logs_filter: "Filtrovať…",
+    logs_clear: "Vymazať",
+    logs_bottom: "↓ Dole",
+    logs_empty: "Čaká sa na výstup záznamu…",
+    logs_no_mpv:
+        "Nenašiel sa žiadny záznam mpv — kliknite na „Vybrať záznam mpv“ na načítanie",
+    logs_lines: "riadkov",
+    logs_loading_older: "Načítavajú sa staršie záznamy…",
+    logs_scroll_older: "Posuňte nahor na načítanie starších záznamov",
+    logs_open_folder: "Otvoriť priečinok záznamov",
+    logs_pick_mpv: "Vybrať záznam mpv",
+    logs_reset_mpv: "Obnoviť predvolené",
+    logs_reset_mpv_title: "Prepnúť späť na predvolený záznam mpv v priečinku záznamov",
+    logs_anon: "Anonymne",
+    logs_anon_title:
+        "Skryť ID zariadenia, tokeny, IP, ID používateľa, hostiteľa URL a používateľské mená Bangumi / Trakt iba v zobrazení, vhodné na zdieľanie snímok obrazovky; súbor záznamu zostáva nedotknutý — cenzúra súboru sa naďalej riadi prepínačom „Citlivý text“",
+
+    // About modal
+    about_thanks: "Poďakovania",
+    about_thanks_desc: "za nekonečnú inšpiráciu",
+    about_version_label: "Verzia",
+
+    // Autostart toasts
+    autostart_on: "Spustenie pri prihlásení povolené",
+    autostart_off: "Spustenie pri prihlásení zakázané",
+
+    // Font size options
+    font_12: "12px (kompaktné)",
+    font_13: "13px (predvolené)",
+    font_14: "14px (pohodlné)",
+    font_15: "15px (veľké)",
+    font_16: "16px (veľmi veľké)",
+};

@@ -39,8 +39,6 @@ fn sys_is_chinese() -> bool {
 struct TrayLabels {
     tooltip: &'static str,
     show: &'static str,
-    start: &'static str,
-    stop: &'static str,
     reload: &'static str,
     about: &'static str,
     quit: &'static str,
@@ -52,8 +50,6 @@ impl TrayLabels {
             Self {
                 tooltip: "原神",
                 show: "显示主界面",
-                start: "启动服务",
-                stop: "停止服务",
                 reload: "重载配置",
                 about: "关于",
                 quit: "退出",
@@ -62,8 +58,6 @@ impl TrayLabels {
             Self {
                 tooltip: "Genshin",
                 show: "Show Window",
-                start: "Start Service",
-                stop: "Stop Service",
                 reload: "Reload Config",
                 about: "About",
                 quit: "Quit",
@@ -142,32 +136,16 @@ fn decode_tray_icon(
 fn build_tray_menu(
     app: &impl tauri::Manager<tauri::Wry>,
     labels: &TrayLabels,
-    running: bool,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let show = MenuItemBuilder::with_id("show", labels.show).build(app)?;
-    let toggle = MenuItemBuilder::with_id(
-        "toggle",
-        if running { labels.stop } else { labels.start },
-    )
-    .build(app)?;
     let reload =
         MenuItemBuilder::with_id("reload", labels.reload).build(app)?;
     let about = MenuItemBuilder::with_id("about", labels.about).build(app)?;
     let quit = MenuItemBuilder::with_id("quit", labels.quit).build(app)?;
 
     MenuBuilder::new(app)
-        .items(&[&show, &toggle, &reload, &about, &quit])
+        .items(&[&show, &reload, &about, &quit])
         .build()
-}
-
-/// Rebuild the tray menu to reflect the service's running state. Best-effort:
-/// a missing tray or menu-build error is ignored.
-fn refresh_tray_running(app: &tauri::AppHandle, running: bool) {
-    if let Some(tray) = app.tray_by_id("")
-        && let Ok(menu) = build_tray_menu(app, &TrayLabels::detect(), running)
-    {
-        let _ = tray.set_menu(Some(menu));
-    }
 }
 
 /// Show a best-effort system notification. Failures (e.g. permissions denied)
@@ -423,7 +401,7 @@ pub fn run() {
             migrate_autostart(app.handle(), want_autostart);
 
             // ── Tray icon ──────────────────────────────────────────────────────
-            let menu = build_tray_menu(app.handle(), &labels, false)?;
+            let menu = build_tray_menu(app.handle(), &labels)?;
 
             let mut tray_builder = TrayIconBuilder::new();
             if let Some((tray_buf, tray_w, tray_h)) = tray_rgba {
@@ -437,67 +415,21 @@ pub fn run() {
             let _tray = tray_builder
                 .tooltip(labels.tooltip)
                 .menu(&menu)
-                .on_menu_event(|app, event| {
-                    let state = app.state::<GuiState>();
-                    match event.id().as_ref() {
-                        "show" => show_main_window(app),
-                        "toggle" => {
-                            let running = state
-                                .running
-                                .load(std::sync::atomic::Ordering::Acquire);
-                            let app_c = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let state2 = app_c.state::<GuiState>();
-                                if running {
-                                    let _ = commands::stop_server(state2).await;
-                                } else {
-                                    let _ =
-                                        commands::start_server(state2).await;
-                                }
-                                // Rebuild menu to reflect new state
-                                let new_running = app_c
-                                    .state::<GuiState>()
-                                    .running
-                                    .load(std::sync::atomic::Ordering::Acquire);
-                                if let Some(tray) = app_c.tray_by_id("")
-                                    && let Ok(m) = build_tray_menu(
-                                        &app_c,
-                                        &TrayLabels::detect(),
-                                        new_running,
-                                    )
-                                {
-                                    let _ = tray.set_menu(Some(m));
-                                }
-                            });
-                        }
-                        "reload" => {
-                            let app_c = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let state2 = app_c.state::<GuiState>();
-                                let _ = commands::restart_server(state2).await;
-                                let new_running = app_c
-                                    .state::<GuiState>()
-                                    .running
-                                    .load(std::sync::atomic::Ordering::Acquire);
-                                if let Some(tray) = app_c.tray_by_id("")
-                                    && let Ok(m) = build_tray_menu(
-                                        &app_c,
-                                        &TrayLabels::detect(),
-                                        new_running,
-                                    )
-                                {
-                                    let _ = tray.set_menu(Some(m));
-                                }
-                            });
-                        }
-                        "about" => {
-                            // Bring window to front and signal frontend to open about modal
-                            show_main_window(app);
-                            app.emit("show-about", ()).ok();
-                        }
-                        "quit" => app.exit(0),
-                        _ => {}
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => show_main_window(app),
+                    "reload" => {
+                        let app_c = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = app_c.state::<GuiState>();
+                            let _ = commands::restart_server(state).await;
+                        });
                     }
+                    "about" => {
+                        show_main_window(app);
+                        app.emit("show-about", ()).ok();
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     use tauri::tray::TrayIconEvent;
@@ -560,7 +492,6 @@ pub fn run() {
                                 port,
                                 "silent start: service started"
                             );
-                            refresh_tray_running(&app_handle, true);
                         }
                         Err(e) => {
                             tracing::error!(

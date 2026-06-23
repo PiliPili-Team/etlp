@@ -1702,6 +1702,23 @@ function SystemSection({
         { value: "zh-CN", label: "简体中文" },
         { value: "zh-TW", label: "繁體中文" },
         { value: "en", label: "English" },
+        { value: "ja", label: "日本語" },
+        { value: "ko", label: "한국어" },
+        { value: "de", label: "Deutsch" },
+        { value: "it", label: "Italiano" },
+        { value: "fr", label: "Français" },
+        { value: "es", label: "Español" },
+        { value: "pt", label: "Português" },
+        { value: "ru", label: "Русский" },
+        { value: "uk", label: "Українська" },
+        { value: "pl", label: "Polski" },
+        { value: "sk", label: "Slovenčina" },
+        { value: "sr", label: "Српски" },
+        { value: "tr", label: "Türkçe" },
+        { value: "th", label: "ไทย" },
+        { value: "id", label: "Indonesia" },
+        { value: "ar", label: "العربية" },
+        { value: "he", label: "עברית" },
     ];
 
     const FONT_SIZE_OPTIONS = [
