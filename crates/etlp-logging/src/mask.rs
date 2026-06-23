@@ -1,9 +1,10 @@
 //! Log masking for sensitive values in log lines.
 //!
 //! Sensitive values that appear in log lines—the API key, the server host, and
-//! the OS user name—are replaced with placeholders so logs can be shared
-//! safely. The host is half-redacted (keeping the leading half plus the port)
-//! to remain recognizable; mirrors `MyLogger.mix_host_gen`.
+//! user-identifying names (the OS user plus the configured Bangumi / Trakt
+//! account names)—are replaced with placeholders so logs can be shared safely.
+//! The host is half-redacted (keeping the leading half plus the port) to remain
+//! recognizable; mirrors `MyLogger.mix_host_gen`.
 
 use std::sync::{Arc, RwLock};
 
@@ -30,7 +31,10 @@ struct Rules {
     api_key: String,
     netloc: String,
     netloc_replace: String,
-    user_name: String,
+    /// User-identifying strings to redact: the OS user plus the configured
+    /// Bangumi / Trakt account names. Empty entries are never stored, so a
+    /// blank config field can never blank-replace the whole line.
+    users: Vec<String>,
 }
 
 impl Rules {
@@ -45,8 +49,8 @@ impl Rules {
         if !self.netloc.is_empty() {
             out = out.replace(&self.netloc, &self.netloc_replace);
         }
-        if !self.user_name.is_empty() {
-            out = out.replace(&self.user_name, HIDE_USER);
+        for user in &self.users {
+            out = out.replace(user, HIDE_USER);
         }
         out
     }
@@ -88,10 +92,28 @@ impl Masker {
         }
     }
 
-    /// Set the OS user name to redact.
+    /// Set the OS user name to redact, replacing any previously registered
+    /// users. An empty name clears the list rather than redacting everything.
     pub fn set_user(&self, user_name: &str) {
         if let Ok(mut rules) = self.rules.write() {
-            rules.user_name = user_name.to_owned();
+            rules.users.clear();
+            if !user_name.is_empty() {
+                rules.users.push(user_name.to_owned());
+            }
+        }
+    }
+
+    /// Register an additional account name (e.g. a Bangumi / Trakt user) to
+    /// redact. Empty or already-registered names are ignored, so a blank config
+    /// field is a no-op and duplicates do not pile up.
+    pub fn add_user(&self, user_name: &str) {
+        if user_name.is_empty() {
+            return;
+        }
+        if let Ok(mut rules) = self.rules.write()
+            && !rules.users.iter().any(|u| u == user_name)
+        {
+            rules.users.push(user_name.to_owned());
         }
     }
 
@@ -131,6 +153,29 @@ mod tests {
         assert!(masked.contains("_hide_api_key_"));
         assert!(masked.contains("_hide_user_"));
         assert!(masked.contains("_mix_host_"));
+    }
+
+    #[test]
+    fn add_user_redacts_multiple_accounts() {
+        // Both the Bangumi `user=` field and the Trakt URL slug must go.
+        let m = Masker::new(true);
+        m.add_user("alice");
+        m.add_user("bob");
+        let line = "bangumi: GET /me user=alice -> trakt users/bob/history";
+        let masked = m.mask(line);
+        assert!(!masked.contains("alice"));
+        assert!(!masked.contains("bob"));
+        assert_eq!(masked.matches("_hide_user_").count(), 2);
+    }
+
+    #[test]
+    fn add_user_ignores_empty_and_duplicates() {
+        let m = Masker::new(true);
+        m.add_user(""); // a blank config field must not blank the whole line
+        m.add_user("alice");
+        m.add_user("alice"); // duplicates do not stack
+        assert_eq!(m.mask("nothing to hide"), "nothing to hide");
+        assert_eq!(m.mask("user=alice"), "user=_hide_user_");
     }
 
     #[test]

@@ -1,11 +1,13 @@
 //! Debug-level `curl` logging for Bangumi / Trakt API requests.
 //!
 //! Emits the equivalent `curl` command line for an outgoing request so the call
-//! can be reproduced and diagnosed straight from the logs. The line is written
-//! verbatim to the log file; secrets in it (Bearer tokens, api keys, usernames,
-//! hosts) are redacted only at *display* time by the Logs view's anonymous
-//! mode, so a shared screenshot stays safe while the on-disk file keeps the full
-//! request for debugging.
+//! can be reproduced and diagnosed straight from the logs. When `dev.mix_log`
+//! is on, the logging `Masker` redacts the configured Bangumi / Trakt account
+//! names (and the Emby api key / host) from the on-disk file, so a `users/<name>`
+//! path or `user=` field never leaks the user's identity. The Logs view's
+//! anonymous mode additionally masks Bearer tokens, user names and hosts at
+//! *display* time. With masking off, the file keeps the full request verbatim
+//! for debugging.
 
 use std::time::Duration;
 

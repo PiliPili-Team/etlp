@@ -92,12 +92,14 @@ async fn main() {
         config.dev.log_max_size_mb,
         config.dev.log_max_files,
     );
-    let _ = init_logging(
-        Masker::new(mix_log),
-        &log_level,
-        log_file.as_deref(),
-        rotation,
-    );
+    let masker = Masker::new(mix_log);
+    // Redact the configured Bangumi / Trakt account names from on-disk logs
+    // when masking is on, so a shared log never carries the user's identity —
+    // whether it surfaces as a `user=` field, a `user_name=` field, or a
+    // `users/<name>/…` URL path in a logged curl line.
+    masker.add_user(&config.bangumi.username);
+    masker.add_user(&config.trakt.user_name);
+    let _ = init_logging(masker, &log_level, log_file.as_deref(), rotation);
 
     info!(
         "etlp {} starting (config={})",

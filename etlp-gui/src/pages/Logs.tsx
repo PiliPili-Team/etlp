@@ -80,6 +80,13 @@ const ANON_KV_RULES: { re: RegExp; replace: string }[] = [
         re: /\b((?:user[_-]?name|username|nickname)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
         replace: "$1***",
     },
+    // Bare `user=…` tracing field (Bangumi `debug!(user = %username, …)`); the
+    // `[:=]` must follow `user` directly, so `user_id`/`user_name` are untouched
+    // here and handled by their own rules above.
+    {
+        re: /\b(user["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        replace: "$1***",
+    },
     // Bangumi / Trakt user slug embedded in a URL path, e.g. /users/alice.
     { re: /\/users\/[^/\s"'?]+/gi, replace: "/users/***" },
 ];
