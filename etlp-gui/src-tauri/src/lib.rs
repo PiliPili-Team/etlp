@@ -177,6 +177,111 @@ fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
+/// One-time migration from the legacy AppleScript launch-at-login backend to
+/// LaunchAgent.
+///
+/// The AppleScript backend could neither disable itself reliably (`osascript`
+/// returned status 1) nor read its own state, so the preference was mirrored in
+/// `gui.autostart`. LaunchAgent fixes both, so this:
+///   1. carries a saved `autostart = true` forward by registering the agent,
+///   2. best-effort removes any stale login item the AppleScript backend left,
+///   3. drops the now-redundant `gui.autostart` key from the config.
+///
+/// A marker file guards the migration so it runs at most once. Every step is
+/// best-effort: failures are logged (and surfaced to the user for the login-item
+/// cleanup) but never block startup.
+fn migrate_autostart(app: &tauri::AppHandle, legacy_pref: bool) {
+    let Some(cfg_dir) = etlp_server::platform::config_dir() else {
+        return;
+    };
+    let marker = cfg_dir.join(".autostart_launchagent_migrated");
+    if marker.exists() {
+        return;
+    }
+
+    // 1. Carry a saved "on" preference forward to the reliable backend.
+    if legacy_pref {
+        use tauri_plugin_autostart::ManagerExt;
+        let launcher = app.autolaunch();
+        if !launcher.is_enabled().unwrap_or(false)
+            && let Err(e) = launcher.enable()
+        {
+            eprintln!("[etlp] autostart migrate enable failed: {e}");
+        }
+    }
+
+    // 2. Remove any stale login item the AppleScript backend left behind.
+    if let Err(e) = remove_legacy_login_item() {
+        eprintln!("[etlp] autostart legacy login-item cleanup failed: {e}");
+        let (title, body) = if sys_is_chinese() {
+            (
+                "开机自启方式已更新",
+                "若“系统设置 → 通用 → 登录项”中仍残留 Genshin 项，请手动移除。",
+            )
+        } else {
+            (
+                "Launch-at-login updated",
+                "If a stale \"Genshin\" entry remains under System Settings → \
+                 General → Login Items, please remove it manually.",
+            )
+        };
+        notify(app, title, body);
+    }
+
+    // 3. Drop the redundant persisted preference; OS state is now the truth.
+    let path = etlp_config::existing_config_path(&cfg_dir)
+        .unwrap_or_else(|| cfg_dir.join("config.toml"));
+    if path.exists()
+        && let Err(e) = config_patch::patch_field(
+            &path,
+            "gui",
+            "autostart",
+            &serde_json::Value::Null,
+        )
+    {
+        eprintln!("[etlp] autostart config strip failed: {e}");
+    }
+
+    // 4. Record completion so the migration runs only once.
+    if let Err(e) = std::fs::write(&marker, b"1") {
+        eprintln!("[etlp] autostart migration marker write failed: {e}");
+    }
+}
+
+/// Remove the legacy macOS login item the AppleScript autostart backend
+/// registered, if present.
+///
+/// The `exists` guard makes the call succeed whether or not the item is there;
+/// it errors only when Automation permission for System Events is denied — the
+/// case the caller surfaces to the user. No-op on non-macOS platforms.
+#[cfg(target_os = "macos")]
+fn remove_legacy_login_item() -> std::io::Result<()> {
+    let status = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\"")
+        .arg("-e")
+        .arg(
+            "if exists login item \"Genshin\" then \
+             delete login item \"Genshin\"",
+        )
+        .arg("-e")
+        .arg("end tell")
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "osascript exited with {status}"
+        )))
+    }
+}
+
+/// No-op stub on platforms without a legacy AppleScript login item.
+#[cfg(not(target_os = "macos"))]
+fn remove_legacy_login_item() -> std::io::Result<()> {
+    Ok(())
+}
+
 /// Show or hide the macOS dock icon by switching the activation policy.
 ///
 /// `Regular` shows the dock icon; `Accessory` hides it so the app keeps running
@@ -303,7 +408,7 @@ pub fn run() {
             show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::AppleScript,
+            MacosLauncher::LaunchAgent,
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
@@ -311,21 +416,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(gui_state)
         .setup(move |app| {
-            // Reconcile OS launch-at-login with the saved preference so the
-            // persisted value is the source of truth (best-effort; a failure
-            // must not block startup).
-            {
-                use tauri_plugin_autostart::ManagerExt;
-                let launcher = app.autolaunch();
-                let res = if want_autostart {
-                    launcher.enable()
-                } else {
-                    launcher.disable()
-                };
-                if let Err(e) = res {
-                    eprintln!("[etlp] autostart reconcile failed: {e}");
-                }
-            }
+            // Migrate the legacy AppleScript launch-at-login backend to
+            // LaunchAgent (best-effort, runs once). LaunchAgent reports its own
+            // state reliably, so afterwards the OS registration is the single
+            // source of truth and there is no per-startup reconcile.
+            migrate_autostart(app.handle(), want_autostart);
 
             // ── Tray icon ──────────────────────────────────────────────────────
             let menu = build_tray_menu(app.handle(), &labels, false)?;
