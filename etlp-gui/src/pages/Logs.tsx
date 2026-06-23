@@ -29,6 +29,10 @@ interface LogPaths {
 }
 type LogSource = "app" | "mpv";
 
+// localStorage key holding the last user-picked mpv log path, so a manual
+// choice is remembered and preferred over the config default on next launch.
+const MPV_CUSTOM_KEY = "logs_mpv_custom_path";
+
 const POLL_MS = 800;
 // One page = newest 200 lines; older pages are fetched on scroll-up.
 const PAGE_SIZE = 200;
@@ -169,7 +173,11 @@ export default function Logs({ active }: { active: boolean }) {
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [hasOlder, setHasOlder] = useState(false);
     // A user-picked mpv log file; falls back to the config-derived default.
-    const [mpvCustomPath, setMpvCustomPath] = useState<string | null>(null);
+    // Restored from localStorage so a manual pick survives a restart and keeps
+    // priority over the default until the user resets it.
+    const [mpvCustomPath, setMpvCustomPath] = useState<string | null>(
+        () => localStorage.getItem(MPV_CUSTOM_KEY) || null,
+    );
 
     const bodyRef = useRef<HTMLDivElement>(null);
     // Live-tail cursor: byte offset up to which we have appended new lines.
@@ -182,6 +190,21 @@ export default function Logs({ active }: { active: boolean }) {
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
             .then(setPaths)
+            .catch(() => {});
+    }, []);
+
+    // Drop a remembered pick whose file has since been deleted or rotated away,
+    // so the view falls back to the default mpv log instead of a dead path.
+    useEffect(() => {
+        const saved = localStorage.getItem(MPV_CUSTOM_KEY);
+        if (!saved) return;
+        invoke<boolean>("path_exists", { path: saved })
+            .then((exists) => {
+                if (!exists) {
+                    localStorage.removeItem(MPV_CUSTOM_KEY);
+                    setMpvCustomPath(null);
+                }
+            })
             .catch(() => {});
     }, []);
 
@@ -367,6 +390,8 @@ export default function Logs({ active }: { active: boolean }) {
             filters: [{ name: "Log", extensions: ["log", "txt"] }],
         });
         if (typeof selected === "string") {
+            // Remember the pick so it is preferred over the default next launch.
+            localStorage.setItem(MPV_CUSTOM_KEY, selected);
             setMpvCustomPath(selected);
             setSource("mpv");
             setLines([]);
@@ -375,6 +400,20 @@ export default function Logs({ active }: { active: boolean }) {
             initializedRef.current = false;
             setHasOlder(false);
         }
+    };
+
+    // Forget the remembered pick and fall back to the config-derived default
+    // mpv log under the log folder. The source-reset is handled by the effect
+    // keyed on `effectiveMpvPath`, so we only clear the buffer cursors here.
+    const handleResetMpvLog = () => {
+        localStorage.removeItem(MPV_CUSTOM_KEY);
+        setMpvCustomPath(null);
+        setSource("mpv");
+        setLines([]);
+        posRef.current = 0;
+        oldestRef.current = 0;
+        initializedRef.current = false;
+        setHasOlder(false);
     };
 
     // Defer the filter so typing stays responsive on large buffers; the
@@ -440,6 +479,16 @@ export default function Logs({ active }: { active: boolean }) {
                             flexShrink: 0,
                         }}
                     >
+                        {source === "mpv" && mpvCustomPath && (
+                            <button
+                                className="btn"
+                                style={{ padding: "4px 10px", fontSize: 12 }}
+                                onClick={handleResetMpvLog}
+                                title={t("logs_reset_mpv_title")}
+                            >
+                                {t("logs_reset_mpv")}
+                            </button>
+                        )}
                         {source === "mpv" && (
                             <button
                                 className="btn"

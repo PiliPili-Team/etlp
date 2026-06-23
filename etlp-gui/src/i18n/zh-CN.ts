@@ -318,6 +318,8 @@ export const zhCN = {
     logs_scroll_older: "向上滚动加载更早的日志",
     logs_open_folder: "打开日志文件夹",
     logs_pick_mpv: "选择 mpv 日志",
+    logs_reset_mpv: "恢复默认",
+    logs_reset_mpv_title: "改回加载日志目录下的默认 mpv 日志",
     logs_anon: "匿名模式",
     logs_anon_title:
         "仅在界面上隐藏设备 ID、令牌、IP、用户 ID、URL 主机以及 Bangumi / Trakt 用户名，便于截图分享；不会改动日志文件，文件脱敏仍由「敏感文案」开关决定",

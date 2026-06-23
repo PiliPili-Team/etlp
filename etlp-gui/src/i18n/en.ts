@@ -339,6 +339,8 @@ export const en: typeof zhCN = {
     logs_scroll_older: "Scroll up to load older logs",
     logs_open_folder: "Open Log Folder",
     logs_pick_mpv: "Choose mpv Log",
+    logs_reset_mpv: "Reset to Default",
+    logs_reset_mpv_title: "Switch back to the default mpv log in the log folder",
     logs_anon: "Anonymous",
     logs_anon_title:
         "Hide device id, tokens, IPs, user id, URL host and Bangumi / Trakt usernames in the view only, handy for sharing screenshots; the log file is untouched — file redaction still follows the “Sensitive text” switch",
