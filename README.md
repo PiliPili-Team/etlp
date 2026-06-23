@@ -76,6 +76,26 @@ Download the installer for your platform from the
 The desktop app embeds the server and exposes every setting shown in the
 [preview](#app-preview) above.
 
+#### First-launch security prompts (unsigned builds)
+
+These builds are **not** code-signed with a paid Apple/Microsoft developer
+certificate, so the OS shows a generic warning on first launch. The app is
+**not** actually damaged and contains **no** malware — the prompts are purely a
+consequence of the missing certificate.
+
+- **macOS — "Genshin" is damaged and can't be opened:**
+  the quarantine attribute the browser attaches to downloaded apps trips
+  Gatekeeper. Remove it once, then reopen the app:
+
+  ```bash
+  sudo xattr -dr com.apple.quarantine /Applications/Genshin.app
+  ```
+
+- **Windows — Defender / firewall / antivirus flags the app:**
+  allow it through and add it to your antivirus allow-list (whitelist). For the
+  Windows Firewall prompt, tick **Allow access**; for SmartScreen, choose
+  **More info → Run anyway**.
+
 ### Pre-built binary (CLI)
 
 Prefer a headless server? Download the archive for your platform from the
