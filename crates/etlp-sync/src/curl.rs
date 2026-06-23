@@ -109,6 +109,24 @@ pub(crate) async fn read_logged(
     Ok((status, body))
 }
 
+/// Read a response and log only the status code; the body is drained but
+/// never written to the log.
+///
+/// Use for endpoints (e.g. `GET /me`) whose response body may contain PII
+/// (email address, display name, registration date) that no masker rule
+/// covers.  The body is still returned so error paths can surface the raw
+/// API reply to the caller, but it never reaches the log sink.
+pub(crate) async fn read_status_only(
+    label: &str,
+    logged: LoggedResponse,
+) -> Result<(reqwest::StatusCode, String)> {
+    let LoggedResponse { method: _, resp } = logged;
+    let status = resp.status();
+    tracing::debug!("{label}: response {}", status.as_u16());
+    let body = resp.text().await?;
+    Ok((status, body))
+}
+
 /// Read and log a response (via [`read_logged`]), then deserialize it.
 ///
 /// A non-success status maps to [`SyncError::Api`] carrying the body; a body
@@ -291,5 +309,43 @@ mod tests {
         // An empty body is status-only even for GET/POST: nothing to dump.
         assert_eq!(classify(&Method::POST, ""), ResponseLog::StatusOnly);
         assert_eq!(classify(&Method::GET, "   "), ResponseLog::StatusOnly);
+    }
+
+    #[tokio::test]
+    async fn read_status_only_returns_status_and_body_without_logging() {
+        // Verify that read_status_only returns the correct status and the body
+        // is available for error paths, even though it is never logged.
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        let pii_body = serde_json::json!({
+            "id": 12345,
+            "username": "someuser",
+            "email": "private@example.com",
+            "nickname": "Nick",
+        });
+        Mock::given(method("GET"))
+            .and(path("/me"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(pii_body.clone()),
+            )
+            .mount(&server)
+            .await;
+
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(format!("{}/me", server.uri()))
+            .send()
+            .await
+            .unwrap();
+        let logged = LoggedResponse {
+            method: Method::GET,
+            resp,
+        };
+        let (status, body) = read_status_only("bangumi", logged).await.unwrap();
+        assert_eq!(status.as_u16(), 200);
+        // The body is still available so error paths can include it.
+        assert!(body.contains("private@example.com"));
     }
 }

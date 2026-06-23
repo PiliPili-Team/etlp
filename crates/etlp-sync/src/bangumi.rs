@@ -407,7 +407,10 @@ impl BangumiApi {
             self.http.get(self.url("me")).headers(self.auth_headers()),
         )
         .await?;
-        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        // /me response contains PII (email, nickname, reg_time, …) that the
+        // masker does not cover; log only the status code and discard the body.
+        let (status, body) =
+            crate::curl::read_status_only(DOMAIN, resp).await?;
         let status = status.as_u16();
         if (200..300).contains(&status) {
             return Ok(());
