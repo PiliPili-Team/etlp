@@ -52,7 +52,7 @@ impl TrayLabels {
         if sys_is_chinese() {
             Self {
                 tooltip: "原神",
-                show: "显示主界面",
+                show: "显示主窗口",
                 reload: "重载配置",
                 about: "关于",
                 quit: "退出",
@@ -318,7 +318,7 @@ pub fn run() {
     etlp_server::platform::migrate_layout(&data_dir);
     let log_dir = etlp_server::platform::log_dir_in(&data_dir);
     std::fs::create_dir_all(&log_dir).ok();
-    let log_file = log_dir.join("etlp.log");
+    let log_file = log_dir.join(commands::APP_LOG_FILE);
 
     // Read the config early so we can honour dev.log_level from the very first
     // log line and decide whether to start hidden.  Failures are silently

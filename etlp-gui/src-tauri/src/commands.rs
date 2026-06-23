@@ -13,6 +13,9 @@ use tower_http::normalize_path::NormalizePathLayer;
 use tracing::{error, info, warn};
 
 use etlp_config::Config;
+
+pub const APP_LOG_FILE: &str = "etlp.log";
+pub const MPV_LOG_FILE: &str = "mpv.log";
 use etlp_download::{
     DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_PER_DOMAIN, DownloadManager,
 };
@@ -48,7 +51,9 @@ impl Default for GuiState {
             shutdown_tx: Mutex::new(None),
             port: AtomicU16::new(58000),
             started_at: Mutex::new(None),
-            log_file: Mutex::new(platform::log_dir_in(&data).join("etlp.log")),
+            log_file: Mutex::new(
+                platform::log_dir_in(&data).join(APP_LOG_FILE),
+            ),
             log_read_pos: Mutex::new(0),
             log_handle: Mutex::new(None),
         }
@@ -1056,7 +1061,7 @@ pub async fn get_log_paths(
         .to_string_lossy()
         .into_owned();
 
-    let mpv_log = platform::log_dir().map(|d| d.join("mpv.log"));
+    let mpv_log = platform::log_dir().map(|d| d.join(MPV_LOG_FILE));
 
     Ok(serde_json::json!({
         "app_log": app_log,
@@ -1086,7 +1091,7 @@ fn cache_log_paths(state: &GuiState) -> Result<Vec<PathBuf>, String> {
         .clone();
     let mut paths = vec![app_log];
     if let Some(log) = platform::log_dir() {
-        paths.push(log.join("mpv.log"));
+        paths.push(log.join(MPV_LOG_FILE));
     }
     Ok(paths)
 }
