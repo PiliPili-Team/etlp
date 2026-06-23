@@ -4,10 +4,7 @@ pub mod backup;
 pub mod commands;
 pub mod config_patch;
 
-use tauri::menu::{
-    IconMenuItemBuilder, MenuBuilder, MenuItemBuilder, NativeIcon,
-    PredefinedMenuItem,
-};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -147,9 +144,7 @@ fn build_tray_menu(
     let reload =
         MenuItemBuilder::with_id("reload", labels.reload).build(app)?;
     let sep3 = PredefinedMenuItem::separator(app)?;
-    let quit = IconMenuItemBuilder::with_id("quit", labels.quit)
-        .native_icon(NativeIcon::StatusUnavailable)
-        .build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", labels.quit).build(app)?;
 
     MenuBuilder::new(app)
         .items(&[&about, &sep1, &show, &sep2, &reload, &sep3, &quit])
