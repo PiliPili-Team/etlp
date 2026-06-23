@@ -200,7 +200,7 @@ export const zhTW: typeof zhCN = {
         "開啟後每次看完都會再次標記同一劇集 / 影片；關閉則啟用節流去重：同一條目在下方設定的節流時間內重複看完只標記一次（補全的歷史集數無論開關始終去重）",
     sys_trakt_dup_throttle: "重複標記節流時間（秒）",
     sys_trakt_dup_throttle_desc:
-        "關閉「允許重複標記」時生效：同一條目在該秒數內重複看完只記錄一次；最少 120 秒，舊版本設定升級後預設 300 秒",
+        "關閉「允許重複標記」時生效：同一條目在該秒數內重複看完只記錄一次；最少 120 秒",
     sys_trakt_dup_throttle_floored: "節流時間不能小於 120 秒，已修正為 120",
     sys_bangumi: "Bangumi.tv 追番記錄同步",
     sys_bangumi_sync_note:

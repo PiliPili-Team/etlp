@@ -213,7 +213,7 @@ export const en: typeof zhCN = {
         "When on, every completion re-marks the same episode/movie; when off, throttled de-duplication applies: the same item finished again within the throttle window set below is marked only once (back-filled earlier episodes are always de-duplicated regardless)",
     sys_trakt_dup_throttle: "Duplicate-Mark Throttle (seconds)",
     sys_trakt_dup_throttle_desc:
-        'Effective when "Allow Duplicate Marking" is off: the same item finished again within this many seconds is recorded only once. Minimum 120s; configs upgraded from older versions default to 300s',
+        'Effective when "Allow Duplicate Marking" is off: the same item finished again within this many seconds is recorded only once. Minimum 120s',
     sys_trakt_dup_throttle_floored:
         "Throttle cannot be below 120 seconds; corrected to 120",
     sys_bangumi: "Bangumi.tv Tracking",

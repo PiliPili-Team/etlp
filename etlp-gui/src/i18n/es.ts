@@ -220,7 +220,7 @@ export const es: typeof zhCN = {
         "Si está activado, cada finalización vuelve a marcar el mismo episodio/película; si está desactivado, se aplica deduplicación con límite: el mismo elemento terminado de nuevo dentro de la ventana de límite definida abajo se marca solo una vez (los episodios anteriores rellenados siempre se deduplican)",
     sys_trakt_dup_throttle: "Límite de marcado duplicado (segundos)",
     sys_trakt_dup_throttle_desc:
-        "Efectivo cuando «Permitir marcado duplicado» está desactivado: el mismo elemento terminado de nuevo dentro de estos segundos se registra solo una vez. Mínimo 120 s; las configuraciones actualizadas desde versiones anteriores usan 300 s de forma predeterminada",
+        "Efectivo cuando «Permitir marcado duplicado» está desactivado: el mismo elemento terminado de nuevo dentro de estos segundos se registra solo una vez. Mínimo 120 s",
     sys_trakt_dup_throttle_floored:
         "El límite no puede ser inferior a 120 segundos; corregido a 120",
     sys_bangumi: "Seguimiento de Bangumi.tv",

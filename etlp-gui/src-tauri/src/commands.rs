@@ -1056,17 +1056,7 @@ pub async fn get_log_paths(
         .to_string_lossy()
         .into_owned();
 
-    // mpv log path comes from the config dev.mpv_log_file if set.
-    let cfg_dir = platform::config_dir();
-    let mpv_log = cfg_dir
-        .as_ref()
-        .and_then(|d| Config::load_from_dir(d).ok())
-        .and_then(|c| {
-            c.dev
-                .mpv_input_ipc_server
-                .as_ref()
-                .and_then(|_| platform::log_dir().map(|d| d.join("mpv.log")))
-        });
+    let mpv_log = platform::log_dir().map(|d| d.join("mpv.log"));
 
     Ok(serde_json::json!({
         "app_log": app_log,

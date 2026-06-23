@@ -219,7 +219,7 @@ export const de: typeof zhCN = {
         "Wenn aktiviert, wird bei jedem Abschluss dieselbe Episode/derselbe Film erneut markiert; wenn deaktiviert, gilt eine gedrosselte Duplikatentfernung: dasselbe Element, das innerhalb des unten festgelegten Drosselfensters erneut beendet wird, wird nur einmal markiert (nachgetragene frühere Episoden werden immer dedupliziert)",
     sys_trakt_dup_throttle: "Drosselung für doppeltes Markieren (Sekunden)",
     sys_trakt_dup_throttle_desc:
-        "Wirksam, wenn „Doppeltes Markieren zulassen“ deaktiviert ist: dasselbe Element, das innerhalb dieser Sekundenzahl erneut beendet wird, wird nur einmal aufgezeichnet. Minimum 120 s; aus älteren Versionen aktualisierte Konfigurationen verwenden standardmäßig 300 s",
+        "Wirksam, wenn „Doppeltes Markieren zulassen“ deaktiviert ist: dasselbe Element, das innerhalb dieser Sekundenzahl erneut beendet wird, wird nur einmal aufgezeichnet. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "Drosselung darf nicht unter 120 Sekunden liegen; auf 120 korrigiert",
     sys_bangumi: "Bangumi.tv-Verfolgung",

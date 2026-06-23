@@ -215,7 +215,7 @@ export const id: typeof zhCN = {
         "Saat aktif, setiap penyelesaian menandai ulang episode/film yang sama; saat nonaktif, deduplikasi dengan throttle diterapkan: item yang sama diselesaikan lagi dalam jendela throttle di bawah hanya ditandai sekali (episode backfill sebelumnya selalu dideduplikasi)",
     sys_trakt_dup_throttle: "Throttle Penandaan Ulang (detik)",
     sys_trakt_dup_throttle_desc:
-        "Aktif saat 'Izinkan Penandaan Ulang' dinonaktifkan: item yang sama diselesaikan lagi dalam jumlah detik ini hanya ditandai sekali. Minimum 120 detik; konfigurasi yang diperbarui dari versi lama menggunakan 300 detik secara default",
+        "Aktif saat 'Izinkan Penandaan Ulang' dinonaktifkan: item yang sama diselesaikan lagi dalam jumlah detik ini hanya ditandai sekali. Minimum 120 detik",
     sys_trakt_dup_throttle_floored:
         "Throttle tidak boleh kurang dari 120 detik; diperbaiki menjadi 120",
     sys_bangumi: "Pelacakan Bangumi.tv",

@@ -218,7 +218,7 @@ export const it: typeof zhCN = {
         "Se attivo, ogni completamento ricontrassegna lo stesso episodio/film; se disattivo, si applica la deduplicazione con limitazione: lo stesso elemento completato di nuovo entro la finestra di limitazione impostata qui sotto viene contrassegnato una sola volta (gli episodi precedenti recuperati sono sempre deduplicati)",
     sys_trakt_dup_throttle: "Limitazione contrassegno duplicato (secondi)",
     sys_trakt_dup_throttle_desc:
-        "Attiva quando «Consenti contrassegno duplicato» è disattivo: lo stesso elemento completato di nuovo entro questi secondi viene registrato una sola volta. Minimo 120 s; le configurazioni aggiornate da versioni precedenti usano 300 s come predefinito",
+        "Attiva quando «Consenti contrassegno duplicato» è disattivo: lo stesso elemento completato di nuovo entro questi secondi viene registrato una sola volta. Minimo 120 s",
     sys_trakt_dup_throttle_floored:
         "La limitazione non può essere inferiore a 120 secondi; corretta a 120",
     sys_bangumi: "Tracciamento Bangumi.tv",

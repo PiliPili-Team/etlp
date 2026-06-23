@@ -215,7 +215,7 @@ export const tr: typeof zhCN = {
         "Etkin olduğunda her tamamlama aynı bölümü/filmi yeniden işaretler; devre dışı olduğunda kısıtlama ile tekilleştirme uygulanır: aşağıdaki kısıtlama penceresi içinde aynı öğe tekrar tamamlandığında yalnızca bir kez işaretlenir (önceki backfill bölümleri her zaman tekilleştirilir)",
     sys_trakt_dup_throttle: "Yeniden İşaretleme Kısıtlaması (saniye)",
     sys_trakt_dup_throttle_desc:
-        "'Yeniden İşaretlemeye İzin Ver' devre dışıyken etkin: aynı öğe bu kadar saniye içinde tekrar tamamlandığında yalnızca bir kez işaretlenir. Minimum 120 s; eski sürümlerden yükseltilen yapılandırmalar varsayılan olarak 300 s kullanır",
+        "'Yeniden İşaretlemeye İzin Ver' devre dışıyken etkin: aynı öğe bu kadar saniye içinde tekrar tamamlandığında yalnızca bir kez işaretlenir. Minimum 120 s",
     sys_trakt_dup_throttle_floored: "Kısıtlama 120 saniyeden az olamaz; 120'ye ayarlandı",
     sys_bangumi: "Bangumi.tv Takibi",
     sys_bangumi_sync_note:

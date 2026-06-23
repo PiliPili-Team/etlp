@@ -219,7 +219,7 @@ export const pl: typeof zhCN = {
         "Gdy włączone, każde ukończenie ponownie oznacza ten sam odcinek/film; gdy wyłączone, stosowana jest deduplikacja z ograniczeniem: ten sam element ukończony ponownie w oknie ograniczenia poniżej jest oznaczany tylko raz (wcześniejsze odcinki backfill są zawsze deduplikowane)",
     sys_trakt_dup_throttle: "Ograniczenie ponownego oznaczania (sekundy)",
     sys_trakt_dup_throttle_desc:
-        "Aktywne gdy 'Zezwalaj na ponowne oznaczanie' jest wyłączone: ten sam element ukończony ponownie w ciągu tej liczby sekund jest oznaczany tylko raz. Minimum 120 s; konfiguracje zaktualizowane ze starszych wersji domyślnie używają 300 s",
+        "Aktywne gdy 'Zezwalaj na ponowne oznaczanie' jest wyłączone: ten sam element ukończony ponownie w ciągu tej liczby sekund jest oznaczany tylko raz. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "Ograniczenie nie może być mniejsze niż 120 sekund; ustawiono na 120",
     sys_bangumi: "Śledzenie Bangumi.tv",

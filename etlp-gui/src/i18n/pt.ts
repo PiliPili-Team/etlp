@@ -219,7 +219,7 @@ export const pt: typeof zhCN = {
         "Se ativado, cada conclusão volta a marcar o mesmo episódio/filme; se desativado, aplica-se a desduplicação limitada: o mesmo item terminado novamente dentro da janela de limitação definida abaixo é marcado apenas uma vez (os episódios anteriores preenchidos são sempre desduplicados)",
     sys_trakt_dup_throttle: "Limitação de marcação duplicada (segundos)",
     sys_trakt_dup_throttle_desc:
-        "Eficaz quando «Permitir marcação duplicada» está desativado: o mesmo item terminado novamente dentro destes segundos é registado apenas uma vez. Mínimo 120 s; as configurações atualizadas de versões anteriores usam 300 s por predefinição",
+        "Eficaz quando «Permitir marcação duplicada» está desativado: o mesmo item terminado novamente dentro destes segundos é registado apenas uma vez. Mínimo 120 s",
     sys_trakt_dup_throttle_floored:
         "A limitação não pode ser inferior a 120 segundos; corrigida para 120",
     sys_bangumi: "Rastreio do Bangumi.tv",

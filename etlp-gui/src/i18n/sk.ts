@@ -217,7 +217,7 @@ export const sk: typeof zhCN = {
         "Keď je zapnuté, každé dokončenie znova označí tú istú epizódu/film; keď je vypnuté, použije sa odstránenie duplikátov s obmedzením: tá istá položka dokončená znova v rámci okna obmedzenia nastaveného nižšie sa označí iba raz (dodatočne doplnené skoršie epizódy sa vždy deduplikujú)",
     sys_trakt_dup_throttle: "Obmedzenie duplicitného označovania (sekundy)",
     sys_trakt_dup_throttle_desc:
-        "Účinné, keď je „Povoliť duplicitné označovanie“ vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s; konfigurácie aktualizované zo starších verzií predvolene používajú 300 s",
+        "Účinné, keď je „Povoliť duplicitné označovanie“ vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "Obmedzenie nemôže byť nižšie ako 120 sekúnd; opravené na 120",
     sys_bangumi: "Sledovanie Bangumi.tv",

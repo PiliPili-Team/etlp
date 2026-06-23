@@ -221,7 +221,7 @@ export const fr: typeof zhCN = {
         "Activé, chaque achèvement re-marque le même épisode/film ; désactivé, une déduplication limitée s'applique : le même élément terminé à nouveau dans la fenêtre de limitation définie ci-dessous n'est marqué qu'une fois (les épisodes antérieurs rattrapés sont toujours dédupliqués)",
     sys_trakt_dup_throttle: "Limitation du marquage en double (secondes)",
     sys_trakt_dup_throttle_desc:
-        "Actif lorsque « Autoriser le marquage en double » est désactivé : le même élément terminé à nouveau dans ce nombre de secondes n'est enregistré qu'une fois. Minimum 120 s ; les configurations mises à niveau depuis d'anciennes versions utilisent 300 s par défaut",
+        "Actif lorsque « Autoriser le marquage en double » est désactivé : le même élément terminé à nouveau dans ce nombre de secondes n'est enregistré qu'une fois. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "La limitation ne peut être inférieure à 120 secondes ; corrigée à 120",
     sys_bangumi: "Suivi Bangumi.tv",
