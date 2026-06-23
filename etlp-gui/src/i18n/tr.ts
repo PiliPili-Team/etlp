@@ -240,7 +240,7 @@ export const tr: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID Eşleştirmesi",
     sys_bangumi_map_desc:
-        "Bir dizi veya filmi tmdb/imdb/tvdb'den tam Bangumi nesnesine sabitle; en yüksek önceliğe sahip. Biçim: tmdb:10000|type:tv|S4 -> bgm:20000|E+59, 4. sezonu +59 bölüm ofseti ile 20000 nesnesine eşleştirir; film tmdb:10001|type:movie -> bgm:20001. Tür olmadan sezonden çıkarılır (sezon varlığı TV anlamına gelir, aksi halde film)",
+        "Bir dizi veya filmi tmdb/imdb/tvdb'den tam Bangumi nesnesine sabitle; en yüksek önceliğe sahip. Üç sezon biçimi: tam sezon (S4), kapalı bölüm aralığı (S5E1~S5E50, yalnızca bölüm 1–50), açık aralık (S5E51++, bölüm 51'den itibaren). Sağdaki E±N yerel bölüm indeksini Bangumi sıralama numarasına kaydırır. Örnekler: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Tür olmadan sezonden çıkarılır (sezon varlığı TV anlamına gelir, aksi halde film)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Kontrol Et ve Ekle",
     map_remove: "Kaldır",
@@ -250,6 +250,8 @@ export const tr: typeof zhCN = {
     map_err_provider_id: "Yanlış ID (tmdb/tvdb sayısal, imdb tt ile başlar)",
     map_err_type: "type tv veya movie olmalıdır",
     map_err_season: "Yanlış sezon; S4 gibi pozitif tam sayı bekleniyor",
+    map_err_ep_range:
+        "Geçersiz bölüm aralığı; S5E106~S5E157 (kapalı) veya S5E158++ (açık) kullanın; başlangıç bitiş değerinden büyük olamaz",
     map_err_subject: "Yanlış Bangumi nesne ID'si; pozitif tam sayı bekleniyor",
     map_err_offset: "Yanlış bölüm ofseti; E+59 veya E-3 gibi tam sayı bekleniyor",
     map_err_movie_season: "Filmde sezon veya bölüm ofseti olamaz",

@@ -237,7 +237,7 @@ export const ar: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ربط المعرّفات",
     sys_bangumi_map_desc:
-        "تثبيت مسلسل أو فيلم من tmdb/imdb/tvdb بموضوع Bangumi محدّد؛ ذو أولوية قصوى. الصيغة: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 يربط الموسم 4 بالموضوع 20000 بإزاحة حلقات +59؛ والفيلم هو tmdb:10001|type:movie -> bgm:20001. وبدون type يُستنتج من الموسم (وجود موسم يعني TV، وإلا فيلم)",
+        "تثبيت مسلسل أو فيلم من tmdb/imdb/tvdb بموضوع Bangumi محدّد؛ ذو أولوية قصوى. ثلاثة أشكال للموسم: موسم كامل (S4)، نطاق حلقات مغلق (S5E1~S5E50، الحلقات 1–50 فقط)، نطاق مفتوح (S5E51++، من الحلقة 51 فصاعداً). يُضيف E±N على اليمين إزاحة لرقم الحلقة. أمثلة: tmdb:10000|type:tv|S4 -> bgm:20000|E+59؛ tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001؛ tmdb:10000|type:tv|S5E51++ -> bgm:20002؛ tmdb:10001|type:movie -> bgm:30000. بدون type يُستنتج من الموسم (وجود موسم يعني TV، وإلا فيلم)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "تحقّق وأضف",
     map_remove: "إزالة",
@@ -247,6 +247,8 @@ export const ar: typeof zhCN = {
     map_err_provider_id: "معرّف خاطئ (tmdb/tvdb رقمي، imdb يبدأ بـ tt)",
     map_err_type: "يجب أن يكون type إما tv أو movie",
     map_err_season: "موسم خاطئ؛ المتوقع عدد صحيح موجب مثل S4",
+    map_err_ep_range:
+        "نطاق الحلقات خاطئ؛ استخدم S5E106~S5E157 (مغلق) أو S5E158++ (مفتوح)، ولا يجوز أن يكون البداية أكبر من النهاية",
     map_err_subject: "معرّف موضوع Bangumi خاطئ؛ المتوقع عدد صحيح موجب",
     map_err_offset: "إزاحة حلقات خاطئة؛ المتوقع عدد صحيح مثل E+59 أو E-3",
     map_err_movie_season: "لا يمكن أن يحمل الفيلم إزاحة موسم أو حلقة",

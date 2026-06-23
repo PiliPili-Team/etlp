@@ -243,7 +243,7 @@ export const sk: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "Mapovanie ID",
     sys_bangumi_map_desc:
-        "Pripnúť seriál alebo film tmdb/imdb/tvdb na presný predmet Bangumi; má najvyššiu prioritu. Formát: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 mapuje 4. sériu na predmet 20000 s posunom epizód +59; film je tmdb:10001|type:movie -> bgm:20001. Bez type sa odvodí zo série (séria znamená TV, inak film)",
+        "Pripnúť seriál alebo film tmdb/imdb/tvdb na presný predmet Bangumi; má najvyššiu prioritu. Tri formáty sezóny: celá sezóna (S4), uzavretý rozsah epizód (S5E1~S5E50, len epizódy 1–50), otvorený rozsah (S5E51++, od epizódy 51 ďalej). E±N vpravo posúva lokálny index epizódy na poradové číslo Bangumi. Príklady: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Bez type sa odvodí zo sezóny (sezóna znamená TV, inak film)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Skontrolovať a pridať",
     map_remove: "Odstrániť",
@@ -253,6 +253,8 @@ export const sk: typeof zhCN = {
     map_err_provider_id: "Nesprávne ID (tmdb/tvdb číselné, imdb začína na tt)",
     map_err_type: "type musí byť tv alebo movie",
     map_err_season: "Nesprávna séria; očakávané kladné celé číslo ako S4",
+    map_err_ep_range:
+        "Neplatný rozsah epizód; použite S5E106~S5E157 (uzavretý) alebo S5E158++ (otvorený); začiatok nesmie byť väčší ako koniec",
     map_err_subject: "Nesprávne ID predmetu Bangumi; očakávané kladné celé číslo",
     map_err_offset: "Nesprávny posun epizód; očakávané celé číslo ako E+59 alebo E-3",
     map_err_movie_season: "Film nemôže mať posun série ani epizódy",

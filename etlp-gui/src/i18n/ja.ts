@@ -236,7 +236,7 @@ export const ja: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID マッピング",
     sys_bangumi_map_desc:
-        "tmdb/imdb/tvdb の作品や映画を特定の Bangumi 作品に固定します。最優先で適用されます。形式：tmdb:10000|type:tv|S4 -> bgm:20000|E+59 はシーズン 4 をエピソードオフセット +59 で作品 20000 に対応付けます。映画は tmdb:10001|type:movie -> bgm:20001 です。type を省略するとシーズンから推測します（シーズンがあれば TV、なければ映画）",
+        "tmdb/imdb/tvdb の作品や映画を特定の Bangumi 作品に固定します。最優先で適用されます。三つのシーズン形式：シーズン全体（S4）、閉区間（S5E1~S5E50、エピソード 1–50 のみ）、開区間（S5E51++、エピソード 51 以降）。右側の E±N はローカルエピソード番号を Bangumi ソート番号にシフトします。例：tmdb:10000|type:tv|S4 -> bgm:20000|E+59；tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001；tmdb:10000|type:tv|S5E51++ -> bgm:20002；tmdb:10001|type:movie -> bgm:30000。type を省略するとシーズンから推測します（シーズンがあれば TV、なければ映画）",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "確認して追加",
     map_remove: "削除",
@@ -246,6 +246,8 @@ export const ja: typeof zhCN = {
     map_err_provider_id: "ID が不正です（tmdb/tvdb は数値、imdb は tt で始まる）",
     map_err_type: "type は tv または movie である必要があります",
     map_err_season: "シーズンが不正です。S4 のような正の整数が必要です",
+    map_err_ep_range:
+        "エピソード範囲が不正です。S5E106~S5E157（閉区間）または S5E158++（開区間）を使用し、開始が終了を超えてはなりません",
     map_err_subject: "Bangumi の作品 ID が不正です。正の整数が必要です",
     map_err_offset: "エピソードオフセットが不正です。E+59 や E-3 のような整数が必要です",
     map_err_movie_season: "映画にシーズンやエピソードオフセットは指定できません",

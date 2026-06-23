@@ -238,7 +238,7 @@ export const en: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID Mapping",
     sys_bangumi_map_desc:
-        "Pin a tmdb/imdb/tvdb show or movie to an exact Bangumi subject; takes top priority. Format: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 maps season 4 to subject 20000 with a +59 episode offset; a movie is tmdb:10001|type:movie -> bgm:20001. With no type it is inferred from the season (a season means TV, otherwise movie)",
+        "Pin a tmdb/imdb/tvdb show or movie to an exact Bangumi subject; takes top priority. Three season formats: whole season (S4), closed episode range (S5E106~S5E157, episodes 106–157 only), open range (S5E158++, episode 158 onwards). The RHS E±N shifts the local episode index to the Bangumi sort number. Examples: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. If type is omitted it is inferred from the presence of a season.",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Check & Add",
     map_remove: "Remove",
@@ -248,6 +248,8 @@ export const en: typeof zhCN = {
     map_err_provider_id: "Bad ID (tmdb/tvdb numeric, imdb starts with tt)",
     map_err_type: "type must be tv or movie",
     map_err_season: "Bad season; expected a positive integer like S4",
+    map_err_ep_range:
+        "Bad episode range; use S5E106~S5E157 (closed) or S5E158++ (open), and start must not exceed end",
     map_err_subject: "Bad Bangumi subject ID; expected a positive integer",
     map_err_offset: "Bad episode offset; expected an integer like E+59 or E-3",
     map_err_movie_season: "A movie cannot carry a season or episode offset",

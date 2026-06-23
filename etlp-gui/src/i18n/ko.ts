@@ -234,7 +234,7 @@ export const ko: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "ID 매핑",
     sys_bangumi_map_desc:
-        "tmdb/imdb/tvdb 작품이나 영화를 정확한 Bangumi 항목에 고정합니다. 최우선으로 적용됩니다. 형식: tmdb:10000|type:tv|S4 -> bgm:20000|E+59는 시즌 4를 에피소드 오프셋 +59로 항목 20000에 매핑합니다. 영화는 tmdb:10001|type:movie -> bgm:20001입니다. type이 없으면 시즌으로 추론합니다 (시즌이 있으면 TV, 없으면 영화)",
+        "tmdb/imdb/tvdb 작품이나 영화를 정확한 Bangumi 항목에 고정합니다. 최우선으로 적용됩니다. 세 가지 시즌 형식: 전체 시즌(S4), 닫힌 에피소드 범위(S5E1~S5E50, 에피소드 1–50만), 열린 범위(S5E51++, 에피소드 51부터). 오른쪽 E±N은 로컬 에피소드 인덱스를 Bangumi 정렬 번호로 이동합니다. 예: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. type이 없으면 시즌으로 추론합니다(시즌이 있으면 TV, 없으면 영화)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "확인 후 추가",
     map_remove: "제거",
@@ -244,6 +244,8 @@ export const ko: typeof zhCN = {
     map_err_provider_id: "잘못된 ID (tmdb/tvdb는 숫자, imdb는 tt로 시작)",
     map_err_type: "type은 tv 또는 movie여야 합니다",
     map_err_season: "잘못된 시즌. S4 같은 양의 정수여야 합니다",
+    map_err_ep_range:
+        "잘못된 에피소드 범위. S5E106~S5E157(닫힌 범위) 또는 S5E158++(열린 범위)를 사용하며, 시작이 끝보다 클 수 없습니다",
     map_err_subject: "잘못된 Bangumi 항목 ID. 양의 정수여야 합니다",
     map_err_offset: "잘못된 에피소드 오프셋. E+59 또는 E-3 같은 정수여야 합니다",
     map_err_movie_season: "영화에는 시즌이나 에피소드 오프셋을 지정할 수 없습니다",

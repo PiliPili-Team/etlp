@@ -247,7 +247,7 @@ export const es: typeof zhCN = {
     sys_bangumi_genres_placeholder: "动画|anime",
     sys_bangumi_map: "Asignación de ID",
     sys_bangumi_map_desc:
-        "Fijar una serie o película de tmdb/imdb/tvdb a un sujeto exacto de Bangumi; tiene la máxima prioridad. Formato: tmdb:10000|type:tv|S4 -> bgm:20000|E+59 asigna la temporada 4 al sujeto 20000 con un desplazamiento de episodio de +59; una película es tmdb:10001|type:movie -> bgm:20001. Sin type se deduce de la temporada (una temporada significa TV, de lo contrario película)",
+        "Fijar una serie o película de tmdb/imdb/tvdb a un sujeto exacto de Bangumi; tiene la máxima prioridad. Tres formatos de temporada: temporada completa (S4), rango de episodios cerrado (S5E1~S5E50, solo episodios 1–50), rango abierto (S5E51++, desde el episodio 51 en adelante). E±N a la derecha desplaza el índice de episodio local al número de orden de Bangumi. Ejemplos: tmdb:10000|type:tv|S4 -> bgm:20000|E+59; tmdb:10000|type:tv|S5E1~S5E50 -> bgm:20001; tmdb:10000|type:tv|S5E51++ -> bgm:20002; tmdb:10001|type:movie -> bgm:30000. Sin type se deduce de la temporada (una temporada significa TV, de lo contrario película)",
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Comprobar y añadir",
     map_remove: "Quitar",
@@ -257,6 +257,8 @@ export const es: typeof zhCN = {
     map_err_provider_id: "ID incorrecto (tmdb/tvdb numérico, imdb empieza por tt)",
     map_err_type: "type debe ser tv o movie",
     map_err_season: "Temporada incorrecta; se esperaba un entero positivo como S4",
+    map_err_ep_range:
+        "Rango de episodios incorrecto; usa S5E106~S5E157 (cerrado) o S5E158++ (abierto); el inicio no puede ser mayor que el final",
     map_err_subject: "ID de sujeto de Bangumi incorrecto; se esperaba un entero positivo",
     map_err_offset:
         "Desplazamiento de episodio incorrecto; se esperaba un entero como E+59 o E-3",
