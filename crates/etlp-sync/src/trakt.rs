@@ -716,8 +716,7 @@ impl TraktApi {
     /// provider ids, returning `None` when none of them resolve.
     ///
     /// Tries `tvdb` → `tmdb` → `imdb` in turn (tvdb matches episodes most
-    /// reliably). The resolved id lets [`sync_history`] de-duplicate the item
-    /// against the user's existing watch history before re-adding it.
+    /// reliably).
     pub async fn resolve_trakt_id(
         &self,
         kind: TraktItemKind,
@@ -727,6 +726,26 @@ impl TraktApi {
             TraktItemKind::Movie => "movie",
             TraktItemKind::Episode => "episode",
         };
+        self.resolve_id_for_type(type_str, ids).await
+    }
+
+    /// Resolve the numeric Trakt id for a **show** from its external provider
+    /// ids, returning `None` when none of them resolve.
+    ///
+    /// Used to address the whole-show watched-progress query
+    /// ([`Self::show_watched_episodes`]); episodes are then matched by season and
+    /// number rather than per-episode ids the media server often omits.
+    pub async fn resolve_show_trakt_id(&self, ids: &TraktIds) -> Option<u64> {
+        self.resolve_id_for_type("show", ids).await
+    }
+
+    /// Shared lookup: search `tvdb` → `tmdb` → `imdb` and return the first
+    /// `{type}.ids.trakt` that resolves for the given Trakt item type.
+    async fn resolve_id_for_type(
+        &self,
+        type_str: &str,
+        ids: &TraktIds,
+    ) -> Option<u64> {
         let lookups = [
             ("tvdb", ids.tvdb.map(|v| v.to_string())),
             ("tmdb", ids.tmdb.map(|v| v.to_string())),
@@ -753,6 +772,72 @@ impl TraktApi {
             }
         }
         None
+    }
+
+    /// Fetch the authenticated user's completed-episode progress for a show.
+    ///
+    /// Calls `GET /shows/{id}/progress/watched` (one request for the whole show)
+    /// and returns every `(season, number)` the user has completed. An empty
+    /// result means nothing watched, or the show is unknown to Trakt (`404`).
+    pub async fn show_watched_episodes(
+        &self,
+        show_trakt_id: u64,
+    ) -> Result<Vec<TraktEpisode>> {
+        let path = format!("shows/{show_trakt_id}/progress/watched");
+        let resp = crate::curl::send_logged(
+            DOMAIN,
+            self.http
+                .get(self.url(&path))
+                .query(&[("hidden", "false"), ("specials", "false")])
+                .headers(self.auth_headers()),
+        )
+        .await?;
+
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        if status.as_u16() == 404 {
+            return Ok(Vec::new());
+        }
+        if !status.is_success() {
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        let json: serde_json::Value =
+            serde_json::from_str(&body).map_err(SyncError::Json)?;
+
+        let mut out: Vec<TraktEpisode> = Vec::new();
+        let Some(seasons) = json.get("seasons").and_then(|v| v.as_array())
+        else {
+            return Ok(out);
+        };
+        for s in seasons {
+            let Some(season) =
+                s.get("number").and_then(serde_json::Value::as_u64)
+            else {
+                continue;
+            };
+            let Some(eps) = s.get("episodes").and_then(|v| v.as_array()) else {
+                continue;
+            };
+            for e in eps {
+                let completed = e
+                    .get("completed")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                let Some(number) =
+                    e.get("number").and_then(serde_json::Value::as_u64)
+                else {
+                    continue;
+                };
+                if let (true, Ok(season), Ok(number)) =
+                    (completed, u32::try_from(season), u32::try_from(number))
+                {
+                    out.push(TraktEpisode { season, number });
+                }
+            }
+        }
+        Ok(out)
     }
 }
 
