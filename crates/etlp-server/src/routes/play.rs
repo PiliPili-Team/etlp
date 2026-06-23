@@ -829,6 +829,18 @@ async fn emby_played_backfill(
         backfill = out.len(),
         "backfill: resolved played episodes"
     );
+    // Human-readable watched-history line for the configured media server, so
+    // the Trakt/Bangumi backfill can be traced against what the server reports.
+    debug!(
+        "{}: show \"{}\", {} watched on server: {}",
+        data.server.as_str(),
+        data.media_title,
+        season_label(data.season_number),
+        format_season_episodes(
+            data.season_number,
+            out.iter().map(|p| p.index).collect(),
+        ),
+    );
     out
 }
 
@@ -847,6 +859,32 @@ fn trakt_ids_from_provider_map(
 /// Whether any external id is present.
 fn has_any_trakt_id(ids: &etlp_sync::TraktIds) -> bool {
     ids.imdb.is_some() || ids.tmdb.is_some() || ids.tvdb.is_some()
+}
+
+/// Render a season number as the `S{n}` prefix used in backfill logs, falling
+/// back to `S?` when the season is unknown.
+fn season_label(season: Option<i64>) -> String {
+    match season {
+        Some(s) => format!("S{s}"),
+        None => "S?".to_owned(),
+    }
+}
+
+/// Render a season's episode numbers as `S{season}E[1, 2, 3]` for the watch-
+/// history diagnostic logs. The list is sorted and de-duplicated; an unknown
+/// season collapses the prefix to `E[…]`.
+fn format_season_episodes(season: Option<i64>, mut eps: Vec<i64>) -> String {
+    eps.sort_unstable();
+    eps.dedup();
+    let list = eps
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    match season {
+        Some(s) => format!("S{s}E[{list}]"),
+        None => format!("E[{list}]"),
+    }
 }
 
 /// Build a [`TraktHistoryItem`] from an episode/movie's external ids, or `None`
@@ -939,7 +977,7 @@ async fn fetch_series_trakt_ids(
 /// skips when either is absent or the netloc does not match `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{
-        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind, sync_history,
+        ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind,
     };
 
     if entries.is_empty() {
@@ -1086,6 +1124,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // first sync of a season records everything finished in the client.
         if kind == TraktItemKind::Episode {
             let cur_index = data.index.unwrap_or_default();
+            // Split the earlier played episodes by whether Trakt already has
+            // them, so only the genuine gap is re-marked and both sets are
+            // logged for diagnosis.
+            let mut already: Vec<i64> = Vec::new();
+            let mut to_mark: Vec<i64> = Vec::new();
             for ep in &emby_played_backfill(state, data).await {
                 if ep.index == cur_index {
                     continue;
@@ -1099,8 +1142,36 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 item.ids.trakt = api
                     .resolve_trakt_id(TraktItemKind::Episode, &item.ids)
                     .await;
-                backfill_items.push(item);
+                // An episode already in the Trakt history needs no re-mark; one
+                // without a resolved id is added unconditionally (a 404 history
+                // lookup is treated as "not watched").
+                let on_trakt = match item.ids.trakt {
+                    Some(id) => api
+                        .get_watch_history("episode", id)
+                        .await
+                        .map(|h| !h.is_empty())
+                        .unwrap_or(false),
+                    None => false,
+                };
+                if on_trakt {
+                    already.push(ep.index);
+                } else {
+                    to_mark.push(ep.index);
+                    backfill_items.push(item);
+                }
             }
+            debug!(
+                "trakt: show \"{}\", {} already watched on Trakt: {}",
+                data.media_title,
+                season_label(data.season_number),
+                format_season_episodes(data.season_number, already),
+            );
+            debug!(
+                "trakt: show \"{}\", {} to backfill: {}",
+                data.media_title,
+                season_label(data.season_number),
+                format_season_episodes(data.season_number, to_mark),
+            );
         }
     }
 
@@ -1130,11 +1201,13 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         }
     }
 
-    // Backfill: de-duplicated against the existing history before adding.
+    // Backfill: each item was already de-duplicated against the Trakt history
+    // above, so add the remaining gap directly.
     if !backfill_items.is_empty() {
-        match sync_history(&api, backfill_items).await {
-            Ok(n) => info!("trakt: backfilled {n} item(s)"),
-            Err(e) => warn!("trakt sync error: {e}"),
+        let n = backfill_items.len();
+        match api.add_to_history(&backfill_items).await {
+            Ok(_) => info!("trakt: backfilled {n} item(s)"),
+            Err(e) => warn!("trakt backfill add error: {e}"),
         }
     }
 }
