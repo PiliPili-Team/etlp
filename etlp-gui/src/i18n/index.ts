@@ -8,8 +8,9 @@ export type I18nKey = keyof Messages;
 export type T = (key: I18nKey, vars?: Record<string, string | number>) => string;
 
 // Each locale is a separate dynamic chunk — only the active one is loaded.
+// zh-CN is omitted: every locale file statically imports it for the spread,
+// so it always lands in the main bundle and is returned directly in loadMessages.
 const LOADERS: Record<string, () => Promise<Messages>> = {
-    "zh-CN": async () => (await import("./zh-CN")).zhCN,
     "zh-TW": async () => (await import("./zh-TW")).zhTW,
     en: async () => (await import("./en")).en,
     ja: async () => (await import("./ja")).ja,
@@ -33,6 +34,7 @@ const LOADERS: Record<string, () => Promise<Messages>> = {
 
 export async function loadMessages(lang: LangMode): Promise<Messages> {
     const locale = resolveLocale(lang);
+    if (locale === "zh-CN") return zhCN;
     return (await LOADERS[locale]?.()) ?? zhCN;
 }
 
