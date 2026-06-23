@@ -23,8 +23,8 @@ pub use bangumi::{
     sync_episodes,
 };
 pub use bangumi_map::{
-    MapError, MapProvider, SubjectMapping, match_mapping, parse_mapping,
-    parse_mappings,
+    EpRange, MapError, MapProvider, SubjectMapping, match_mapping,
+    parse_mapping, parse_mappings,
 };
 pub use error::{Result, SyncError};
 pub use trakt::{

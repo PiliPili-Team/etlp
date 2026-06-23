@@ -1368,6 +1368,17 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
 
+    // Cache for series-level provider IDs fetched from Emby (keyed by
+    // series_id). Emby stores the TMDB *series* id on the series item, not on
+    // individual episode items, so a direct lookup of the episode's
+    // ProviderIds["Tmdb"] returns an episode-specific id that never matches a
+    // user mapping written with the series TMDB id. Fetching the series item
+    // once — the same approach Trakt uses — gives us the correct series ids.
+    let mut series_provider_cache: std::collections::HashMap<
+        String,
+        std::collections::BTreeMap<String, String>,
+    > = std::collections::HashMap::new();
+
     for entry in entries {
         let data = entry.data;
         if !host_enabled(&data.netloc, &enable_host) {
@@ -1390,12 +1401,43 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
+        // Fetch series-level provider IDs so user mappings keyed on the
+        // TMDB/TVDB *series* id (e.g. `tmdb:79481`) match correctly. Episode
+        // items in Emby carry episode-specific provider ids, not the series id.
+        let series_provider_ids = if !mappings.is_empty()
+            && !data.series_id.is_empty()
+            && data.server.is_emby_like()
+        {
+            if let Some(ids) = series_provider_cache.get(&data.series_id) {
+                ids.clone()
+            } else {
+                let base_url = format!("{}://{}", data.scheme, data.netloc);
+                let emby = EmbyClient::new(
+                    state.http_client.clone(),
+                    &base_url,
+                    &data.api_key,
+                    &data.user_id,
+                );
+                let ids = emby
+                    .item(&data.series_id)
+                    .await
+                    .map(|item| item.provider_ids)
+                    .unwrap_or_default();
+                series_provider_cache
+                    .insert(data.series_id.clone(), ids.clone());
+                ids
+            }
+        } else {
+            std::collections::BTreeMap::new()
+        };
+
         let Some(target) = resolve_bangumi_subject(
             &api,
             data,
             title_fallback,
             &genres,
             &mappings,
+            &series_provider_ids,
             &mut cache,
             &cache_path,
         )
@@ -1506,35 +1548,53 @@ impl BangumiTarget {
 /// carries an episode offset) → `provider_ids["Bangumi"]` → cache → title search
 /// (gated to anime by `genres`). Returns `None` when the subject cannot be
 /// determined.
+///
+/// `series_provider_ids` should contain the provider IDs of the *series* item
+/// (fetched separately from Emby). For Emby, episode items carry episode-level
+/// provider IDs (episode-specific TMDB ids), while user mappings are written
+/// using the *series* TMDB/TVDB id. Merging both sets ensures the match works.
+#[allow(clippy::too_many_arguments)]
 async fn resolve_bangumi_subject(
     api: &etlp_sync::BangumiApi,
     data: &PlaybackData,
     title_fallback: bool,
     genres: &str,
     mappings: &[etlp_sync::SubjectMapping],
+    series_provider_ids: &std::collections::BTreeMap<String, String>,
     cache: &mut etlp_sync::SubjectCache,
     cache_path: &std::path::Path,
 ) -> Option<BangumiTarget> {
     use etlp_sync::{MapProvider, match_mapping};
 
     // Highest priority: an explicit user mapping pinned to this item by its
-    // tmdb/imdb/tvdb id (and season for TV).
+    // tmdb/imdb/tvdb id (and season + episode for TV).
     let is_movie = data.item_type.eq_ignore_ascii_case("movie");
     let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
-    let ids: Vec<(MapProvider, &str)> = [
+    let episode_u32 = data.index.and_then(|i| u32::try_from(i).ok());
+
+    // Build the provider id list from both series-level and episode-level ids.
+    // Series ids are checked first so a mapping keyed on the series TMDB id
+    // (the common case) is matched even when the episode item carries a
+    // different episode-specific TMDB id.
+    let mut ids: Vec<(MapProvider, &str)> = Vec::new();
+    for (key, prov) in [
         ("Tmdb", MapProvider::Tmdb),
         ("Imdb", MapProvider::Imdb),
         ("Tvdb", MapProvider::Tvdb),
-    ]
-    .into_iter()
-    .filter_map(|(key, prov)| {
-        data.provider_ids
+    ] {
+        // Prefer the series-level id; fall back to the episode-level id.
+        let v = series_provider_ids
             .get(key)
             .filter(|v| !v.is_empty())
-            .map(|v| (prov, v.as_str()))
-    })
-    .collect();
-    if let Some(m) = match_mapping(mappings, &ids, is_movie, season_u32) {
+            .or_else(|| data.provider_ids.get(key).filter(|v| !v.is_empty()));
+        if let Some(v) = v {
+            ids.push((prov, v.as_str()));
+        }
+    }
+
+    if let Some(m) =
+        match_mapping(mappings, &ids, is_movie, season_u32, episode_u32)
+    {
         // For TV, the offset must land the current episode on a positive
         // Bangumi sort. A non-positive result (e.g. `E-59` while watching ep 1)
         // means the mapping cannot serve this episode: skip it and fall back to
