@@ -452,12 +452,13 @@ pub fn validate_bangumi_mapping(
     let parsed =
         etlp_sync::parse_mapping(&line).map_err(|e| e.code().to_owned())?;
 
-    // Reject a duplicate key (same provider + id + kind + season).
+    // Reject a duplicate key (same provider + id + kind + season + ep_range).
     let collides = etlp_sync::parse_mappings(&existing).iter().any(|m| {
         m.provider == parsed.provider
             && m.provider_id == parsed.provider_id
             && m.is_movie == parsed.is_movie
             && m.season == parsed.season
+            && m.ep_range == parsed.ep_range
     });
     if collides {
         return Err("map_err_duplicate".to_owned());
