@@ -84,9 +84,10 @@ export const ko: typeof zhCN = {
     // Version prefer
     page_vp: "버전 환경설정",
     vp_priority: "버전 우선순위",
-    vp_keywords: "버전 키워드",
-    vp_keywords_desc: "미디어 버전 키워드를 순서대로 매칭 — 앞에 있는 항목이 우선합니다",
-    vp_keywords_placeholder: "예: VCB-Studio, ANi, DBD-Raws",
+    vp_keywords: "버전 우선 태그",
+    vp_keywords_desc:
+        "동일 에피소드에 여러 버전이 있을 경우, 목록 앞쪽의 태그와 일치하는 파일을 우선 선택합니다. 예: 「TeamX → GroupA → StreamB」 순으로 입력 시, 세 버전이 모두 있으면 TeamX를 선택; 없으면 GroupA; 이하 동일",
+    vp_keywords_placeholder: "예: TeamX, GroupA, StreamB",
     vp_playlist: "재생 목록에 적용",
     vp_playlist_desc: "재생 목록을 만들 때 버전 우선순위를 사용합니다",
     vp_subtitle: "자막 환경설정",
@@ -103,10 +104,10 @@ export const ko: typeof zhCN = {
     vp_last_ep: "마지막 화에서 비활성화",
     vp_last_ep_desc:
         "켜짐: 시즌 마지막 화를 재생할 때 재생 목록을 만들지 않고 그 화만 엽니다 (이후 없음). 꺼짐: 항상 재생 목록을 만듭니다 (현재 화 + 이후 화)",
-    vp_filter: "버전 필터 정규식",
+    vp_filter: "버전 지문",
     vp_filter_desc:
-        "이 정규식과 일치하는 버전만 재생 목록에 추가합니다 (빈 값 = 필터 없음)",
-    vp_filter_placeholder: "예: |VCB-Studio|ANi|간체",
+        "현재 재생 중인 파일 경로에서 버전 특징을 추출하여 「지문」으로 사용합니다. 동일한 특징 집합과 일치하는 에피소드만 재생 목록에 포함되어 시즌 전체가 같은 버전으로 고정됩니다. 예: 정규식에 「TeamX|1080p」가 포함되고 현재 파일에 이 두 특징이 일치하면, 두 단어를 모두 포함하는 에피소드만 포함 (비워두면 비활성화)",
+    vp_filter_placeholder: "예: |TeamX|1080p|CHS",
     vp_filter_valid: "유효한 정규식",
     vp_filter_invalid: "잘못된 정규식",
 
@@ -215,7 +216,7 @@ export const ko: typeof zhCN = {
         "스로틀은 120초 미만일 수 없습니다. 120으로 수정했습니다",
     sys_bangumi: "Bangumi.tv 추적",
     sys_bangumi_sync_note:
-        '재생이 끝나면 시청 기록이 자동으로 Bangumi에 동기화됩니다. 약 80% 이상에 도달하면 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 같은 시즌에서 미디어 서버에 이미 시청 완료된 다른 에피소드도 표시되며, 이미 있는 항목은 중복되지 않습니다. 시청 완료로 표시하면 해당 작품이 "보는 중"으로 설정됩니다.',
+        '재생이 끝나면 시청 기록이 자동으로 Bangumi에 동기화됩니다. ≥ 80%에 도달하면 현재 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 미디어 서버에 이미 시청 완료된 같은 시즌의 다른 에피소드도 추가되며, 기존 항목은 중복되지 않습니다. 표시할 항목이 없는 경우(< 80% 및 기록 없음) 실제 재생 시간이 ≥ 20초일 때만 작품을 "보는 중"으로 설정하고, 그렇지 않으면 건너뜁니다.',
     sys_bangumi_host: "호스트 활성화",
     sys_bangumi_host_desc:
         "쉼표로 구분된 호스트 키워드. 비우면 비활성화, 점 하나면 모두 활성화",
@@ -239,6 +240,22 @@ export const ko: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "확인 후 추가",
     map_remove: "제거",
+    map_group_add: "새 그룹",
+    map_group_name_placeholder: "그룹 이름",
+    map_group_add_confirm: "만들기",
+    map_group_delete: "그룹 삭제",
+    map_group_delete_confirm: "그룹 «{name}» 및 모든 매핑을 삭제하시겠습니까?",
+    map_group_default_label: "기본",
+    map_export: "내보내기",
+    map_export_done: "매핑 내보내기 완료",
+    map_import: "가져오기",
+    map_import_prefer: "가져온 항목 우선 (로컬 충돌 덮어쓰기)",
+    map_import_done: "가져오기 완료: {added}개 추가, {replaced}개 교체",
+    cfg_backup_busy: "백업 중…",
+    cfg_importing: "가져오는 중…",
+    bgm_mark_watching: "보는 중으로 표시",
+    bgm_mark_watching_desc:
+        "켜짐: 부분 시청도 작품을 보는 중으로 표시합니다. 꺼짐: 에피소드를 완전히 시청한 후에만 상태가 업데이트됩니다.",
     map_err_empty: "매핑을 입력하세요",
     map_err_format: '형식 오류 — "LHS -> RHS" 형식이어야 합니다',
     map_err_provider: "알 수 없는 소스. tmdb / imdb / tvdb만 지원됩니다",
@@ -373,8 +390,8 @@ export const ko: typeof zhCN = {
     // Download
     page_download: "다운로드",
     dl_folder: "다운로드 폴더",
-    dl_folder_desc: "미디어 파일 저장 위치. 비워 두면 기본값 (~/Downloads)",
+    dl_folder_desc: "비워두면 시스템 기본 폴더 사용",
     dl_browse: "찾아보기…",
-    dl_placeholder: "비워 두면 기본값 (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "경로가 존재하지 않습니다. 입력을 확인하세요",
 };

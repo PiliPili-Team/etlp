@@ -84,11 +84,11 @@ export const id: typeof zhCN = {
 
     // Version prefer
     page_vp: "Preferensi Versi",
-    vp_priority: "Prioritas Versi",
-    vp_keywords: "Kata Kunci Versi",
+    vp_priority: "Urutan Prioritas Versi",
+    vp_keywords: "Label Versi",
     vp_keywords_desc:
-        "Cocokkan kata kunci versi media secara berurutan — entri sebelumnya menang",
-    vp_keywords_placeholder: "mis. VCB-Studio, ANi, DBD-Raws",
+        "Jika ada beberapa file untuk episode yang sama, file yang jalurnya cocok dengan label paling atas dalam daftar akan dipilih. Contoh: «TeamX → GroupA → StreamB» — jika ketiga versi tersedia, TeamX dipilih; jika tidak, GroupA; dan seterusnya",
+    vp_keywords_placeholder: "mis. TeamX, GroupA, StreamB",
     vp_playlist: "Terapkan ke Playlist",
     vp_playlist_desc: "Gunakan preferensi versi saat membuat playlist",
     vp_subtitle: "Preferensi Subtitle",
@@ -106,10 +106,10 @@ export const id: typeof zhCN = {
     vp_last_ep: "Berhenti di Episode Terakhir",
     vp_last_ep_desc:
         "Aktif: saat memutar episode terakhir musim, daftar tidak dibuat dan hanya episode itu yang dibuka (tidak ada lagi setelahnya); Nonaktif: daftar selalu dibuat (saat ini + episode berikutnya)",
-    vp_filter: "Regex Filter Versi",
+    vp_filter: "Sidik Jari Versi",
     vp_filter_desc:
-        "Hanya versi yang cocok dengan regex ini yang ditambahkan ke playlist (kosong = tidak ada filter)",
-    vp_filter_placeholder: "mis. |VCB-Studio|ANi|Simplified",
+        "Mengekstrak fitur versi dari jalur file yang sedang diputar sebagai «sidik jari». Hanya episode yang jalurnya cocok dengan set fitur yang persis sama yang ditambahkan ke daftar putar, mengunci seluruh musim ke versi yang sama. Contoh: jika regex cocok dengan «TeamX» dan «1080p» di file saat ini, hanya episode yang berisi kedua kata tersebut yang disertakan (kosong = nonaktif)",
+    vp_filter_placeholder: "mis. |TeamX|1080p|CHS",
     vp_filter_valid: "Regex valid",
     vp_filter_invalid: "Regex tidak valid",
 
@@ -221,7 +221,7 @@ export const id: typeof zhCN = {
         "Throttle tidak boleh kurang dari 120 detik; diperbaiki menjadi 120",
     sys_bangumi: "Pelacakan Bangumi.tv",
     sys_bangumi_sync_note:
-        "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Bangumi: mencapai sekitar 80% atau lebih menandai episode sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditandai, tanpa menduplikasi yang sudah ada. Menandai sebagai ditonton juga mengatur karya ke status 'sedang menonton'.",
+        "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Bangumi: mencapai ≥ 80% menandai episode saat ini sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditambahkan, tanpa menduplikasi yang sudah ada. Jika tidak ada yang ditandai (< 80% dan tidak ada riwayat), karya diatur ke status 'sedang menonton' hanya jika durasi pemutaran efektif ≥ 20 detik, jika tidak dilewati untuk mencegah penambahan tidak sengaja.",
     sys_bangumi_host: "Aktifkan Host",
     sys_bangumi_host_desc:
         "Kata kunci host yang dipisahkan koma; biarkan kosong untuk menonaktifkan, titik mengaktifkan semua",
@@ -246,6 +246,22 @@ export const id: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Periksa dan Tambah",
     map_remove: "Hapus",
+    map_group_add: "Grup Baru",
+    map_group_name_placeholder: "Nama grup",
+    map_group_add_confirm: "Buat",
+    map_group_delete: "Hapus Grup",
+    map_group_delete_confirm: 'Hapus grup "{name}" beserta semua pemetaannya?',
+    map_group_default_label: "Default",
+    map_export: "Ekspor",
+    map_export_done: "Pemetaan diekspor",
+    map_import: "Impor",
+    map_import_prefer: "Utamakan yang diimpor (timpa konflik lokal)",
+    map_import_done: "Impor selesai: {added} ditambahkan, {replaced} diganti",
+    cfg_backup_busy: "Sedang mencadangkan…",
+    cfg_importing: "Sedang mengimpor…",
+    bgm_mark_watching: "Tandai Sedang Ditonton",
+    bgm_mark_watching_desc:
+        "Aktif: penayangan sebagian menandai karya sebagai sedang ditonton. Nonaktif: status diperbarui hanya setelah episode selesai ditonton.",
     map_err_empty: "Masukkan pemetaan",
     map_err_format: "Format salah — 'LHS -> RHS' diharapkan",
     map_err_provider: "Penyedia tidak dikenal; hanya tmdb / imdb / tvdb yang didukung",
@@ -384,8 +400,8 @@ export const id: typeof zhCN = {
     // Download
     page_download: "Unduhan",
     dl_folder: "Folder Unduhan",
-    dl_folder_desc: "Lokasi penyimpanan file. Kosong = default sistem (~/Downloads)",
+    dl_folder_desc: "Biarkan kosong untuk menggunakan folder default sistem",
     dl_browse: "Jelajahi…",
-    dl_placeholder: "Kosong untuk default (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Jalur tidak ada, periksa input Anda",
 };

@@ -85,11 +85,11 @@ export const it: typeof zhCN = {
 
     // Version prefer
     page_vp: "Preferenze versione",
-    vp_priority: "Priorità versione",
-    vp_keywords: "Parole chiave versione",
+    vp_priority: "Ordine di priorità versioni",
+    vp_keywords: "Etichette versione",
     vp_keywords_desc:
-        "Abbina le parole chiave di versione del file in ordine — vincono le voci precedenti",
-    vp_keywords_placeholder: "es. VCB-Studio, ANi, DBD-Raws",
+        "Se esistono più file per lo stesso episodio, vince quello il cui percorso corrisponde all'etichetta più in alto della lista. Esempio: «TeamX → GroupA → StreamB» — se tutte e tre le versioni esistono, si sceglie TeamX; altrimenti GroupA; e così via",
+    vp_keywords_placeholder: "es. TeamX, GroupA, StreamB",
     vp_playlist: "Applica alla playlist",
     vp_playlist_desc: "Usa la priorità di versione durante la creazione della playlist",
     vp_subtitle: "Preferenze sottotitoli",
@@ -108,10 +108,10 @@ export const it: typeof zhCN = {
     vp_last_ep: "Disattiva all'ultimo episodio",
     vp_last_ep_desc:
         "Attivo: riproducendo l'ultimo episodio della stagione, non crea alcuna playlist e apre solo quell'episodio (nulla lo segue); Disattivo: crea sempre la playlist (episodio corrente + successivi)",
-    vp_filter: "Regex filtro versione",
+    vp_filter: "Impronta digitale versione",
     vp_filter_desc:
-        "Solo le versioni che corrispondono a questa regex vengono aggiunte alla playlist (vuoto = nessun filtro)",
-    vp_filter_placeholder: "es. |VCB-Studio|ANi|Semplificato",
+        "Estrae caratteristiche di versione dal percorso del file in riproduzione come «impronta digitale». Solo gli episodi i cui percorsi corrispondono esattamente allo stesso insieme di caratteristiche vengono aggiunti alla playlist, bloccando l'intera stagione alla stessa versione. Esempio: se il regex corrisponde a «TeamX» e «1080p» nel file attuale, vengono inclusi solo gli episodi che contengono entrambe le parole (vuoto = disabilitato)",
+    vp_filter_placeholder: "es. |TeamX|1080p|CHS",
     vp_filter_valid: "Regex valida",
     vp_filter_invalid: "Regex non valida",
 
@@ -224,7 +224,7 @@ export const it: typeof zhCN = {
         "La limitazione non può essere inferiore a 120 secondi; corretta a 120",
     sys_bangumi: "Tracciamento Bangumi.tv",
     sys_bangumi_sync_note:
-        "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Bangumi: raggiungendo circa l'80% o più l'episodio viene contrassegnato come visto, al di sotto resta non contrassegnato; vengono contrassegnati anche gli altri episodi della stessa stagione già completati nel tuo media server, senza duplicare quelli già presenti. Contrassegnarlo come visto imposta inoltre l'opera su «in visione».",
+        "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Bangumi: raggiungere ≥ 80% contrassegna l'episodio corrente come visto, al di sotto non viene contrassegnato; vengono aggiunti anche gli altri episodi della stessa stagione già completati nel tuo server multimediale, senza duplicati. Se non c'è nulla da contrassegnare (< 80% e nessuna cronologia), l'opera viene impostata su «in visione» solo se il tempo di riproduzione effettivo è ≥ 20 secondi, altrimenti viene saltata per evitare aggiunte accidentali.",
     sys_bangumi_host: "Abilita host",
     sys_bangumi_host_desc:
         "Parole chiave host separate da virgole; lascia vuoto per disabilitare, un singolo punto abilita tutto",
@@ -249,6 +249,22 @@ export const it: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Verifica e aggiungi",
     map_remove: "Rimuovi",
+    map_group_add: "Nuovo gruppo",
+    map_group_name_placeholder: "Nome gruppo",
+    map_group_add_confirm: "Crea",
+    map_group_delete: "Elimina gruppo",
+    map_group_delete_confirm: 'Eliminare il gruppo "{name}" e tutte le sue voci?',
+    map_group_default_label: "Predefinito",
+    map_export: "Esporta",
+    map_export_done: "Mappature esportate",
+    map_import: "Importa",
+    map_import_prefer: "Preferisci importato (sovrascrivi conflitti locali)",
+    map_import_done: "Importazione completata: aggiunte {added}, sostituite {replaced}",
+    cfg_backup_busy: "Backup in corso…",
+    cfg_importing: "Importazione…",
+    bgm_mark_watching: "Segna come in visione",
+    bgm_mark_watching_desc:
+        "Attivo: una visione parziale marca l'opera come in visione. Disattivo: lo stato viene aggiornato solo dopo aver completato un episodio.",
     map_err_empty: "Inserisci una mappatura",
     map_err_format: "Formato errato — atteso «LHS -> RHS»",
     map_err_provider: "Origine sconosciuta; sono supportati solo tmdb / imdb / tvdb",
@@ -390,8 +406,8 @@ export const it: typeof zhCN = {
     // Download
     page_download: "Download",
     dl_folder: "Cartella download",
-    dl_folder_desc: "Posizione salvataggio file. Vuoto = predefinito (~/Downloads)",
+    dl_folder_desc: "Lasciare vuoto per usare la cartella predefinita del sistema",
     dl_browse: "Sfoglia…",
-    dl_placeholder: "Vuoto per predefinito (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Percorso inesistente, verifica l'input",
 };

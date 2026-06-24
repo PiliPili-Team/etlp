@@ -85,11 +85,11 @@ export const tr: typeof zhCN = {
 
     // Version prefer
     page_vp: "Sürüm Tercihi",
-    vp_priority: "Sürüm Önceliği",
-    vp_keywords: "Sürüm Anahtar Kelimeleri",
+    vp_priority: "Sürüm Öncelik Sırası",
+    vp_keywords: "Sürüm Etiketleri",
     vp_keywords_desc:
-        "Medya sürümü anahtar kelimelerini sırayla eşleştir — önceki girişler önceliklidir",
-    vp_keywords_placeholder: "örn. VCB-Studio, ANi, DBD-Raws",
+        "Aynı bölüm için birden fazla dosya olduğunda, yolu bu listedeki en üst etiketi içeren dosya seçilir. Örnek: «TeamX → GroupA → StreamB» — üç sürüm de mevcutsa TeamX seçilir; yoksa GroupA; ve devam eder",
+    vp_keywords_placeholder: "örn. TeamX, GroupA, StreamB",
     vp_playlist: "Oynatma Listesine Uygula",
     vp_playlist_desc: "Oynatma listesi oluştururken sürüm tercihini kullan",
     vp_subtitle: "Altyazı Tercihi",
@@ -106,10 +106,10 @@ export const tr: typeof zhCN = {
     vp_last_ep: "Son Bölümde Durdur",
     vp_last_ep_desc:
         "Açık: sezonun son bölümü oynatılırken liste oluşturulmaz ve yalnızca bu bölüm açılır (sonrası yok); Kapalı: liste her zaman oluşturulur (mevcut + sonraki bölümler)",
-    vp_filter: "Sürüm Filtresi Regex'i",
+    vp_filter: "Sürüm Parmak İzi",
     vp_filter_desc:
-        "Oynatma listesine yalnızca bu regex ile eşleşen sürümler eklenir (boş = filtre yok)",
-    vp_filter_placeholder: "örn. |VCB-Studio|ANi|Simplified",
+        "Geçerli oynatma dosyasının yolundan sürüm özelliklerini «parmak izi» olarak çıkarır. Yalnızca tam olarak aynı özellik kümesiyle eşleşen bölümler oynatma listesine eklenir, böylece tüm sezon aynı sürüme kilitlenir. Örnek: regex mevcut dosyada «TeamX» ve «1080p» ile eşleşirse, yalnızca her iki kelimeyi de içeren bölümler dahil edilir (boş bırakın = devre dışı)",
+    vp_filter_placeholder: "örn. |TeamX|1080p|CHS",
     vp_filter_valid: "Geçerli regex",
     vp_filter_invalid: "Geçersiz regex",
 
@@ -220,7 +220,7 @@ export const tr: typeof zhCN = {
     sys_trakt_dup_throttle_floored: "Kısıtlama 120 saniyeden az olamaz; 120'ye ayarlandı",
     sys_bangumi: "Bangumi.tv Takibi",
     sys_bangumi_sync_note:
-        "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: yaklaşık %80 veya daha fazlasına ulaşmak bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de işaretlenir, mevcut olanlar çoğaltılmaz. İzlendi olarak işaretlemek eseri 'izliyorum' durumuna da getirir.",
+        "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: ≥ %80'e ulaşmak mevcut bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de eklenir, mevcut olanlar çoğaltılmaz. İşaretlenecek bir şey yoksa (< %80 ve geçmiş yoksa), eserin durumu yalnızca gerçek oynatma süresi ≥ 20 saniyeyse 'izliyorum' olarak ayarlanır, aksi takdirde yanlışlıkla eklemeyi önlemek için atlanır.",
     sys_bangumi_host: "Ana Bilgisayarı Etkinleştir",
     sys_bangumi_host_desc:
         "Virgülle ayrılmış ana bilgisayar anahtar kelimeleri; devre dışı bırakmak için boş bırakın, nokta hepsini etkinleştirir",
@@ -245,6 +245,23 @@ export const tr: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Kontrol Et ve Ekle",
     map_remove: "Kaldır",
+    map_group_add: "Yeni Grup",
+    map_group_name_placeholder: "Grup adı",
+    map_group_add_confirm: "Oluştur",
+    map_group_delete: "Grubu Sil",
+    map_group_delete_confirm:
+        '"{name}" grubunu ve tüm eşleştirmelerini silmek istiyor musunuz?',
+    map_group_default_label: "Varsayılan",
+    map_export: "Dışa Aktar",
+    map_export_done: "Eşleştirmeler dışa aktarıldı",
+    map_import: "İçe Aktar",
+    map_import_prefer: "İçe aktarılanı tercih et (yerel çakışmaların üzerine yaz)",
+    map_import_done: "İçe aktarma tamamlandı: {added} eklendi, {replaced} değiştirildi",
+    cfg_backup_busy: "Yedekleniyor…",
+    cfg_importing: "İçe aktarılıyor…",
+    bgm_mark_watching: "İzleniyor Olarak İşaretle",
+    bgm_mark_watching_desc:
+        "Açık: kısmen izlenen bir bölüm eseri izleniyor olarak işaretler. Kapalı: durum yalnızca bir bölüm tamamlandığında güncellenir.",
     map_err_empty: "Eşleştirme girin",
     map_err_format: "Yanlış biçim — 'LHS -> RHS' bekleniyor",
     map_err_provider: "Bilinmeyen sağlayıcı; yalnızca tmdb / imdb / tvdb desteklenir",
@@ -380,9 +397,8 @@ export const tr: typeof zhCN = {
     // Download
     page_download: "İndirmeler",
     dl_folder: "İndirme Klasörü",
-    dl_folder_desc:
-        "Medya dosyalarının kaydedileceği yer. Boş = varsayılan (~/Downloads)",
+    dl_folder_desc: "Sistem varsayılanı için boş bırakın",
     dl_browse: "Gözat…",
-    dl_placeholder: "Boş bırakın = varsayılan (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Yol mevcut değil, lütfen girişi kontrol edin",
 };
