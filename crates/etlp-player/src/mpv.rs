@@ -929,7 +929,7 @@ mod tests {
         let cmd = build_args(&args, &ipc);
         let flat = cmd.join(" ");
         assert!(flat.contains("--fullscreen=yes"));
-        assert!(flat.contains("--no-audio"));
+        assert!(flat.contains("--mute=yes"));
     }
 
     #[test]
