@@ -10,7 +10,7 @@
 //! macOS deliberately uses XDG-style paths instead of `~/Library/Application Support`
 //! so configuration files are easy to locate and edit from a terminal.
 //!
-//! **Windows Portable mode** is detected when a `portable.txt` marker file or
+//! **Windows Portable mode** is detected when a `portable.bin` marker file or
 //! an existing `config/` directory is found alongside the executable. In that
 //! mode all paths are relative to the exe directory so the entire installation
 //! is self-contained and can be moved freely.
@@ -78,7 +78,7 @@ fn base_data() -> Option<PathBuf> {
 /// Returns the executable's parent directory when the process is running in
 /// Windows Portable mode, or `None` otherwise.
 ///
-/// Portable mode is declared by either a `portable.txt` marker file or an
+/// Portable mode is declared by either a `portable.bin` marker file or an
 /// existing `config/` directory alongside the exe. The marker-file form is
 /// preferred for fresh installations; the directory form ensures an existing
 /// portable install keeps working after the marker is removed.
@@ -88,7 +88,7 @@ fn base_data() -> Option<PathBuf> {
 fn portable_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_dir = exe.parent()?;
-    if exe_dir.join("portable.txt").exists() || exe_dir.join("config").is_dir()
+    if exe_dir.join("portable.bin").exists() || exe_dir.join("config").is_dir()
     {
         Some(exe_dir.to_path_buf())
     } else {
