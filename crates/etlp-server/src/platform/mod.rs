@@ -9,7 +9,8 @@ pub mod path;
 pub use dirs::{
     ENV_PORTABLE, ENV_RUNTIME, RuntimeMode, backup_dir, backup_dir_in,
     cache_dir, cache_dir_in, cache_subdir_in, config_dir, data_dir,
-    is_portable, log_dir, log_dir_in, migrate_layout, portable_update_dir,
+    is_portable, log_dir, log_dir_in, migrate_layout, portable_requested,
+    portable_update_dir,
 };
 pub use kill::kill_matching_processes;
 pub use path::{

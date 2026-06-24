@@ -16,6 +16,8 @@
 //! is self-contained and can be moved freely.
 
 use std::path::PathBuf;
+#[cfg(target_os = "windows")]
+use std::sync::OnceLock;
 
 const APP_NAME: &str = "etlp";
 
@@ -83,17 +85,72 @@ fn base_data() -> Option<PathBuf> {
 /// preferred for fresh installations; the directory form ensures an existing
 /// portable install keeps working after the marker is removed.
 ///
+/// Additionally the exe directory must be writable by the current process.
+/// Locations like `C:\` (root) or `C:\Program Files\` require elevation and
+/// cannot host self-contained data; in those cases the function returns `None`
+/// so config and data fall back to the standard `%APPDATA%` / `%LOCALAPPDATA%`
+/// paths where writes are always permitted.
+///
+/// The result is cached via [`OnceLock`] so the writability probe (one temp
+/// file create+delete) runs at most once per process.
+///
 /// Only ever returns `Some` on Windows; other platforms always return `None`.
 #[cfg(target_os = "windows")]
 fn portable_root() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-    if exe_dir.join("portable.bin").exists() || exe_dir.join("config").is_dir()
-    {
-        Some(exe_dir.to_path_buf())
-    } else {
-        None
+    static CACHE: OnceLock<Option<PathBuf>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let exe = std::env::current_exe().ok()?;
+            let exe_dir = exe.parent()?;
+            if exe_dir.join("portable.bin").exists()
+                || exe_dir.join("config").is_dir()
+            {
+                if is_dir_writable(exe_dir) {
+                    return Some(exe_dir.to_path_buf());
+                }
+            }
+            None
+        })
+        .clone()
+}
+
+/// Returns `true` when a temporary file can be created inside `dir`.
+///
+/// Used to verify that the exe directory is actually writable before committing
+/// to Windows Portable mode. The probe file is removed immediately on success.
+#[cfg(target_os = "windows")]
+fn is_dir_writable(dir: &std::path::Path) -> bool {
+    let probe = dir.join(".etlp_write_probe");
+    match std::fs::File::create(&probe) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
     }
+}
+
+/// Returns `true` when a `portable.bin` marker file exists alongside the
+/// current executable, indicating the user intends Windows Portable mode.
+///
+/// Unlike [`is_portable`], this does **not** check write access. It is used
+/// by the GUI to detect intent before falling back to `%APPDATA%`, so the app
+/// can request UAC elevation rather than silently switching paths.
+///
+/// Always `false` on non-Windows platforms.
+#[must_use]
+pub fn portable_requested() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.parent().map(|d| d.join("portable.bin").exists())
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "windows"))]
+    false
 }
 
 /// Returns `true` when the process is running in Windows Portable mode.
