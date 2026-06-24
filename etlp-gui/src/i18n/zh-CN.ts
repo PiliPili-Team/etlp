@@ -309,8 +309,8 @@ export const zhCN = {
     cfg_update_checking: "检查中…",
     cfg_update_available: "发现新版本 v{version}",
     cfg_update_latest: "已是最新版本 v{version}",
-    cfg_update_current_ver: "当前: v{version}",
-    cfg_update_latest_ver: "最新: v{version}",
+    cfg_update_current_ver: "当前版本",
+    cfg_update_latest_ver: "最新版本",
     cfg_update_up_to_date: "已是最新版",
     cfg_update_install: "下载并安装",
 

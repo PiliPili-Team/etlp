@@ -334,8 +334,8 @@ export const sk: typeof zhCN = {
     cfg_update_checking: "Kontroluje sa…",
     cfg_update_available: "Nová verzia v{version} nájdená",
     cfg_update_latest: "Máte najnovšiu verziu v{version}",
-    cfg_update_current_ver: "Aktuálna: v{version}",
-    cfg_update_latest_ver: "Najnovšia: v{version}",
+    cfg_update_current_ver: "Aktuálna verzia",
+    cfg_update_latest_ver: "Najnovšia verzia",
     cfg_update_up_to_date: "Aktuálna verzia",
     cfg_update_install: "Stiahnuť a nainštalovať",
 

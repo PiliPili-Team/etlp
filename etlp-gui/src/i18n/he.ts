@@ -319,8 +319,8 @@ export const he: typeof zhCN = {
     cfg_update_checking: "בודק…",
     cfg_update_available: "נמצאה גרסה חדשה v{version}",
     cfg_update_latest: "יש לך את הגרסה העדכנית v{version}",
-    cfg_update_current_ver: "נוכחי: v{version}",
-    cfg_update_latest_ver: "עדכני ביותר: v{version}",
+    cfg_update_current_ver: "גרסה נוכחית",
+    cfg_update_latest_ver: "גרסה אחרונה",
     cfg_update_up_to_date: "עדכני",
     cfg_update_install: "הורד והתקן",
 

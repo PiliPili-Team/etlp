@@ -331,8 +331,8 @@ export const tr: typeof zhCN = {
     cfg_update_checking: "Kontrol ediliyor…",
     cfg_update_available: "Yeni sürüm v{version} bulundu",
     cfg_update_latest: "En son sürüme sahipsiniz v{version}",
-    cfg_update_current_ver: "Mevcut: v{version}",
-    cfg_update_latest_ver: "En son: v{version}",
+    cfg_update_current_ver: "Mevcut sürüm",
+    cfg_update_latest_ver: "Son sürüm",
     cfg_update_up_to_date: "Güncel",
     cfg_update_install: "İndir ve kur",
 

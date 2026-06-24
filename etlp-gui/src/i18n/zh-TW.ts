@@ -310,8 +310,8 @@ export const zhTW: typeof zhCN = {
     cfg_update_checking: "檢查中…",
     cfg_update_available: "發現新版本 v{version}",
     cfg_update_latest: "已是最新版本 v{version}",
-    cfg_update_current_ver: "當前: v{version}",
-    cfg_update_latest_ver: "最新: v{version}",
+    cfg_update_current_ver: "當前版本",
+    cfg_update_latest_ver: "最新版本",
     cfg_update_up_to_date: "已是最新版",
     cfg_update_install: "下載並安裝",
 

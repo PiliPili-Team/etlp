@@ -328,8 +328,8 @@ export const ar: typeof zhCN = {
     cfg_update_checking: "جارٍ التحقق…",
     cfg_update_available: "عُثر على إصدار جديد v{version}",
     cfg_update_latest: "أنت على أحدث إصدار v{version}",
-    cfg_update_current_ver: "الحالي: v{version}",
-    cfg_update_latest_ver: "الأحدث: v{version}",
+    cfg_update_current_ver: "الإصدار الحالي",
+    cfg_update_latest_ver: "أحدث إصدار",
     cfg_update_up_to_date: "محدَّث",
     cfg_update_install: "تنزيل وتثبيت",
 

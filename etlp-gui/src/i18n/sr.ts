@@ -330,8 +330,8 @@ export const sr: typeof zhCN = {
     cfg_update_checking: "Провера…",
     cfg_update_available: "Пронађена нова верзија v{version}",
     cfg_update_latest: "Имате најновију верзију v{version}",
-    cfg_update_current_ver: "Тренутна: v{version}",
-    cfg_update_latest_ver: "Најновија: v{version}",
+    cfg_update_current_ver: "Тренутна верзија",
+    cfg_update_latest_ver: "Последња верзија",
     cfg_update_up_to_date: "Актуелна верзија",
     cfg_update_install: "Преузми и инсталирај",
 
