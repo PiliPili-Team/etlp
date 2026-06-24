@@ -123,10 +123,16 @@ export function applyDisplay(s: DisplaySettings) {
     root.setAttribute("data-theme", "dark");
     root.setAttribute("dir", isRTL(s.lang) ? "rtl" : "ltr");
 
+    // Express font-size as a zoom multiplier so ALL elements scale, including
+    // those with hardcoded px values. Default font size (13) gives a multiplier
+    // of 1 — backward-compatible with stored zoom preferences.
+    const effectiveZoom = s.zoom * (s.fontSize / 13);
     root.style.setProperty("--base-font-size", `${s.fontSize}px`);
-    root.style.setProperty("--app-zoom", String(s.zoom));
+    root.style.setProperty("--app-zoom", String(effectiveZoom));
 
-    const fontCss = s.fontFamily ? `"${s.fontFamily}"` : "-apple-system";
+    // On Windows / Linux the platform body class overrides font-family; we
+    // must set --app-font on :root so the var() in that rule resolves correctly.
+    const fontCss = s.fontFamily ? `"${s.fontFamily}"` : "system-ui";
     root.style.setProperty("--app-font", fontCss);
 
     const [, dark, soft] = ACCENT_PALETTES[s.accentColor ?? "blue"];
@@ -139,8 +145,7 @@ export function applyDisplay(s: DisplaySettings) {
         "[display] applied — " +
             `font: ${s.fontFamily || "(system)"} → css: ${fontCss} ` +
             `| computed font-family: ${computed.getPropertyValue("--app-font").trim()} ` +
-            `| size: ${s.fontSize}px ` +
-            `| zoom: ${s.zoom} ` +
+            `| size: ${s.fontSize}px, zoom: ${s.zoom} → effective: ${effectiveZoom.toFixed(3)} ` +
             `| lang: ${s.lang} (rtl=${isRTL(s.lang)}) ` +
             `| accent: ${s.accentColor}`,
     );
