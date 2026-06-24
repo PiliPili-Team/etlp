@@ -568,6 +568,29 @@ html[data-center-nav="true"] .sidebar {
     color: var(--text-2);
 }
 
+.map-url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.map-url-input {
+    flex: 1;
+    padding: 5px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-input, var(--bg-2));
+    color: var(--text-1);
+    font-size: 13px;
+    outline: none;
+    min-width: 0;
+}
+
+.map-url-input:focus {
+    border-color: var(--accent);
+}
+
 .map-groups {
     display: flex;
     flex-direction: column;
@@ -589,11 +612,42 @@ html[data-center-nav="true"] .sidebar {
     gap: 8px;
 }
 
+.map-group-header-clickable {
+    cursor: pointer;
+    border-radius: 6px;
+    margin: -4px;
+    padding: 4px;
+    transition: background 0.12s;
+}
+
+.map-group-header-clickable:hover {
+    background: var(--bg-hover, var(--bg-2));
+}
+
+.map-group-chevron {
+    flex-shrink: 0;
+    font-size: 9px;
+    color: var(--text-3);
+    width: 12px;
+    text-align: center;
+    transition: color 0.12s;
+}
+
 .map-group-name {
     flex: 1;
     font-weight: 600;
     font-size: 13px;
     color: var(--text);
+}
+
+.map-group-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-3);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1px 7px;
 }
 
 .map-group-delete {
@@ -1472,6 +1526,8 @@ html[data-center-nav="true"] .sidebar {
     line-height: 1.6;
     color: var(--text-2);
     margin-bottom: 22px;
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 .confirm-actions {
     display: flex;

@@ -2422,7 +2422,15 @@ function GroupedSubjectMap({
     const [preferImported, setPreferImported] = useState(false);
     const [exportBusy, setExportBusy] = useState(false);
     const [importBusy, setImportBusy] = useState(false);
+    const [showUrlInput, setShowUrlInput] = useState(false);
+    const [urlInput, setUrlInput] = useState("");
+    const [urlBusy, setUrlBusy] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
+    const [deleteItemTarget, setDeleteItemTarget] = useState<{
+        groupName: string;
+        idx: number;
+    } | null>(null);
 
     // Drag-to-reorder state (within-group and cross-group).
     const [dragItem, setDragItem] = useState<MapDragItem | null>(null);
@@ -2459,13 +2467,19 @@ function GroupedSubjectMap({
     );
 
     const handleRemove = (groupName: string, idx: number) => {
+        setDeleteItemTarget({ groupName, idx });
+    };
+
+    const doRemoveItem = () => {
+        if (!deleteItemTarget) return;
+        const { groupName, idx } = deleteItemTarget;
+        setDeleteItemTarget(null);
         const cur = getGroupMappings(groupName);
         const next = cur.filter((_, i) => i !== idx);
         const newGroups = groups
             .map((g) => (g.name === groupName ? { ...g, mappings: next } : g))
             .filter((g) => g.mappings.length > 0);
         save(newGroups);
-        // Keep empty non-default group visible so the user can add to it.
         if (groupName !== "#" && next.length === 0) {
             setExtraGroups((prev) =>
                 prev.includes(groupName) ? prev : [...prev, groupName],
@@ -2650,6 +2664,32 @@ function GroupedSubjectMap({
         }
     };
 
+    const handleImportUrl = async () => {
+        const trimmed = urlInput.trim();
+        if (!trimmed) return;
+        setUrlBusy(true);
+        try {
+            const result = await invoke<{
+                subject_map: string[];
+                added: number;
+                replaced: number;
+            }>("import_bangumi_map_url", { url: trimmed, preferImported });
+            onUpdate(result.subject_map);
+            addToast(
+                t("map_import_done", {
+                    added: result.added,
+                    replaced: result.replaced,
+                }),
+            );
+            setShowUrlInput(false);
+            setUrlInput("");
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setUrlBusy(false);
+        }
+    };
+
     return (
         <div className="row row-block">
             <div className="row-label">
@@ -2673,6 +2713,13 @@ function GroupedSubjectMap({
                     >
                         {importBusy ? t("cfg_importing") : t("map_import")}
                     </button>
+                    <button
+                        className="btn"
+                        disabled={urlBusy}
+                        onClick={() => setShowUrlInput((v) => !v)}
+                    >
+                        {t("map_import_url")}
+                    </button>
                     <label className="map-import-prefer">
                         <span className="toggle">
                             <input
@@ -2690,15 +2737,51 @@ function GroupedSubjectMap({
                     </label>
                 </div>
 
+                {/* URL import row */}
+                {showUrlInput && (
+                    <div className="map-url-row">
+                        <input
+                            className="map-url-input"
+                            type="url"
+                            placeholder={t("map_import_url_placeholder")}
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") void handleImportUrl();
+                                if (e.key === "Escape") {
+                                    setShowUrlInput(false);
+                                    setUrlInput("");
+                                }
+                            }}
+                            autoFocus
+                        />
+                        <button
+                            className="btn btn-primary"
+                            disabled={urlBusy || !urlInput.trim()}
+                            onClick={() => void handleImportUrl()}
+                        >
+                            {urlBusy ? t("cfg_importing") : t("map_import_url_confirm")}
+                        </button>
+                    </div>
+                )}
+
                 {/* Groups */}
                 <div className="map-groups">
                     {allGroupNames.map((groupName) => {
                         const mappings = getGroupMappings(groupName);
                         const isDefault = groupName === "#";
+                        const isCollapsed = collapsedGroups.has(groupName);
                         const isDropActive =
                             dragItem !== null &&
                             overTarget?.group === groupName &&
                             dragItem.group !== groupName;
+                        const toggleCollapse = () =>
+                            setCollapsedGroups((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(groupName)) next.delete(groupName);
+                                else next.add(groupName);
+                                return next;
+                            });
                         return (
                             <div
                                 key={groupName}
@@ -2706,24 +2789,38 @@ function GroupedSubjectMap({
                                 data-group-drop={groupName}
                                 data-group-count={String(mappings.length)}
                             >
-                                <div className="map-group-header">
+                                <div
+                                    className="map-group-header map-group-header-clickable"
+                                    onClick={toggleCollapse}
+                                >
+                                    <span className="map-group-chevron">
+                                        {isCollapsed ? "▶" : "▼"}
+                                    </span>
                                     <span className="map-group-name">
                                         {isDefault
                                             ? `# ${t("map_group_default_label")}`
                                             : groupName}
                                     </span>
+                                    {isCollapsed && mappings.length > 0 && (
+                                        <span className="map-group-count">
+                                            {mappings.length}
+                                        </span>
+                                    )}
                                     {!isDefault && (
                                         <button
                                             className="map-group-delete"
                                             title={t("map_group_delete")}
-                                            onClick={() => handleDeleteGroup(groupName)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteGroup(groupName);
+                                            }}
                                         >
                                             {t("cfg_delete")}
                                         </button>
                                     )}
                                 </div>
 
-                                {mappings.length > 0 && (
+                                {!isCollapsed && mappings.length > 0 && (
                                     <div className="map-list">
                                         {mappings.map((m, idx) => {
                                             const isDraggingThis =
@@ -2774,12 +2871,14 @@ function GroupedSubjectMap({
                                     </div>
                                 )}
 
-                                <GroupAddRow
-                                    allExisting={items}
-                                    onAdd={(canonical) =>
-                                        handleAddToGroup(groupName, canonical)
-                                    }
-                                />
+                                {!isCollapsed && (
+                                    <GroupAddRow
+                                        allExisting={items}
+                                        onAdd={(canonical) =>
+                                            handleAddToGroup(groupName, canonical)
+                                        }
+                                    />
+                                )}
                             </div>
                         );
                     })}
@@ -2837,6 +2936,23 @@ function GroupedSubjectMap({
                     danger
                     onConfirm={doDeleteGroup}
                     onCancel={() => setDeleteGroupTarget(null)}
+                />
+            )}
+
+            {deleteItemTarget && (
+                <ConfirmModal
+                    title={t("map_item_delete_title")}
+                    message={t("map_item_delete_confirm", {
+                        entry:
+                            getGroupMappings(deleteItemTarget.groupName)[
+                                deleteItemTarget.idx
+                            ] ?? "",
+                    })}
+                    confirmLabel={t("cfg_delete")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    danger
+                    onConfirm={doRemoveItem}
+                    onCancel={() => setDeleteItemTarget(null)}
                 />
             )}
         </div>
