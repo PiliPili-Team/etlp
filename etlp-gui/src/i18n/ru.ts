@@ -334,8 +334,8 @@ export const ru: typeof zhCN = {
     cfg_update_checking: "Проверка…",
     cfg_update_available: "Найдена новая версия v{version}",
     cfg_update_latest: "У вас последняя версия v{version}",
-    cfg_update_current_ver: "Текущая: v{version}",
-    cfg_update_latest_ver: "Последняя: v{version}",
+    cfg_update_current_ver: "Текущая версия",
+    cfg_update_latest_ver: "Последняя версия",
     cfg_update_up_to_date: "Актуальная версия",
     cfg_update_install: "Скачать и установить",
 

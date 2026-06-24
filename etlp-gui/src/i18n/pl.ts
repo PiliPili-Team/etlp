@@ -339,8 +339,8 @@ export const pl: typeof zhCN = {
     cfg_update_checking: "Sprawdzanie…",
     cfg_update_available: "Znaleziono nową wersję v{version}",
     cfg_update_latest: "Masz najnowszą wersję v{version}",
-    cfg_update_current_ver: "Aktualna: v{version}",
-    cfg_update_latest_ver: "Najnowsza: v{version}",
+    cfg_update_current_ver: "Bieżąca wersja",
+    cfg_update_latest_ver: "Najnowsza wersja",
     cfg_update_up_to_date: "Aktualna wersja",
     cfg_update_install: "Pobierz i zainstaluj",
 

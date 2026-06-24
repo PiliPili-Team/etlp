@@ -325,8 +325,8 @@ export const th: typeof zhCN = {
     cfg_update_checking: "กำลังตรวจสอบ…",
     cfg_update_available: "พบเวอร์ชันใหม่ v{version}",
     cfg_update_latest: "คุณมีเวอร์ชันล่าสุด v{version}",
-    cfg_update_current_ver: "ปัจจุบัน: v{version}",
-    cfg_update_latest_ver: "ล่าสุด: v{version}",
+    cfg_update_current_ver: "เวอร์ชันปัจจุบัน",
+    cfg_update_latest_ver: "เวอร์ชันล่าสุด",
     cfg_update_up_to_date: "เป็นเวอร์ชันล่าสุดแล้ว",
     cfg_update_install: "ดาวน์โหลดและติดตั้ง",
 

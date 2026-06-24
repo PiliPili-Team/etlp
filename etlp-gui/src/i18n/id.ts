@@ -334,8 +334,8 @@ export const id: typeof zhCN = {
     cfg_update_checking: "Memeriksa…",
     cfg_update_available: "Versi baru v{version} ditemukan",
     cfg_update_latest: "Anda memiliki versi terbaru v{version}",
-    cfg_update_current_ver: "Saat ini: v{version}",
-    cfg_update_latest_ver: "Terbaru: v{version}",
+    cfg_update_current_ver: "Versi saat ini",
+    cfg_update_latest_ver: "Versi terbaru",
     cfg_update_up_to_date: "Sudah terkini",
     cfg_update_install: "Unduh & Pasang",
 

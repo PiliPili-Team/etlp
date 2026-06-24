@@ -326,8 +326,8 @@ export const ja: typeof zhCN = {
     cfg_update_checking: "確認中…",
     cfg_update_available: "新しいバージョン v{version} が見つかりました",
     cfg_update_latest: "最新バージョン v{version} を使用しています",
-    cfg_update_current_ver: "現在: v{version}",
-    cfg_update_latest_ver: "最新: v{version}",
+    cfg_update_current_ver: "現在のバージョン",
+    cfg_update_latest_ver: "最新バージョン",
     cfg_update_up_to_date: "最新版です",
     cfg_update_install: "ダウンロードしてインストール",
 

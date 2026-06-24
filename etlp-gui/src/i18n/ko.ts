@@ -325,8 +325,8 @@ export const ko: typeof zhCN = {
     cfg_update_checking: "확인 중…",
     cfg_update_available: "새 버전 v{version}을(를) 찾았습니다",
     cfg_update_latest: "최신 버전 v{version}을(를) 사용 중입니다",
-    cfg_update_current_ver: "현재: v{version}",
-    cfg_update_latest_ver: "최신: v{version}",
+    cfg_update_current_ver: "현재 버전",
+    cfg_update_latest_ver: "최신 버전",
     cfg_update_up_to_date: "최신 버전입니다",
     cfg_update_install: "다운로드 및 설치",
 

@@ -336,8 +336,8 @@ export const uk: typeof zhCN = {
     cfg_update_checking: "Перевірка…",
     cfg_update_available: "Знайдено нову версію v{version}",
     cfg_update_latest: "У вас найновіша версія v{version}",
-    cfg_update_current_ver: "Поточна: v{version}",
-    cfg_update_latest_ver: "Остання: v{version}",
+    cfg_update_current_ver: "Поточна версія",
+    cfg_update_latest_ver: "Остання версія",
     cfg_update_up_to_date: "Актуальна версія",
     cfg_update_install: "Завантажити та встановити",
 
