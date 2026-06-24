@@ -21,7 +21,7 @@ use etlp_net::{
     update_progress,
 };
 use tokio::sync::mpsc::UnboundedSender;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::dandan::DanDanHandle;
 use crate::mpc::MpcHandle;
@@ -686,8 +686,14 @@ pub async fn redirect_next_ep_loop(
         return;
     }
 
-    // Ordered key list preserves the playlist insertion order.
-    let keys: Vec<String> = playlist.keys().cloned().collect();
+    // Sort keys by PlaybackData::order so the sequence matches the mpv
+    // playlist order. HashMap iteration order is non-deterministic; using
+    // it directly causes next-episode lookups to pick the wrong entry,
+    // leading to a permanent "filename mismatch" on every 5-second poll.
+    let mut keys: Vec<String> = playlist.keys().cloned().collect();
+    keys.sort_by_key(|k| {
+        playlist.get(k).and_then(|e| e.order).unwrap_or(i64::MAX)
+    });
     let mut done: HashSet<String> = HashSet::new();
 
     'outer: loop {
@@ -795,7 +801,12 @@ pub async fn redirect_next_ep_loop(
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             if next_filename != next_ep.stream_url {
-                info!("redirect_next_ep: next entry filename mismatch, skip");
+                debug!(
+                    next_key = ?next_key,
+                    expected = %next_ep.stream_url,
+                    got = %next_filename,
+                    "redirect_next_ep: next entry filename mismatch, skip"
+                );
                 continue;
             }
 
