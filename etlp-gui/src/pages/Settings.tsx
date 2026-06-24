@@ -1669,7 +1669,7 @@ function DownloadSection({
     return (
         <>
             <div className="page-title">{t("page_download")}</div>
-            <div className="section">
+            <div className="settings-group">
                 <div
                     className="row"
                     style={{
@@ -1728,6 +1728,14 @@ function DownloadSection({
                         </div>
                     )}
                 </div>
+                <NumberRow
+                    label={t("sys_speed_limit")}
+                    desc={t("sys_speed_limit_desc")}
+                    value={cfg.speed_limit_mb}
+                    min={0}
+                    onCommit={(v) => update("gui", "speed_limit_mb", v)}
+                />
+                <div className="settings-note">{t("sys_download_note")}</div>
             </div>
         </>
     );
@@ -2050,19 +2058,6 @@ function SystemSection({
                     checked={cfg.disable_progress_report}
                     onChange={(v) => update("dev", "disable_progress_report", v)}
                 />
-            </div>
-
-            {/* Download */}
-            <div className="settings-group-title">{t("sys_download")}</div>
-            <div className="settings-group">
-                <NumberRow
-                    label={t("sys_speed_limit")}
-                    desc={t("sys_speed_limit_desc")}
-                    value={cfg.speed_limit_mb}
-                    min={0}
-                    onCommit={(v) => update("gui", "speed_limit_mb", v)}
-                />
-                <div className="settings-note">{t("sys_download_note")}</div>
             </div>
 
             {/* Cache */}
