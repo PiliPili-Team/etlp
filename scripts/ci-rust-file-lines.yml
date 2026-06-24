@@ -1,0 +1,62 @@
+# ci-rust-file-lines.yml
+#
+# NOTE: This file lives in scripts/ temporarily.
+# Move it to .github/workflows/ once all existing violations have been resolved,
+# and update the two `paths:` filters below to reference its new location.
+
+name: CI Rust File Lines
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.rs'
+      - '.rustlint.toml'
+      - 'scripts/check-file-lines.sh'
+      - 'scripts/ci-rust-file-lines.yml'    # update path when moved
+  pull_request:
+    paths:
+      - '**/*.rs'
+      - '.rustlint.toml'
+      - 'scripts/check-file-lines.sh'
+      - 'scripts/ci-rust-file-lines.yml'    # update path when moved
+
+concurrency:
+  group: ci-rust-file-lines-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: File Line Count
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect changed Rust files
+        id: changed
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+
+          # First push to a branch has no base commit; scan all .rs files.
+          if [[ -z "${BASE}" || \
+                "${BASE}" == "0000000000000000000000000000000000000000" ]]; then
+            find . -name "*.rs" -not -path "*/target/*" | sort \
+              > changed-rs-files.txt
+          else
+            git diff --name-only "${BASE}" "${{ github.sha }}" \
+              | grep '\.rs$' | sort > changed-rs-files.txt || true
+          fi
+
+          COUNT=$(wc -l < changed-rs-files.txt | tr -d ' ')
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Collected ${COUNT} changed Rust file(s)."
+
+      - name: Check file line counts
+        if: steps.changed.outputs.count != '0'
+        run: bash scripts/check-file-lines.sh changed-rs-files.txt

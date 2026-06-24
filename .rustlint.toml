@@ -1,0 +1,7 @@
+# .rustlint.toml
+# Configuration for scripts/check-file-lines.sh.
+# This file controls custom lint rules that are not covered by clippy or rustfmt.
+
+# Maximum number of lines allowed per Rust source file.
+# Files exceeding this limit cause CI to fail.
+max_file_lines = 500
