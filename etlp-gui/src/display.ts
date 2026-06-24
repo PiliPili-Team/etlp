@@ -122,14 +122,26 @@ export function applyDisplay(s: DisplaySettings) {
     // Light mode is not yet ready; force dark unconditionally.
     root.setAttribute("data-theme", "dark");
     root.setAttribute("dir", isRTL(s.lang) ? "rtl" : "ltr");
+
     root.style.setProperty("--base-font-size", `${s.fontSize}px`);
     root.style.setProperty("--app-zoom", String(s.zoom));
-    root.style.setProperty(
-        "--app-font",
-        s.fontFamily ? `"${s.fontFamily}"` : "-apple-system",
-    );
+
+    const fontCss = s.fontFamily ? `"${s.fontFamily}"` : "-apple-system";
+    root.style.setProperty("--app-font", fontCss);
+
     const [, dark, soft] = ACCENT_PALETTES[s.accentColor ?? "blue"];
     root.style.setProperty("--accent", dark);
     root.style.setProperty("--accent-soft", soft);
     root.setAttribute("data-center-nav", s.centerNav ? "true" : "false");
+
+    const computed = getComputedStyle(root);
+    console.debug(
+        "[display] applied — " +
+            `font: ${s.fontFamily || "(system)"} → css: ${fontCss} ` +
+            `| computed font-family: ${computed.getPropertyValue("--app-font").trim()} ` +
+            `| size: ${s.fontSize}px ` +
+            `| zoom: ${s.zoom} ` +
+            `| lang: ${s.lang} (rtl=${isRTL(s.lang)}) ` +
+            `| accent: ${s.accentColor}`,
+    );
 }
