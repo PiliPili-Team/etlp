@@ -118,9 +118,9 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         port: cfg.dandan.port,
         api_key: cfg.dandan.api_key.clone(),
     };
-    // `item_limit == 0` means "no cap": append the whole season.
+    // `item_limit == 0` means "default 100 episodes".
     let playlist_limit = match cfg.playlist.item_limit {
-        0 => usize::MAX,
+        0 => 100,
         n => n as usize,
     };
     let disable_progress_report = cfg.dev.disable_progress_report;
@@ -213,9 +213,26 @@ async fn run_player_chain(
                 });
             debug!(cur_idx, "current episode index in assembled playlist");
 
+            // Window the episode list around the current episode.
+            // Fill forward first, then backfill with earlier episodes up to
+            // the limit. Total entries never exceeds `cfg.playlist_limit`.
+            let (window_start, windowed_cur_idx) =
+                if cfg.playlist_limit >= episode_list.len() {
+                    (0, cur_idx)
+                } else {
+                    let limit = cfg.playlist_limit;
+                    let forward = (episode_list.len() - cur_idx - 1)
+                        .min(limit.saturating_sub(1));
+                    let backward = cur_idx.min(limit.saturating_sub(1) - forward);
+                    (cur_idx - backward, backward)
+                };
+            let window_end =
+                (window_start + cfg.playlist_limit).min(episode_list.len());
+            let windowed = &episode_list[window_start..window_end];
+
             let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
             let mut m3u8 = String::from("#EXTM3U\n");
-            for ep in &episode_list {
+            for ep in windowed {
                 let title = ep.media_title.replace(['\n', '\r'], " ");
                 m3u8.push_str(&format!(
                     "#EXTINF:-1,{title}\n{}\n",
@@ -228,11 +245,15 @@ async fn run_player_chain(
                     metrics.m3u8_write_ms = Some(m3u8_span.finish());
                     debug!(
                         path = %m3u8_path.display(),
-                        entries = episode_list.len(),
-                        cur_idx,
+                        entries = windowed.len(),
+                        cur_idx = windowed_cur_idx,
                         "M3U8 playlist written for launch"
                     );
-                    (m3u8_path.display().to_string(), Some(cur_idx), cur_idx)
+                    (
+                        m3u8_path.display().to_string(),
+                        Some(windowed_cur_idx),
+                        cur_idx,
+                    )
                 }
                 Err(e) => {
                     let _ = m3u8_span.finish();

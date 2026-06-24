@@ -179,16 +179,16 @@ impl Default for DevSection {
     }
 }
 
-/// Upper bound for `[playlist] item_limit`; mirrors the GUI's maximum. `0` keeps
-/// its special "no limit" meaning and is preserved as-is when clamping. Enforced
-/// at load time so a hand-edited config cannot exceed the supported cap.
+/// Upper bound for `[playlist] item_limit`; mirrors the GUI's maximum. `0` means
+/// "use default 100 episodes" at runtime. Enforced at load time so a hand-edited
+/// config cannot exceed the supported cap.
 pub const ITEM_LIMIT_MAX: u32 = 100;
 
 /// `[playlist]` section — playlist assembly options.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct PlaylistSection {
-    /// Maximum episodes to append to the player playlist (`0` = no limit).
+    /// Maximum episodes in the player playlist (`0` = default 100).
     pub item_limit: u32,
     /// Regex that selects one version per episode (empty = no filter).
     pub version_filter: String,
@@ -197,7 +197,7 @@ pub struct PlaylistSection {
 impl Default for PlaylistSection {
     fn default() -> Self {
         Self {
-            item_limit: 10,
+            item_limit: 0,
             version_filter: String::new(),
         }
     }
@@ -541,8 +541,10 @@ impl Config {
             .clamp(LOG_MAX_FILES_MIN, LOG_MAX_FILES_MAX);
 
         let mut playlist = raw.playlist;
-        // `0` means "no limit", so only the upper bound is enforced.
-        playlist.item_limit = playlist.item_limit.min(ITEM_LIMIT_MAX);
+        // `0` means "default 100 episodes" at runtime; cap non-zero values.
+        if playlist.item_limit > 0 {
+            playlist.item_limit = playlist.item_limit.min(ITEM_LIMIT_MAX);
+        }
 
         let mut trakt = raw.trakt;
         trakt.duplicate_throttle_secs = trakt
@@ -637,7 +639,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.dev.log_max_size_mb, 50);
         assert_eq!(cfg.dev.log_max_files, 7);
         assert!(cfg.dev.kill_process_at_start);
-        assert_eq!(cfg.playlist.item_limit, 10);
+        assert_eq!(cfg.playlist.item_limit, 0);
         assert_eq!(cfg.dandan.port, 8080);
         assert_eq!(cfg.gui.speed_limit_mb, 0);
         assert!(cfg.dev.version_prefer.is_empty());
@@ -708,7 +710,8 @@ speed_dummy = 1.5
         assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
         assert_eq!(cfg.playlist.item_limit, ITEM_LIMIT_MAX);
 
-        // `item_limit = 0` keeps its "no limit" meaning rather than being raised.
+        // `item_limit = 0` means "use default 100 at runtime"; the stored value
+        // stays 0 (it is not raised to ITEM_LIMIT_MAX at load time).
         write_config(dir.path(), "config.toml", "[playlist]\nitem_limit = 0\n");
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg.playlist.item_limit, 0);
