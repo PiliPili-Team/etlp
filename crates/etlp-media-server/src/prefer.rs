@@ -74,10 +74,21 @@ fn pick_by_rules<'a>(
             let prefix = joined.get(..m.start()).unwrap_or("");
             let index = prefix.matches(JOIN).count();
             if let Some(picked) = sources.get(index) {
+                debug!(
+                    "pick_by_rules: rule {:?} matched {:?} in joined {:?} -> {:?}",
+                    rule,
+                    m.as_str(),
+                    joined,
+                    picked.path.as_deref().unwrap_or("?")
+                );
                 return Some(picked);
             }
         }
     }
+    debug!(
+        "pick_by_rules: no rule matched joined {:?}, falling back to first",
+        joined
+    );
     None
 }
 

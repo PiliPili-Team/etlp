@@ -15,7 +15,7 @@
 //! The full `version_filter` orchestration (official-rule / clean-path / ini
 //! regex passes) is ported separately.
 
-use regex::Regex;
+use regex::RegexBuilder;
 use tracing::debug;
 
 use crate::dto::Item;
@@ -211,14 +211,18 @@ fn sequence_from_current(
 /// after the first `E\d\d?`, dropped when too short) used by the builtin pass.
 fn name_rules(file_path: &str) -> (Option<&str>, Option<String>) {
     let official = file_path.rsplit_once(" - ").map(|(_, tail)| tail);
-    let clean = Regex::new(r"E\d\d?").ok().and_then(|re| {
-        let rest = re.splitn(file_path, 2).last().unwrap_or("").trim();
-        if rest.chars().count() <= 5 {
-            None
-        } else {
-            Some(rest.to_owned())
-        }
-    });
+    let clean = RegexBuilder::new(r"E\d\d?")
+        .case_insensitive(true)
+        .build()
+        .ok()
+        .and_then(|re| {
+            let rest = re.splitn(file_path, 2).last().unwrap_or("").trim();
+            if rest.chars().count() <= 5 {
+                None
+            } else {
+                Some(rest.to_owned())
+            }
+        });
     (official, clean)
 }
 
@@ -236,22 +240,53 @@ fn builtin_pass(
     rules: (Option<&str>, Option<String>),
 ) -> Result<Vec<Item>, Vec<Item>> {
     let (official, clean) = rules;
-    for (data, keys) in [(episodes, seq_keys), (eps_after, cut_keys)] {
-        for rule in [official, clean.as_deref()].into_iter().flatten() {
+    for (scope, data, keys) in
+        [("full", episodes, seq_keys), ("tail", eps_after, cut_keys)]
+    {
+        for (rule_name, rule) in
+            [("official", official), ("clean_path", clean.as_deref())]
+                .into_iter()
+                .filter_map(|(n, r)| r.map(|v| (n, v)))
+        {
             let matched: Vec<Item> = data
                 .iter()
                 .filter(|i| path_contains(i, rule))
                 .cloned()
                 .collect();
+            debug!(
+                "builtin_pass: scope={} rule_name={} rule={:?} matched={}/{}",
+                scope,
+                rule_name,
+                rule,
+                matched.len(),
+                keys.len()
+            );
             if matched.len() == keys.len() && keys.len() > 1 {
+                debug!(
+                    "builtin_pass: exact full match via {} rule={:?} ({} episodes): {:?}",
+                    rule_name,
+                    rule,
+                    matched.len(),
+                    matched
+                        .iter()
+                        .map(|e| e.path.as_deref().unwrap_or("?"))
+                        .collect::<Vec<_>>()
+                );
                 return Ok(matched);
             }
             let seq = sequence_from_current(&matched, ep_current, cut_keys);
             if seq.len() >= 2 {
+                debug!(
+                    "builtin_pass: partial sequence via {} rule={:?} ({} episodes from current)",
+                    rule_name,
+                    rule,
+                    seq.len()
+                );
                 return Err(seq);
             }
         }
     }
+    debug!("builtin_pass: no rule produced a usable match, returning empty");
     Err(Vec::new())
 }
 
@@ -471,7 +506,10 @@ pub fn version_filter(
     // ini regex pass: derive tokens from the played path, keep episodes whose
     // path yields the same number of token matches.
     let single_line: String = ver_re.split('\n').collect();
-    let Ok(outer) = Regex::new(&single_line) else {
+    let Ok(outer) = RegexBuilder::new(&single_line)
+        .case_insensitive(true)
+        .build()
+    else {
         debug!(
             "version_filter: invalid ini regex {:?}, falling back",
             ver_re
@@ -487,7 +525,8 @@ pub fn version_filter(
         ver_re, ini_tokens, input.file_path
     );
     let combined = ini_tokens.join("|");
-    let Ok(inner) = Regex::new(&combined) else {
+    let Ok(inner) = RegexBuilder::new(&combined).case_insensitive(true).build()
+    else {
         return fallback(builtin_res, ep_current);
     };
     let token_count = ini_tokens.len();
@@ -495,25 +534,30 @@ pub fn version_filter(
         .iter()
         .filter(|i| {
             let path = i.path.as_deref().unwrap_or("");
-            let matched = inner.find_iter(path).count() == token_count;
+            let count = inner.find_iter(path).count();
+            let matched = count == token_count;
             debug!(
-                "version_filter: ini-regex episode {:?} matched={}",
-                path, matched
+                "version_filter: ini-regex {:?} tokens={} got={} matched={} path={:?}",
+                ini_tokens, token_count, count, matched, path
             );
             matched
         })
         .cloned()
         .collect();
     debug!(
-        "version_filter: ini-regex matched {} / {} episodes (need {})",
+        "version_filter: ini-regex result: {}/{} episodes matched token_count={} \
+         (need {} unique for exact)",
         ep_data.len(),
         episodes.len(),
+        token_count,
         ep_num
     );
     if ep_data.len() == ep_num {
         debug!(
-            "version_filter: ini-regex exact match, returning {} episodes",
-            ep_data.len()
+            "version_filter: [DECISION] ini-regex exact match, \
+             locked {} episodes via tokens {:?}",
+            ep_data.len(),
+            ini_tokens
         );
         return ep_data;
     }
@@ -576,7 +620,8 @@ pub fn version_filter(
     }
     let merged = merge_prefer(&prefer, &filter_res, &seq_keys);
     debug!(
-        "version_filter: merged prefer+filter -> {} episodes: {:?}",
+        "version_filter: [DECISION] merged filter({} eps)+prefer -> {} episodes: {:?}",
+        filter_res.len(),
         merged.len(),
         merged
             .iter()
@@ -590,8 +635,16 @@ pub fn version_filter(
 /// alone (disabling the forward playlist).
 fn fallback(builtin_res: Vec<Item>, ep_current: &Item) -> Vec<Item> {
     if builtin_res.is_empty() {
+        debug!(
+            "version_filter: [DECISION] fallback to current episode only: {:?}",
+            ep_current.path.as_deref().unwrap_or("?")
+        );
         vec![ep_current.clone()]
     } else {
+        debug!(
+            "version_filter: [DECISION] fallback to builtin sequence ({} episodes)",
+            builtin_res.len()
+        );
         builtin_res
     }
 }

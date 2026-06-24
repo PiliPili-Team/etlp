@@ -385,12 +385,34 @@ pub fn parse_mapping(line: &str) -> Result<SubjectMapping, MapError> {
     })
 }
 
+/// Strip a leading `@GroupName@` prefix from a stored mapping string.
+///
+/// The GUI may attach a group label to mapping entries for organisational
+/// purposes. The label is transparent to the server — this function strips it
+/// so `parse_mapping` and `parse_mappings` work correctly regardless of
+/// whether a group prefix is present.
+pub fn strip_group_prefix(s: &str) -> &str {
+    if let Some(rest) = s.strip_prefix('@')
+        && let Some(pos) = rest.find('@')
+    {
+        return &rest[pos + 1..];
+    }
+    s
+}
+
 /// Parse every line, silently dropping the invalid ones. Used on the server
 /// side where a bad entry must not abort the whole sync; the GUI validates
 /// strictly before an entry is ever stored.
+///
+/// Lines may carry an optional `@GroupName@` prefix added by the GUI for
+/// organisational grouping; the prefix is stripped transparently before
+/// parsing so group-annotated entries resolve exactly as plain ones do.
 #[must_use]
 pub fn parse_mappings(lines: &[String]) -> Vec<SubjectMapping> {
-    lines.iter().filter_map(|l| parse_mapping(l).ok()).collect()
+    lines
+        .iter()
+        .filter_map(|l| parse_mapping(strip_group_prefix(l)).ok())
+        .collect()
 }
 
 impl SubjectMapping {
@@ -821,5 +843,34 @@ mod tests {
             "imdb:tt9 -> bgm:99".to_owned(),
         ]);
         assert_eq!(maps.len(), 2);
+    }
+
+    #[test]
+    fn parse_mappings_strips_group_prefix() {
+        let maps = parse_mappings(&[
+            "@斗破苍穹@tmdb:1|S1 -> bgm:10".to_owned(),
+            "@#@imdb:tt9 -> bgm:99".to_owned(),
+            "tvdb:5|S2 -> bgm:55".to_owned(),
+        ]);
+        assert_eq!(maps.len(), 3);
+        assert_eq!(maps.first().map(|m| m.subject_id), Some(10));
+        assert_eq!(maps.get(1).map(|m| m.subject_id), Some(99));
+        assert_eq!(maps.get(2).map(|m| m.subject_id), Some(55));
+    }
+
+    #[test]
+    fn strip_group_prefix_handles_variants() {
+        assert_eq!(strip_group_prefix("tmdb:1 -> bgm:2"), "tmdb:1 -> bgm:2");
+        assert_eq!(
+            strip_group_prefix("@GroupA@tmdb:1 -> bgm:2"),
+            "tmdb:1 -> bgm:2"
+        );
+        assert_eq!(
+            strip_group_prefix("@斗破苍穹@tmdb:1 -> bgm:2"),
+            "tmdb:1 -> bgm:2"
+        );
+        assert_eq!(strip_group_prefix("@#@tmdb:1 -> bgm:2"), "tmdb:1 -> bgm:2");
+        // Malformed prefix (no closing @) → unchanged.
+        assert_eq!(strip_group_prefix("@notclosed"), "@notclosed");
     }
 }
