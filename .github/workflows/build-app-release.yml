@@ -21,25 +21,36 @@ jobs:
             target_name: macos-arm64
             platform: macos
             arch: arm64
+            script: "bash scripts/build-macos-app.sh --arch arm64"
             asset_glob: "etlp-gui/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg"
           - os: macos-latest
             target: x86_64-apple-darwin
             target_name: macos-amd64
             platform: macos
             arch: amd64
+            script: "bash scripts/build-macos-app.sh --arch amd64"
             asset_glob: "etlp-gui/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             target_name: linux-amd64
             platform: linux
             arch: amd64
+            script: "bash scripts/build-linux-app.sh --arch amd64"
             asset_glob: "etlp-gui/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             target_name: windows-amd64
             platform: windows
             arch: amd64
+            script: "bash scripts/build-windows-app.sh --arch amd64"
             asset_glob: "etlp-gui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            target_name: windows-portable
+            platform: windows
+            arch: amd64
+            script: "bash scripts/build-windows-portable.sh"
+            asset_glob: "dist/Genshin-portable-x64-*.zip"
 
     steps:
       - uses: actions/checkout@v4
@@ -68,9 +79,16 @@ jobs:
         with:
           workspaces: "etlp-gui/src-tauri -> target"
 
-      - name: Build app
+      # Windows Portable also builds etlp-updater from the root workspace.
+      - name: Cache root workspace (portable only)
+        if: matrix.target_name == 'windows-portable'
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-portable-workspace
+
+      - name: Build
         shell: bash
-        run: bash scripts/build-${{ matrix.platform }}-app.sh --arch ${{ matrix.arch }}
+        run: ${{ matrix.script }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
@@ -100,7 +118,8 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          find . -type f \( -name "*.dmg" -o -name "*.AppImage" -o -name "*.exe" \) \
+          find . -type f \( -name "*.dmg" -o -name "*.AppImage" \
+                         -o -name "*.exe" -o -name "*.zip" \) \
             -exec sha512sum {} + > ../etlp-gui.sha512sum
           echo "Checksums:"
           cat ../etlp-gui.sha512sum
@@ -118,7 +137,7 @@ jobs:
       # Release packages + checksum kept 60 days
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe,etlp-gui.sha512sum"
+          artifacts: "artifacts/**/*.dmg,artifacts/**/*.AppImage,artifacts/**/*.exe,artifacts/**/*.zip,etlp-gui.sha512sum"
           token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
           bodyFile: release_body.md
