@@ -72,9 +72,30 @@ Download the installer for your platform from the
 
 - **macOS** — `.dmg`, drag the app into `Applications`
 - **Windows** — `.msi` / `.exe`, run the installer
+- **Windows Portable** — `.zip`, extract anywhere, run `Genshin.exe`
 
 The desktop app embeds the server and exposes every setting shown in the
 [preview](#app-preview) above.
+
+#### Windows Portable — write permissions
+
+The portable build stores its `config/` and `data/` directories **next to the
+executable**. On first launch the app automatically detects if it cannot write
+there and shows a UAC prompt to re-launch with administrator privileges. If you
+dismiss UAC the app falls back to your user-profile directories (`%APPDATA%\etlp`
+and `%LOCALAPPDATA%\etlp`) instead of crashing.
+
+Common locations that require administrator rights:
+
+| Location | Why |
+| -------- | --- |
+| `C:\` (drive root) | Protected even for Administrators without elevation |
+| `C:\Program Files\` | System-protected, always requires UAC |
+| Any NTFS path with custom deny ACLs | Depends on folder permissions |
+
+If you prefer not to run as administrator, place the portable folder in a
+user-writable location such as `C:\Users\<you>\Apps\etlp\` or any directory
+on a non-system drive, where normal user accounts have full write access.
 
 #### First-launch security prompts (unsigned builds)
 
