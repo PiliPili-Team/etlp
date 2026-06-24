@@ -49,7 +49,7 @@ pub struct EmbySection {
     pub player: String,
     /// Launch the player in full-screen mode.
     pub fullscreen: bool,
-    /// Mute audio on launch (mpv `--no-audio`).
+    /// Mute audio on launch (mpv `--mute=yes`).
     pub disable_audio: bool,
 }
 

@@ -69,7 +69,7 @@ export const ru: typeof zhCN = {
     pl_fullscreen: "Полный экран",
     pl_fullscreen_desc: "Запускать плеер в полноэкранном режиме",
     pl_mute: "Запуск без звука",
-    pl_mute_desc: "Запускать с отключённым звуком (mpv --no-audio)",
+    pl_mute_desc: "Запускать без звука (mpv --mute=yes)",
     pl_pretty_title: "Красивый заголовок",
     pl_pretty_title_desc: "Добавлять имя сервера в начало заголовка окна плеера",
     pl_kill_start: "Завершать при запуске",

@@ -69,7 +69,7 @@ export const id: typeof zhCN = {
     pl_fullscreen: "Layar Penuh",
     pl_fullscreen_desc: "Buka pemutar dalam mode layar penuh",
     pl_mute: "Mulai Dalam Mode Senyap",
-    pl_mute_desc: "Mulai dengan audio dinonaktifkan (mpv --no-audio)",
+    pl_mute_desc: "Mulai dalam mode senyap (mpv --mute=yes)",
     pl_pretty_title: "Judul Cantik",
     pl_pretty_title_desc: "Tambahkan nama server di awal judul jendela pemutar",
     pl_kill_start: "Tutup Saat Startup",

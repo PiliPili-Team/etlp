@@ -68,7 +68,7 @@ export const ko: typeof zhCN = {
     pl_fullscreen: "전체 화면",
     pl_fullscreen_desc: "플레이어를 전체 화면 모드로 시작합니다",
     pl_mute: "음소거로 시작",
-    pl_mute_desc: "오디오를 끈 채 실행합니다 (mpv --no-audio)",
+    pl_mute_desc: "음소거로 실행합니다 (mpv --mute=yes)",
     pl_pretty_title: "제목 다듬기",
     pl_pretty_title_desc: "플레이어 창 제목 앞에 서버 이름을 붙입니다",
     pl_kill_start: "시작 시 종료",

@@ -68,7 +68,7 @@ export const th: typeof zhCN = {
     pl_fullscreen: "เต็มหน้าจอ",
     pl_fullscreen_desc: "เปิดเครื่องเล่นในโหมดเต็มหน้าจอ",
     pl_mute: "เริ่มในโหมดเงียบ",
-    pl_mute_desc: "เริ่มโดยปิดเสียง (mpv --no-audio)",
+    pl_mute_desc: "เริ่มในโหมดปิดเสียง (mpv --mute=yes)",
     pl_pretty_title: "ชื่อที่สวยงาม",
     pl_pretty_title_desc: "เพิ่มชื่อเซิร์ฟเวอร์ไปที่ต้นชื่อหน้าต่างเครื่องเล่น",
     pl_kill_start: "ปิดเมื่อเริ่ม",

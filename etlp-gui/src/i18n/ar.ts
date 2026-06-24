@@ -68,7 +68,7 @@ export const ar: typeof zhCN = {
     pl_fullscreen: "ملء الشاشة",
     pl_fullscreen_desc: "تشغيل المشغّل بوضع ملء الشاشة",
     pl_mute: "بدء صامت",
-    pl_mute_desc: "التشغيل مع تعطيل الصوت (mpv --no-audio)",
+    pl_mute_desc: "التشغيل مع كتم الصوت (mpv --mute=yes)",
     pl_pretty_title: "عنوان منسّق",
     pl_pretty_title_desc: "إضافة اسم الخادم إلى عنوان نافذة المشغّل",
     pl_kill_start: "إنهاء عند البدء",

@@ -69,7 +69,7 @@ export const sk: typeof zhCN = {
     pl_fullscreen: "Celá obrazovka",
     pl_fullscreen_desc: "Spustiť prehrávač v režime celej obrazovky",
     pl_mute: "Spustiť stlmené",
-    pl_mute_desc: "Spustiť s vypnutým zvukom (mpv --no-audio)",
+    pl_mute_desc: "Spustiť stlmené (mpv --mute=yes)",
     pl_pretty_title: "Pekný názov",
     pl_pretty_title_desc: "Pridať názov servera pred názov okna prehrávača",
     pl_kill_start: "Ukončiť pri spustení",

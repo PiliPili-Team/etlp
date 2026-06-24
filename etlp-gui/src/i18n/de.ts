@@ -69,7 +69,7 @@ export const de: typeof zhCN = {
     pl_fullscreen: "Vollbild",
     pl_fullscreen_desc: "Den Player im Vollbildmodus starten",
     pl_mute: "Stumm starten",
-    pl_mute_desc: "Mit deaktiviertem Ton starten (mpv --no-audio)",
+    pl_mute_desc: "Stumm starten (mpv --mute=yes)",
     pl_pretty_title: "Titel verschönern",
     pl_pretty_title_desc: "Den Servernamen dem Fenstertitel des Players voranstellen",
     pl_kill_start: "Beim Start beenden",

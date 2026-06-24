@@ -69,7 +69,7 @@ export const sr: typeof zhCN = {
     pl_fullscreen: "Пун екран",
     pl_fullscreen_desc: "Покрени плејер у режиму пуног екрана",
     pl_mute: "Покрени без звука",
-    pl_mute_desc: "Покрени са искљученим звуком (mpv --no-audio)",
+    pl_mute_desc: "Покрени са утишаним звуком (mpv --mute=yes)",
     pl_pretty_title: "Леп наслов",
     pl_pretty_title_desc: "Додај назив сервера на почетак наслова прозора плејера",
     pl_kill_start: "Заустави при покретању",

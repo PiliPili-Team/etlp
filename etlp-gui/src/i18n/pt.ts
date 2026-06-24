@@ -69,7 +69,7 @@ export const pt: typeof zhCN = {
     pl_fullscreen: "Ecrã inteiro",
     pl_fullscreen_desc: "Iniciar o reprodutor em modo de ecrã inteiro",
     pl_mute: "Iniciar sem som",
-    pl_mute_desc: "Iniciar com o áudio desativado (mpv --no-audio)",
+    pl_mute_desc: "Iniciar sem som (mpv --mute=yes)",
     pl_pretty_title: "Título elegante",
     pl_pretty_title_desc: "Antepor o nome do servidor ao título da janela do reprodutor",
     pl_kill_start: "Terminar ao arrancar",
