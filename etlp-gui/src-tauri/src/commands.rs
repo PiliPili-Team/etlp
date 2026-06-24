@@ -212,15 +212,11 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         return Ok(state.port.load(Ordering::Acquire));
     }
 
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
-    std::fs::create_dir_all(&cfg_dir)
-        .map_err(|e| err_create_config_dir(e))?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
+    std::fs::create_dir_all(&cfg_dir).map_err(err_create_config_dir)?;
 
-    let data_dir = platform::data_dir()
-        .ok_or_else(err_no_data_dir)?;
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|e| err_create_data_dir(e))?;
+    let data_dir = platform::data_dir().ok_or_else(err_no_data_dir)?;
+    std::fs::create_dir_all(&data_dir).map_err(err_create_data_dir)?;
     // Relocate any legacy flat-layout files and ensure the log/ dir exists.
     platform::migrate_layout(&data_dir);
     std::fs::create_dir_all(platform::log_dir_in(&data_dir)).ok();
@@ -382,10 +378,8 @@ pub fn get_server_status(state: State<'_, GuiState>) -> serde_json::Value {
 /// patch into.
 #[tauri::command]
 pub async fn get_config() -> Result<ConfigDto, String> {
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
-    std::fs::create_dir_all(&cfg_dir)
-        .map_err(|e| err_create_config_dir(e))?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
+    std::fs::create_dir_all(&cfg_dir).map_err(err_create_config_dir)?;
 
     let config = load_or_default_config(&cfg_dir)?;
     Ok(ConfigDto::from(&config))
@@ -428,8 +422,7 @@ pub async fn update_config_field(
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     // The app reads and writes the same single `config.toml`, so the path we
     // patch always matches the one that was loaded.
     let path = etlp_config::existing_config_path(&cfg_dir)
@@ -580,8 +573,7 @@ fn merge_bangumi_maps(
 pub async fn export_bangumi_map(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_dialog::DialogExt as _;
 
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = crate::commands::load_or_default_config(&cfg_dir)?;
     let subject_map = config.bangumi.subject_map.clone();
 
@@ -640,8 +632,7 @@ pub async fn import_bangumi_map(
     let imported: Vec<String> = serde_json::from_str(&content)
         .map_err(|e| format!("JSON parse error: {e}"))?;
 
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = crate::commands::load_or_default_config(&cfg_dir)?;
     let existing = config.bangumi.subject_map.clone();
 
@@ -680,8 +671,7 @@ pub fn validate_regex(pattern: String) -> Result<(), String> {
 /// effect without requiring a full server restart.
 #[tauri::command]
 pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
-    let working_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let working_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let new_config = load_or_default_config(&working_dir)?;
 
     // Apply log level before writing the new config so the level change is
@@ -730,10 +720,8 @@ pub async fn restart_server(state: State<'_, GuiState>) -> Result<u16, String> {
 #[tauri::command]
 pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt as _;
-    let dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| err_create_config_dir(e))?;
+    let dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
+    std::fs::create_dir_all(&dir).map_err(err_create_config_dir)?;
     app.opener()
         .open_path(dir.to_string_lossy(), None::<&str>)
         .map_err(|e| format!("open folder: {e}"))
@@ -780,8 +768,7 @@ fn open_with_association(path: &std::path::Path) -> bool {
 pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     let path = config_file_path()?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| err_create_config_dir(e))?;
+        std::fs::create_dir_all(parent).map_err(err_create_config_dir)?;
     }
     if !path.exists() {
         write_default_config(&path)?;
@@ -826,14 +813,12 @@ pub const AUTH_OPENED: &str = "AUTH_OPENED";
 ///
 /// Returns `Ok(None)` when Trakt is not configured (empty `client_id`).
 fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
     if config.trakt.client_id.is_empty() {
         return Ok(None);
     }
-    let token_dir = platform::data_dir()
-        .ok_or_else(err_no_data_dir)?;
+    let token_dir = platform::data_dir().ok_or_else(err_no_data_dir)?;
     let token_path = token_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
     let api = etlp_sync::TraktApi::new(
         &config.trakt.client_id,
@@ -850,8 +835,7 @@ fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
 ///
 /// Returns `Ok(None)` when Bangumi is not configured (empty `access_token`).
 fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
-    let cfg_dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
     if config.bangumi.access_token.is_empty() {
         return Ok(None);
@@ -2143,8 +2127,7 @@ pub async fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 fn config_file_path() -> Result<PathBuf, String> {
-    let dir = platform::config_dir()
-        .ok_or_else(err_no_config_dir)?;
+    let dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     // Resolve to the config the app loaded so "edit config" opens the file the
     // user is actually using, not an empty shadow `config.toml`.
     Ok(etlp_config::existing_config_path(&dir)
