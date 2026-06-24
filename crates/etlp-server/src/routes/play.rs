@@ -1327,6 +1327,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         genres,
         title_fallback,
         subject_map,
+        mark_watching,
     ) = {
         let Ok(cfg) = state.config.read() else {
             return;
@@ -1342,6 +1343,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.genres.clone(),
             cfg.bangumi.title_search_fallback,
             cfg.bangumi.subject_map.clone(),
+            cfg.bangumi.mark_watching,
         )
     };
     // User-pinned subject mappings take priority over auto-resolution.
@@ -1516,9 +1518,19 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         eps.dedup_by_key(|(s, _)| *s);
 
         // Nothing watched to mark (only a momentary open of the current episode
-        // and no earlier history): just register the subject as "watching" so
-        // the season still shows up as in-progress on Bangumi.
+        // and no earlier history): register the subject as "watching" when the
+        // user has enabled the option. When disabled, partial views do not add
+        // the subject to the collection — it is only collected once an episode
+        // crosses the watched threshold via sync_episodes below.
         if eps.is_empty() {
+            if !mark_watching {
+                info!(
+                    "bangumi: subject {subject_id} skipped watching mark \
+                     (disabled by config, {}%)",
+                    entry.progress as i64
+                );
+                continue;
+            }
             match api.ensure_collected_watching(subject_id).await {
                 Ok(()) => info!(
                     "bangumi: subject {subject_id} marked watching ({}%)",

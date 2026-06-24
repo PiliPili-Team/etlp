@@ -24,7 +24,7 @@ pub use bangumi::{
 };
 pub use bangumi_map::{
     EpRange, MapError, MapProvider, SubjectMapping, match_mapping,
-    parse_mapping, parse_mappings,
+    parse_mapping, parse_mappings, strip_group_prefix,
 };
 pub use error::{Result, SyncError};
 pub use trakt::{
