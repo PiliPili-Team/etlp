@@ -85,11 +85,11 @@ export const sk: typeof zhCN = {
 
     // Version prefer
     page_vp: "Preferencia verzie",
-    vp_priority: "Priorita verzie",
-    vp_keywords: "Kľúčové slová verzie",
+    vp_priority: "Poradie priority verzií",
+    vp_keywords: "Štítky verzie",
     vp_keywords_desc:
-        "Zhodovať kľúčové slová verzie média v poradí — skoršie položky vyhrávajú",
-    vp_keywords_placeholder: "napr. VCB-Studio, ANi, DBD-Raws",
+        "Ak pre rovnakú epizódu existuje viac súborov, vyhrá ten, ktorého cesta zodpovedá štítku najvyššie v zozname. Príklad: «TeamX → GroupA → StreamB» — ak sú dostupné všetky tri verzie, vyberie sa TeamX; ak nie — GroupA; a tak ďalej",
+    vp_keywords_placeholder: "napr. TeamX, GroupA, StreamB",
     vp_playlist: "Použiť na zoznam skladieb",
     vp_playlist_desc: "Použiť prioritu verzie pri vytváraní zoznamu skladieb",
     vp_subtitle: "Preferencia titulkov",
@@ -107,10 +107,10 @@ export const sk: typeof zhCN = {
     vp_last_ep: "Zakázať pri poslednej epizóde",
     vp_last_ep_desc:
         "Zapnuté: pri prehrávaní poslednej epizódy série sa nevytvorí žiadny zoznam skladieb a otvorí sa iba tá epizóda (nič za ňou nenasleduje); Vypnuté: zoznam skladieb sa vytvorí vždy (aktuálna + neskoršie epizódy)",
-    vp_filter: "Regulárny výraz filtra verzie",
+    vp_filter: "Odtlačok verzie",
     vp_filter_desc:
-        "Do zoznamu skladieb sa pridajú iba verzie zodpovedajúce tomuto regulárnemu výrazu (prázdne = bez filtra)",
-    vp_filter_placeholder: "napr. |VCB-Studio|ANi|Zjednodušená",
+        "Extrahuje vlastnosti verzie z cesty aktuálne prehrávaného súboru ako «odtlačok». Do playlistu sa pridajú len epizódy, ktorých cesty obsahujú presne rovnakú sadu vlastností, čím sa celá séria uzamkne na rovnakú verziu. Príklad: ak regex zodpovedá «TeamX» a «1080p» v aktuálnom súbore, zahrnuté sú len epizódy obsahujúce obe slová (prázdne = vypnuté)",
+    vp_filter_placeholder: "napr. |TeamX|1080p|CHS",
     vp_filter_valid: "Platný regulárny výraz",
     vp_filter_invalid: "Neplatný regulárny výraz",
 
@@ -186,15 +186,15 @@ export const sk: typeof zhCN = {
     sys_speed_limit_desc:
         "Obmedzuje šírku pásma použitú sťahovaním a vyrovnávacou pamäťou predbežného načítania (MiB/s); 0 = neobmedzene",
     sys_download_note:
-        "Predbežné načítanie a režim sťahovania spúšťajú príkazy používateľského skriptu prehliadača, neprepínajú sa tu: „ukladať do vyrovnávacej pamäte počas prehrávania“ v skripte je predbežné načítanie a „iba stiahnuť“ je režim sťahovania; režim sťahovania tiež vyžaduje, aby účet vášho mediálneho servera povoľoval sťahovanie zdrojov",
+        "Predbežné načítanie a režim sťahovania spúšťajú príkazy používateľského skriptu prehliadača, neprepínajú sa tu: „ukladať do vyrovnávacej pamäte počas prehrávania” v skripte je predbežné načítanie a „iba stiahnuť” je režim sťahovania; režim sťahovania tiež vyžaduje, aby účet vášho mediálneho servera povoľoval sťahovanie zdrojov",
     sys_trakt: "Scrobbling Trakt.tv",
     sys_trakt_sync_note:
-        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Trakt: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Pod 80 % sa vaša pozícia zapamätá, aby ste mohli pokračovať neskôr, a ďalšia epizóda sa zobrazí v sekcii „Pokračovať v sledovaní“; opätovné pozretie tej istej epizódy ju zaznamená znova — či je povolený krátky časový odstup, riadi prepínač „povoliť duplikáty“ nižšie.",
+        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Trakt: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Pod 80 % sa vaša pozícia zapamätá, aby ste mohli pokračovať neskôr, a ďalšia epizóda sa zobrazí v sekcii „Pokračovať v sledovaní”; opätovné pozretie tej istej epizódy ju zaznamená znova — či je povolený krátky časový odstup, riadi prepínač „povoliť duplikáty” nižšie.",
     sys_trakt_dashboard: "Otvoriť panel Trakt",
     sys_trakt_setup_title: "Nastavenie",
     sys_trakt_setup_step1: "1. Vytvorte aplikáciu na Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
-    sys_trakt_setup_step2: "2. Nastavte „Redirect uri“ aplikácie na adresu nižšie:",
+    sys_trakt_setup_step2: "2. Nastavte „Redirect uri” aplikácie na adresu nižšie:",
     sys_trakt_setup_copy: "Kopírovať",
     sys_trakt_setup_copied: "URI presmerovania skopírované",
     sys_trakt_setup_copy_failed: "Kopírovanie zlyhalo — vyberte a skopírujte ručne",
@@ -218,12 +218,12 @@ export const sk: typeof zhCN = {
         "Keď je zapnuté, každé dokončenie znova označí tú istú epizódu/film; keď je vypnuté, použije sa odstránenie duplikátov s obmedzením: tá istá položka dokončená znova v rámci okna obmedzenia nastaveného nižšie sa označí iba raz (dodatočne doplnené skoršie epizódy sa vždy deduplikujú)",
     sys_trakt_dup_throttle: "Obmedzenie duplicitného označovania (sekundy)",
     sys_trakt_dup_throttle_desc:
-        "Účinné, keď je „Povoliť duplicitné označovanie“ vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s",
+        "Účinné, keď je „Povoliť duplicitné označovanie” vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "Obmedzenie nemôže byť nižšie ako 120 sekúnd; opravené na 120",
     sys_bangumi: "Sledovanie Bangumi.tv",
     sys_bangumi_sync_note:
-        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Označenie ako pozreté tiež nastaví dielo na „pozerám“.",
+        "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie ≥ 80 % označí aktuálnu epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste ukončili na médiaserveri, bez duplikovania. Keď nie je čo označiť (< 80 % a žiadna história), dielo sa nastaví na „pozerám” len ak efektívna doba prehrávania je ≥ 20 sekúnd, inak sa preskočí, aby sa predišlo náhodným zápisom.",
     sys_bangumi_host: "Povoliť hostiteľa",
     sys_bangumi_host_desc:
         "Kľúčové slová hostiteľov oddelené čiarkami; nechajte prázdne na zakázanie, jedna bodka povolí všetkých",
@@ -248,8 +248,24 @@ export const sk: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Skontrolovať a pridať",
     map_remove: "Odstrániť",
+    map_group_add: "Nová skupina",
+    map_group_name_placeholder: "Názov skupiny",
+    map_group_add_confirm: "Vytvoriť",
+    map_group_delete: "Odstrániť skupinu",
+    map_group_delete_confirm: "Odstrániť skupinu „{name}” a všetky jej záznamy?",
+    map_group_default_label: "Predvolená",
+    map_export: "Exportovať",
+    map_export_done: "Mapovania exportované",
+    map_import: "Importovať",
+    map_import_prefer: "Prednosť importu (prepísať lokálne konflikty)",
+    map_import_done: "Import dokončený: pridané {added}, nahradené {replaced}",
+    cfg_backup_busy: "Zálohovanie…",
+    cfg_importing: "Importovanie…",
+    bgm_mark_watching: "Označiť ako pozerané",
+    bgm_mark_watching_desc:
+        "Zapnuté: čiastočné sledovanie označí dielo ako pozerané. Vypnuté: stav sa aktualizuje len po úplnom zhliadnutí epizódy.",
     map_err_empty: "Zadajte mapovanie",
-    map_err_format: "Chybný formát — očakávané „LHS -> RHS“",
+    map_err_format: "Chybný formát — očakávané „LHS -> RHS”",
     map_err_provider: "Neznámy zdroj; podporované sú iba tmdb / imdb / tvdb",
     map_err_provider_id: "Nesprávne ID (tmdb/tvdb číselné, imdb začína na tt)",
     map_err_type: "type musí byť tv alebo movie",
@@ -274,7 +290,7 @@ export const sk: typeof zhCN = {
     sync_testing: "Kontroluje sa…",
     sync_test_ok: "Autorizácia funguje",
     sync_test_fail:
-        "Autorizácia zlyhala — konfigurácia môže byť nesprávna alebo ešte nie je autorizovaná. Kliknite na „Obnoviť autorizáciu“ vpravo hore.",
+        "Autorizácia zlyhala — konfigurácia môže byť nesprávna alebo ešte nie je autorizovaná. Kliknite na „Obnoviť autorizáciu” vpravo hore.",
     sync_incomplete: "Konfigurácia je neúplná — pred kontrolou vyplňte povinné polia",
 
     // Config tab (config file + backup / restore / reset / update)
@@ -296,12 +312,12 @@ export const sk: typeof zhCN = {
     cfg_restore_done: "Konfigurácia obnovená",
     cfg_restore_confirm_title: "Obnoviť konfiguráciu",
     cfg_restore_confirm_message:
-        "Prepísať aktuálnu konfiguráciu zálohou „{name}“? Toto sa nedá vrátiť späť.",
+        "Prepísať aktuálnu konfiguráciu zálohou „{name}”? Toto sa nedá vrátiť späť.",
     cfg_import_confirm_title: "Importovať a obnoviť konfiguráciu",
     cfg_import_confirm_message:
         "Importovať túto zálohu a prepísať aktuálnu konfiguráciu? Toto sa nedá vrátiť späť.",
     cfg_delete_confirm_title: "Odstrániť zálohu",
-    cfg_delete_confirm_message: "Odstrániť zálohu „{name}“?",
+    cfg_delete_confirm_message: "Odstrániť zálohu „{name}”?",
     cfg_reset_title: "Obnovenie",
     cfg_reset: "Obnoviť predvolené",
     cfg_reset_desc: "Obnoviť všetky nastavenia na predvolené hodnoty",
@@ -354,7 +370,7 @@ export const sk: typeof zhCN = {
     logs_bottom: "↓ Dole",
     logs_empty: "Čaká sa na výstup záznamu…",
     logs_no_mpv:
-        "Nenašiel sa žiadny záznam mpv — kliknite na „Vybrať záznam mpv“ na načítanie",
+        "Nenašiel sa žiadny záznam mpv — kliknite na „Vybrať záznam mpv” na načítanie",
     logs_lines: "riadkov",
     logs_loading_older: "Načítavajú sa staršie záznamy…",
     logs_scroll_older: "Posuňte nahor na načítanie starších záznamov",
@@ -364,7 +380,7 @@ export const sk: typeof zhCN = {
     logs_reset_mpv_title: "Prepnúť späť na predvolený záznam mpv v priečinku záznamov",
     logs_anon: "Anonymne",
     logs_anon_title:
-        "Skryť ID zariadenia, tokeny, IP, ID používateľa, hostiteľa URL a používateľské mená Bangumi / Trakt iba v zobrazení, vhodné na zdieľanie snímok obrazovky; súbor záznamu zostáva nedotknutý — cenzúra súboru sa naďalej riadi prepínačom „Citlivý text“",
+        "Skryť ID zariadenia, tokeny, IP, ID používateľa, hostiteľa URL a používateľské mená Bangumi / Trakt iba v zobrazení, vhodné na zdieľanie snímok obrazovky; súbor záznamu zostáva nedotknutý — cenzúra súboru sa naďalej riadi prepínačom „Citlivý text”",
 
     // About modal
     about_thanks: "Poďakovania",
@@ -385,8 +401,8 @@ export const sk: typeof zhCN = {
     // Download
     page_download: "Sťahovanie",
     dl_folder: "Priečinok sťahovania",
-    dl_folder_desc: "Miesto uloženia súborov. Prázdne = predvolené (~/Downloads)",
+    dl_folder_desc: "Nechajte prázdne pre predvolený priečinok systému",
     dl_browse: "Prehľadávať…",
-    dl_placeholder: "Prázdne pre predvolený priečinok (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Cesta neexistuje, skontrolujte vstup",
 };

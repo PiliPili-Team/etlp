@@ -83,10 +83,11 @@ export const en: typeof zhCN = {
 
     // Version prefer
     page_vp: "Version Preference",
-    vp_priority: "Version Priority",
-    vp_keywords: "Version Keywords",
-    vp_keywords_desc: "Match media version keywords in order — earlier entries win",
-    vp_keywords_placeholder: "e.g. VCB-Studio, ANi, DBD-Raws",
+    vp_priority: "Version Priority Order",
+    vp_keywords: "Version Labels",
+    vp_keywords_desc:
+        'When multiple files exist for the same episode, the one whose path matches the earliest label in this list wins. Example: "TeamX → GroupA → StreamB" — if all three versions are available, TeamX is chosen; if not, GroupA; and so on',
+    vp_keywords_placeholder: "e.g. TeamX, GroupA, StreamB",
     vp_playlist: "Apply to Playlist",
     vp_playlist_desc: "Use version priority when building the playlist",
     vp_subtitle: "Subtitle Preference",
@@ -105,10 +106,10 @@ export const en: typeof zhCN = {
     vp_last_ep: "Disable at Last Episode",
     vp_last_ep_desc:
         "On: when playing the season's last episode, build no playlist and open only that episode (nothing follows it); Off: always build the playlist (current + later episodes)",
-    vp_filter: "Version Filter Regex",
+    vp_filter: "Version Fingerprint",
     vp_filter_desc:
-        "Only versions matching this regex are added to the playlist (empty = no filter)",
-    vp_filter_placeholder: "e.g. |VCB-Studio|ANi|Simplified",
+        'Extracts version tokens from the currently playing file\'s path as a "fingerprint". Only episodes whose paths match the exact same set of tokens are added to the playlist, locking the whole season to the same version. Example: if the regex matches "TeamX" and "1080p" in the current file, only episodes containing both tokens are included (leave empty to disable)',
+    vp_filter_placeholder: "e.g. |TeamX|1080p|CHS",
     vp_filter_valid: "Valid regex",
     vp_filter_invalid: "Invalid regex",
 
@@ -219,7 +220,7 @@ export const en: typeof zhCN = {
         "Throttle cannot be below 120 seconds; corrected to 120",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_sync_note:
-        'When playback ends, your viewing is synced to Bangumi automatically: reaching about 80% or more marks the episode watched, below that it stays unmarked; other episodes of the same season you already finished in your media server are marked too, without duplicating ones already there. Marking it watched also sets the subject to "watching".',
+        "When playback ends, your viewing is synced to Bangumi automatically: ≥ 80% progress marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
         "Comma-separated host keywords; leave empty to disable, a single dot enables all",
@@ -243,6 +244,22 @@ export const en: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Check & Add",
     map_remove: "Remove",
+    map_group_add: "New Group",
+    map_group_name_placeholder: "Group name",
+    map_group_add_confirm: "Create",
+    map_group_delete: "Delete Group",
+    map_group_delete_confirm: 'Delete group "{name}" and all its mappings?',
+    map_group_default_label: "Default",
+    map_export: "Export",
+    map_export_done: "Mappings exported",
+    map_import: "Import",
+    map_import_prefer: "Prefer imported (overwrite local conflicts)",
+    map_import_done: "Import done: {added} added, {replaced} replaced",
+    cfg_backup_busy: "Backing up…",
+    cfg_importing: "Importing…",
+    bgm_mark_watching: "Mark as Watching",
+    bgm_mark_watching_desc:
+        "When on, a partially-watched episode still marks the subject as watching; when off, only a fully watched episode updates the collection status",
     map_err_empty: "Enter a mapping",
     map_err_format: "Malformed — expected “LHS -> RHS”",
     map_err_provider: "Unknown source; only tmdb / imdb / tvdb are supported",
@@ -378,9 +395,8 @@ export const en: typeof zhCN = {
     // Download
     page_download: "Download",
     dl_folder: "Download Folder",
-    dl_folder_desc:
-        "Where media files are saved. Leave empty to use system default (~/Downloads)",
+    dl_folder_desc: "Leave empty to use system default",
     dl_browse: "Browse…",
-    dl_placeholder: "Leave empty for system default (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Path does not exist, please check the input",
 };

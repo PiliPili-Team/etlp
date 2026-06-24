@@ -84,11 +84,11 @@ export const pl: typeof zhCN = {
 
     // Version prefer
     page_vp: "Preferencje wersji",
-    vp_priority: "Priorytet wersji",
-    vp_keywords: "Słowa kluczowe wersji",
+    vp_priority: "Kolejność priorytetów wersji",
+    vp_keywords: "Etykiety wersji",
     vp_keywords_desc:
-        "Dopasuj słowa kluczowe wersji multimediów po kolei — wcześniejsze wpisy mają pierwszeństwo",
-    vp_keywords_placeholder: "np. VCB-Studio, ANi, DBD-Raws",
+        "Gdy dla tego samego odcinka istnieje wiele plików, wybierany jest ten, którego ścieżka odpowiada etykiecie najwyżej w liście. Przykład: «TeamX → GroupA → StreamB» — jeśli dostępne są wszystkie trzy wersje, wybierany jest TeamX; jeśli nie — GroupA; i tak dalej",
+    vp_keywords_placeholder: "np. TeamX, GroupA, StreamB",
     vp_playlist: "Zastosuj do playlisty",
     vp_playlist_desc: "Użyj preferencji wersji przy tworzeniu playlisty",
     vp_subtitle: "Preferencje napisów",
@@ -106,10 +106,10 @@ export const pl: typeof zhCN = {
     vp_last_ep: "Zatrzymaj na ostatnim odcinku",
     vp_last_ep_desc:
         "Włączone: podczas odtwarzania ostatniego odcinka sezonu lista nie jest tworzona i otwierany jest tylko ten odcinek (nic po nim); Wyłączone: lista jest zawsze tworzona (bieżący + następne odcinki)",
-    vp_filter: "Regex filtru wersji",
+    vp_filter: "Odcisk palca wersji",
     vp_filter_desc:
-        "Do playlisty dodawane są tylko wersje pasujące do tego wyrażenia regularnego (puste = brak filtru)",
-    vp_filter_placeholder: "np. |VCB-Studio|ANi|Simplified",
+        "Wyodrębnia cechy wersji ze ścieżki aktualnie odtwarzanego pliku jako «odcisk palca». Do playlisty dodawane są tylko odcinki, których ścieżki zawierają dokładnie ten sam zestaw cech, blokując cały sezon do tej samej wersji. Przykład: jeśli regex pasuje do «TeamX» i «1080p» w bieżącym pliku, uwzględniane są tylko odcinki zawierające oba słowa (puste = wyłączone)",
+    vp_filter_placeholder: "np. |TeamX|1080p|CHS",
     vp_filter_valid: "Prawidłowe wyrażenie regularne",
     vp_filter_invalid: "Nieprawidłowe wyrażenie regularne",
 
@@ -225,7 +225,7 @@ export const pl: typeof zhCN = {
         "Ograniczenie nie może być mniejsze niż 120 sekund; ustawiono na 120",
     sys_bangumi: "Śledzenie Bangumi.tv",
     sys_bangumi_sync_note:
-        "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Bangumi: osiągnięcie około 80% lub więcej oznacza odcinek jako obejrzany, mniej pozostaje nieoznaczone; inne odcinki tego samego sezonu, które ukończyłeś na serwerze multimediów, są również oznaczane, bez duplikowania istniejących. Oznaczenie jako obejrzane ustawia również dzieło w stan 'oglądam'.",
+        "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Bangumi: osiągnięcie ≥ 80% oznacza bieżący odcinek jako obejrzany, poniżej pozostaje nieoznaczony; inne odcinki tego samego sezonu ukończone na serwerze multimediów są również dodawane bez duplikatów. Jeśli nie ma nic do oznaczenia (< 80% i brak historii), dzieło jest ustawiane jako 'oglądam' tylko jeśli efektywny czas odtwarzania wynosi ≥ 20 sekund, w przeciwnym razie jest pomijane, aby zapobiec przypadkowym wpisom.",
     sys_bangumi_host: "Włącz hosta",
     sys_bangumi_host_desc:
         "Słowa kluczowe hosta oddzielone przecinkami; zostaw puste, aby wyłączyć, kropka włącza wszystkich",
@@ -250,6 +250,22 @@ export const pl: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Sprawdź i dodaj",
     map_remove: "Usuń",
+    map_group_add: "Nowa grupa",
+    map_group_name_placeholder: "Nazwa grupy",
+    map_group_add_confirm: "Utwórz",
+    map_group_delete: "Usuń grupę",
+    map_group_delete_confirm: 'Usunąć grupę „{name}" i wszystkie jej wpisy?',
+    map_group_default_label: "Domyślna",
+    map_export: "Eksportuj",
+    map_export_done: "Mapowania wyeksportowane",
+    map_import: "Importuj",
+    map_import_prefer: "Preferuj importowane (nadpisz lokalne konflikty)",
+    map_import_done: "Import zakończony: dodano {added}, zastąpiono {replaced}",
+    cfg_backup_busy: "Tworzenie kopii zapasowej…",
+    cfg_importing: "Importowanie…",
+    bgm_mark_watching: "Oznacz jako oglądane",
+    bgm_mark_watching_desc:
+        "Włączone: częściowe obejrzenie oznacza dzieło jako oglądane. Wyłączone: status aktualizuje się tylko po ukończeniu całego odcinka.",
     map_err_empty: "Wprowadź mapowanie",
     map_err_format: "Nieprawidłowy format — oczekiwano 'LHS -> RHS'",
     map_err_provider: "Nieznany dostawca; obsługiwane są tylko tmdb / imdb / tvdb",
@@ -390,8 +406,8 @@ export const pl: typeof zhCN = {
     // Download
     page_download: "Pobieranie",
     dl_folder: "Folder pobierania",
-    dl_folder_desc: "Miejsce zapisu plików. Puste = domyślne (~/Downloads)",
+    dl_folder_desc: "Pozostaw puste dla systemowego folderu domyślnego",
     dl_browse: "Przeglądaj…",
-    dl_placeholder: "Puste dla domyślnego (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Ścieżka nie istnieje, sprawdź dane wejściowe",
 };

@@ -83,10 +83,11 @@ export const he: typeof zhCN = {
 
     // Version prefer
     page_vp: "העדפת גרסה",
-    vp_priority: "עדיפות גרסה",
-    vp_keywords: "מילות מפתח לגרסה",
-    vp_keywords_desc: "התאם מילות מפתח לגרסת מדיה לפי סדר — רשומות מוקדמות יותר מנצחות",
-    vp_keywords_placeholder: "לדוג׳ VCB-Studio, ANi, DBD-Raws",
+    vp_priority: "סדר עדיפות גרסאות",
+    vp_keywords: "תגיות גרסה",
+    vp_keywords_desc:
+        "כאשר קיימים מספר קבצים לאותו פרק, ייבחר הקובץ שנתיב שלו תואם את התגית הגבוהה ביותר ברשימה. דוגמה: «TeamX → GroupA → StreamB» — אם שלוש הגרסאות זמינות, ייבחר TeamX; אחרת GroupA; וכן הלאה",
+    vp_keywords_placeholder: "לדוג׳ TeamX, GroupA, StreamB",
     vp_playlist: "החל על רשימת השמעה",
     vp_playlist_desc: "השתמש בהעדפת הגרסה בעת יצירת רשימת השמעה",
     vp_subtitle: "העדפת כתוביות",
@@ -103,10 +104,10 @@ export const he: typeof zhCN = {
     vp_last_ep: "עצור בפרק האחרון",
     vp_last_ep_desc:
         "מופעל: בהפעלת הפרק האחרון של העונה לא נוצרת רשימה ורק פרק זה נפתח (אין המשך); כבוי: רשימה תמיד נוצרת (נוכחי + פרקים הבאים)",
-    vp_filter: "Regex לסינון גרסאות",
+    vp_filter: "טביעת אצבע של גרסה",
     vp_filter_desc:
-        "רק גרסאות שתואמות ל-regex זה מתווספות לרשימת ההשמעה (ריק = ללא סינון)",
-    vp_filter_placeholder: "לדוג׳ |VCB-Studio|ANi|Simplified",
+        'מחלץ מאפייני גרסה מהנתיב של הקובץ המושמע כ"טביעת אצבע". רק פרקים שנתיביהם תואמים את אותה קבוצת מאפיינים בדיוק מתווספים לרשימת ההשמעה, ומנעלים את כל העונה לאותה גרסה. דוגמה: אם הביטוי הרגולרי תואם «TeamX» ו-«1080p» בקובץ הנוכחי, יכללו רק פרקים המכילים שני המונחים (ריק = ללא מסנן)',
+    vp_filter_placeholder: "לדוג׳ |TeamX|1080p|CHS",
     vp_filter_valid: "Regex תקין",
     vp_filter_invalid: "Regex לא תקין",
 
@@ -212,7 +213,7 @@ export const he: typeof zhCN = {
     sys_trakt_dup_throttle_floored: "הויסות אינו יכול להיות פחות מ-120 שניות; תוקן ל-120",
     sys_bangumi: "מעקב Bangumi.tv",
     sys_bangumi_sync_note:
-        "כשההפעלה מסתיימת, הצפייה שלך מסונכרנת אוטומטית עם Bangumi: הגעה לכ-80% ומעלה מסמנת את הפרק כנצפה, פחות נשאר לא מסומן; פרקים אחרים של אותה עונה שסיימת בשרת המדיה גם מסומנים, ללא כפילות קיימים. סימון כנצפה גם מגדיר את היצירה למצב 'צופה'.",
+        "כשההפעלה מסתיימת, הצפייה שלך מסונכרנת אוטומטית עם Bangumi: הגעה ל-≥ 80% מסמנת את הפרק הנוכחי כנצפה, פחות נשאר לא מסומן; פרקים אחרים של אותה עונה שסיימת בשרת המדיה מתווספים גם הם, ללא כפילות. אם אין מה לסמן (< 80% ואין היסטוריה), היצירה מוגדרת ל'צופה' רק אם זמן ההפעלה האפקטיבי הוא ≥ 20 שניות, אחרת מדלגים כדי למנוע הוספות מקריות.",
     sys_bangumi_host: "הפעל מארח",
     sys_bangumi_host_desc:
         "מילות מפתח מארח מופרדות בפסיקות; השאר ריק להשבתה, נקודה מפעילה הכול",
@@ -234,6 +235,22 @@ export const he: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "בדוק והוסף",
     map_remove: "הסר",
+    map_group_add: "קבוצה חדשה",
+    map_group_name_placeholder: "שם קבוצה",
+    map_group_add_confirm: "צור",
+    map_group_delete: "מחק קבוצה",
+    map_group_delete_confirm: 'למחוק את הקבוצה "{name}" ואת כל המיפויים שלה?',
+    map_group_default_label: "ברירת מחדל",
+    map_export: "ייצוא",
+    map_export_done: "המיפויים יוצאו",
+    map_import: "ייבוא",
+    map_import_prefer: "העדפת מיובא (דריסת עימותים מקומיים)",
+    map_import_done: "הייבוא הושלם: {added} נוספו, {replaced} הוחלפו",
+    cfg_backup_busy: "מבצע גיבוי…",
+    cfg_importing: "מייבא…",
+    bgm_mark_watching: "סמן כצופה",
+    bgm_mark_watching_desc:
+        "מופעל: צפייה חלקית מסמנת את היצירה כצופה. מכובה: הסטטוס מתעדכן רק לאחר צפייה מלאה בפרק.",
     map_err_empty: "הכנס מיפוי",
     map_err_format: "פורמט שגוי — 'LHS -> RHS' צפוי",
     map_err_provider: "ספק לא ידוע; רק tmdb / imdb / tvdb נתמכים",
@@ -367,8 +384,8 @@ export const he: typeof zhCN = {
     // Download
     page_download: "הורדות",
     dl_folder: "תיקיית הורדות",
-    dl_folder_desc: "מיקום שמירת קבצי מדיה. ריק = ברירת מחדל (~/Downloads)",
+    dl_folder_desc: "השאר ריק לשימוש בתיקיית ברירת המחדל של המערכת",
     dl_browse: "עיון…",
-    dl_placeholder: "ריק לברירת מחדל (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "הנתיב אינו קיים, אנא בדוק את הקלט",
 };

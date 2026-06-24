@@ -84,9 +84,10 @@ export const zhTW: typeof zhCN = {
     // Version prefer
     page_vp: "版本偏好",
     vp_priority: "版本優先順序",
-    vp_keywords: "版本關鍵字",
-    vp_keywords_desc: "依序匹配影片版本關鍵字，排在前面的優先選擇",
-    vp_keywords_placeholder: "例：VCB-Studio、ANi、DBD-Raws",
+    vp_keywords: "版本優先標籤",
+    vp_keywords_desc:
+        "多版本集數時依此順序挑選版本——靠前的標籤優先匹配。例：「TeamX → GroupA → StreamB」，若某集同時存在三個版本，優先選 TeamX；無 TeamX 則選 GroupA；以此類推",
+    vp_keywords_placeholder: "例：TeamX、GroupA、StreamB",
     vp_playlist: "播放清單使用版本偏好",
     vp_playlist_desc: "組建播放清單時同樣依版本優先順序篩選",
     vp_subtitle: "字幕偏好",
@@ -102,9 +103,10 @@ export const zhTW: typeof zhCN = {
     vp_last_ep: "最後一集停用清單",
     vp_last_ep_desc:
         "開啟：播放本季最後一集時不建立播放清單，只開啟當前這一集（後面已無可連播的集數）；關閉：任何集數都建立播放清單（當前集 + 後續集）",
-    vp_filter: "版本篩選正規表示式",
-    vp_filter_desc: "只有匹配該正規表示式的版本才會加入播放清單（留空不篩選）",
-    vp_filter_placeholder: "例：|VCB-Studio|ANi|繁體",
+    vp_filter: "版本指紋",
+    vp_filter_desc:
+        "從目前播放檔案的路徑中提取版本特徵作為「指紋」，播放清單只保留命中完全相同特徵集合的後續集，從而讓整季自動鎖定到同一版本。例：正規表示式包含「TeamX|1080p」，目前檔案命中了 TeamX 和 1080p 兩個特徵，則只有路徑同樣包含這兩個詞的集數進入播放清單（留空不限制）",
+    vp_filter_placeholder: "例：|TeamX|1080p|簡繁內封",
     vp_filter_valid: "正規表示式有效",
     vp_filter_invalid: "正規表示式無效",
 
@@ -205,7 +207,7 @@ export const zhTW: typeof zhCN = {
     sys_trakt_dup_throttle_floored: "節流時間不能小於 120 秒，已修正為 120",
     sys_bangumi: "Bangumi.tv 追番記錄同步",
     sys_bangumi_sync_note:
-        "播放結束後自動同步到 Bangumi：進度約 80% 以上才標記為「看過」，不足 80% 則不標記；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。標記看過的同時整個條目會置為「在看」",
+        "播放結束後自動同步到 Bangumi：進度 ≥ 80% 才將當前集標記為「看過」，不足 80% 則不標記當前集；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。進度不足 80% 且無可補標歷史時，若有效播放時長 ≥ 20 秒則將條目置為「在看」，否則跳過，避免誤觸發。",
     sys_bangumi_host: "啟用網域",
     sys_bangumi_host_desc: "逗號分隔的網域關鍵字；留空停用，單獨一個點表示全部啟用",
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
@@ -226,6 +228,22 @@ export const zhTW: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "檢查並新增",
     map_remove: "刪除",
+    map_group_add: "新建分組",
+    map_group_name_placeholder: "分組名稱",
+    map_group_add_confirm: "建立",
+    map_group_delete: "刪除分組",
+    map_group_delete_confirm: "確定刪除分組「{name}」及其所有對應條目嗎？",
+    map_group_default_label: "預設",
+    map_export: "匯出對應",
+    map_export_done: "對應已匯出",
+    map_import: "匯入對應",
+    map_import_prefer: "匯入優先（衝突覆蓋本機）",
+    map_import_done: "匯入完成：新增 {added} 條，覆蓋 {replaced} 條",
+    cfg_backup_busy: "備份中…",
+    cfg_importing: "匯入中…",
+    bgm_mark_watching: "標記在看",
+    bgm_mark_watching_desc:
+        "開啟後，未播完一集仍將對應劇集標記為在看；關閉後，僅當有已看過的集數時才將劇集置為在看",
     map_err_empty: "請輸入對應內容",
     map_err_format: "格式有誤，應為「左側 -> 右側」",
     map_err_provider: "未知來源，僅支援 tmdb / imdb / tvdb",
@@ -357,8 +375,8 @@ export const zhTW: typeof zhCN = {
     // Download
     page_download: "下載",
     dl_folder: "下載目錄",
-    dl_folder_desc: "媒體檔案儲存位置，留空使用系統預設（~/Downloads）",
+    dl_folder_desc: "留空使用系統預設",
     dl_browse: "瀏覽…",
-    dl_placeholder: "留空使用系統預設（~/Downloads）",
+    dl_placeholder: "",
     dl_path_error: "路徑不存在，請檢查輸入",
 };

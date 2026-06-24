@@ -85,11 +85,11 @@ export const de: typeof zhCN = {
 
     // Version prefer
     page_vp: "Versionseinstellungen",
-    vp_priority: "Versionspriorität",
-    vp_keywords: "Versionsschlüsselwörter",
+    vp_priority: "Versionsreihenfolge",
+    vp_keywords: "Versions-Tags",
     vp_keywords_desc:
-        "Versionsschlüsselwörter der Reihe nach abgleichen – frühere Einträge gewinnen",
-    vp_keywords_placeholder: "z. B. VCB-Studio, ANi, DBD-Raws",
+        "Bei mehreren Versionen einer Folge gewinnt die Datei, deren Pfad das früheste Tag in dieser Liste enthält. Beispiel: „TeamX → GroupA → StreamB” – wenn alle drei vorhanden sind, wird TeamX gewählt; sonst GroupA; usw.",
+    vp_keywords_placeholder: "z. B. TeamX, GroupA, StreamB",
     vp_playlist: "Auf Wiedergabeliste anwenden",
     vp_playlist_desc: "Versionspriorität beim Erstellen der Wiedergabeliste verwenden",
     vp_subtitle: "Untertiteleinstellung",
@@ -108,10 +108,10 @@ export const de: typeof zhCN = {
     vp_last_ep: "Bei letzter Episode deaktivieren",
     vp_last_ep_desc:
         "Ein: Bei der letzten Episode der Staffel wird keine Wiedergabeliste erstellt und nur diese Episode geöffnet (nichts folgt). Aus: Immer die Wiedergabeliste erstellen (aktuelle + spätere Episoden)",
-    vp_filter: "Versionsfilter-Regex",
+    vp_filter: "Versions-Fingerabdruck",
     vp_filter_desc:
-        "Nur Versionen, die diesem Regex entsprechen, werden zur Wiedergabeliste hinzugefügt (leer = kein Filter)",
-    vp_filter_placeholder: "z. B. |VCB-Studio|ANi|Vereinfacht",
+        "Extrahiert Versionsmerkmale aus dem Pfad der aktuellen Datei als „Fingerabdruck”. Nur Folgen mit exakt derselben Merkmalsmenge werden zur Wiedergabeliste hinzugefügt – so wird die gesamte Staffel auf dieselbe Version fixiert. Beispiel: matcht der Regex „TeamX|1080p” in der aktuellen Datei, werden nur Folgen mit beiden Begriffen aufgenommen (leer lassen zum Deaktivieren)",
+    vp_filter_placeholder: "z. B. |TeamX|1080p|CHS",
     vp_filter_valid: "Gültiger Regex",
     vp_filter_invalid: "Ungültiger Regex",
 
@@ -186,16 +186,16 @@ export const de: typeof zhCN = {
     sys_speed_limit_desc:
         "Begrenzt die von Downloads und Vorab-Caching genutzte Bandbreite (MiB/s); 0 = unbegrenzt",
     sys_download_note:
-        "Vorab-Laden und Download-Modus werden durch die Befehle des Browser-Userscripts ausgelöst, nicht hier umgeschaltet: „Während der Wiedergabe cachen“ des Skripts ist Vorab-Laden und „Nur herunterladen“ ist der Download-Modus; der Download-Modus erfordert außerdem, dass Ihr Medienserver-Konto Ressourcen-Downloads erlaubt",
+        "Vorab-Laden und Download-Modus werden durch die Befehle des Browser-Userscripts ausgelöst, nicht hier umgeschaltet: „Während der Wiedergabe cachen” des Skripts ist Vorab-Laden und „Nur herunterladen” ist der Download-Modus; der Download-Modus erfordert außerdem, dass Ihr Medienserver-Konto Ressourcen-Downloads erlaubt",
     sys_trakt: "Trakt.tv-Scrobbling",
     sys_trakt_sync_note:
-        "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Trakt synchronisiert: Ab etwa 80 % wird die Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere Episoden derselben Staffel, die Sie in Ihrem Medienserver bereits beendet haben, werden ebenfalls markiert, ohne bereits vorhandene zu duplizieren. Unter 80 % wird Ihre Position gemerkt, damit Sie später fortfahren können, und die nächste Episode erscheint unter „Weiter ansehen“; erneutes Ansehen derselben Episode wird wieder aufgezeichnet – ob ein kurzer Zeitabstand zulässig ist, steuert der Schalter „Duplikate zulassen“ unten.",
+        "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Trakt synchronisiert: Ab etwa 80 % wird die Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere Episoden derselben Staffel, die Sie in Ihrem Medienserver bereits beendet haben, werden ebenfalls markiert, ohne bereits vorhandene zu duplizieren. Unter 80 % wird Ihre Position gemerkt, damit Sie später fortfahren können, und die nächste Episode erscheint unter „Weiter ansehen”; erneutes Ansehen derselben Episode wird wieder aufgezeichnet – ob ein kurzer Zeitabstand zulässig ist, steuert der Schalter „Duplikate zulassen” unten.",
     sys_trakt_dashboard: "Trakt-Dashboard öffnen",
     sys_trakt_setup_title: "Einrichtung",
     sys_trakt_setup_step1: "1. Eine App auf Trakt erstellen: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
     sys_trakt_setup_step2:
-        "2. Die „Redirect uri“ der App auf die folgende Adresse setzen:",
+        "2. Die „Redirect uri” der App auf die folgende Adresse setzen:",
     sys_trakt_setup_copy: "Kopieren",
     sys_trakt_setup_copied: "Redirect-URI kopiert",
     sys_trakt_setup_copy_failed:
@@ -220,12 +220,12 @@ export const de: typeof zhCN = {
         "Wenn aktiviert, wird bei jedem Abschluss dieselbe Episode/derselbe Film erneut markiert; wenn deaktiviert, gilt eine gedrosselte Duplikatentfernung: dasselbe Element, das innerhalb des unten festgelegten Drosselfensters erneut beendet wird, wird nur einmal markiert (nachgetragene frühere Episoden werden immer dedupliziert)",
     sys_trakt_dup_throttle: "Drosselung für doppeltes Markieren (Sekunden)",
     sys_trakt_dup_throttle_desc:
-        "Wirksam, wenn „Doppeltes Markieren zulassen“ deaktiviert ist: dasselbe Element, das innerhalb dieser Sekundenzahl erneut beendet wird, wird nur einmal aufgezeichnet. Minimum 120 s",
+        "Wirksam, wenn „Doppeltes Markieren zulassen” deaktiviert ist: dasselbe Element, das innerhalb dieser Sekundenzahl erneut beendet wird, wird nur einmal aufgezeichnet. Minimum 120 s",
     sys_trakt_dup_throttle_floored:
         "Drosselung darf nicht unter 120 Sekunden liegen; auf 120 korrigiert",
     sys_bangumi: "Bangumi.tv-Verfolgung",
     sys_bangumi_sync_note:
-        "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Bangumi synchronisiert: Ab etwa 80 % wird die Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere Episoden derselben Staffel, die Sie in Ihrem Medienserver bereits beendet haben, werden ebenfalls markiert, ohne bereits vorhandene zu duplizieren. Das Markieren als gesehen setzt das Werk außerdem auf „schaue gerade“.",
+        "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Bangumi synchronisiert: Ab ≥ 80 % wird die aktuelle Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere bereits abgeschlossene Episoden derselben Staffel im Medienserver werden ebenfalls nachgetragen, ohne Duplikate. Wenn nichts zu markieren ist (< 80 % und keine Verlaufseinträge), wird das Werk nur als „schaue gerade” eingetragen, sofern die effektive Wiedergabezeit ≥ 20 Sekunden beträgt – andernfalls wird der Eintrag übersprungen, um Fehlauslöser zu vermeiden.",
     sys_bangumi_host: "Host aktivieren",
     sys_bangumi_host_desc:
         "Kommagetrennte Host-Schlüsselwörter; leer lassen zum Deaktivieren, ein einzelner Punkt aktiviert alle",
@@ -250,8 +250,24 @@ export const de: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Prüfen & hinzufügen",
     map_remove: "Entfernen",
+    map_group_add: "Neue Gruppe",
+    map_group_name_placeholder: "Gruppenname",
+    map_group_add_confirm: "Erstellen",
+    map_group_delete: "Gruppe löschen",
+    map_group_delete_confirm: "Gruppe „{name}” und alle zugehörigen Einträge löschen?",
+    map_group_default_label: "Standard",
+    map_export: "Exportieren",
+    map_export_done: "Zuordnungen exportiert",
+    map_import: "Importieren",
+    map_import_prefer: "Import bevorzugen (lokale Konflikte überschreiben)",
+    map_import_done: "Import abgeschlossen: {added} hinzugefügt, {replaced} ersetzt",
+    cfg_backup_busy: "Sicherung läuft…",
+    cfg_importing: "Importieren…",
+    bgm_mark_watching: "Als Schauend markieren",
+    bgm_mark_watching_desc:
+        "Ein: Jede Teilansicht markiert das Werk als schauend. Aus: Nur eine vollständig gesehene Episode aktualisiert den Sammlungsstatus.",
     map_err_empty: "Geben Sie eine Zuordnung ein",
-    map_err_format: "Fehlerhaft – erwartet „LHS -> RHS“",
+    map_err_format: "Fehlerhaft – erwartet „LHS -> RHS”",
     map_err_provider: "Unbekannte Quelle; nur tmdb / imdb / tvdb werden unterstützt",
     map_err_provider_id: "Ungültige ID (tmdb/tvdb numerisch, imdb beginnt mit tt)",
     map_err_type: "type muss tv oder movie sein",
@@ -279,7 +295,7 @@ export const de: typeof zhCN = {
     sync_testing: "Wird geprüft…",
     sync_test_ok: "Autorisierung funktioniert",
     sync_test_fail:
-        "Autorisierung fehlgeschlagen – die Konfiguration ist möglicherweise falsch oder noch nicht autorisiert. Klicken Sie oben rechts auf „Autorisierung aktualisieren“.",
+        "Autorisierung fehlgeschlagen – die Konfiguration ist möglicherweise falsch oder noch nicht autorisiert. Klicken Sie oben rechts auf „Autorisierung aktualisieren”.",
     sync_incomplete:
         "Konfiguration unvollständig – füllen Sie die Pflichtfelder vor der Prüfung aus",
 
@@ -303,12 +319,12 @@ export const de: typeof zhCN = {
     cfg_restore_done: "Konfiguration wiederhergestellt",
     cfg_restore_confirm_title: "Konfiguration wiederherstellen",
     cfg_restore_confirm_message:
-        "Aktuelle Konfiguration mit Backup „{name}“ überschreiben? Dies kann nicht rückgängig gemacht werden.",
+        "Aktuelle Konfiguration mit Backup „{name}” überschreiben? Dies kann nicht rückgängig gemacht werden.",
     cfg_import_confirm_title: "Konfiguration importieren & wiederherstellen",
     cfg_import_confirm_message:
         "Dieses Backup importieren und die aktuelle Konfiguration überschreiben? Dies kann nicht rückgängig gemacht werden.",
     cfg_delete_confirm_title: "Backup löschen",
-    cfg_delete_confirm_message: "Backup „{name}“ löschen?",
+    cfg_delete_confirm_message: "Backup „{name}” löschen?",
     cfg_reset_title: "Zurücksetzen",
     cfg_reset: "Auf Standard zurücksetzen",
     cfg_reset_desc: "Alle Einstellungen auf ihre Standardwerte zurücksetzen",
@@ -362,7 +378,7 @@ export const de: typeof zhCN = {
     logs_bottom: "↓ Nach unten",
     logs_empty: "Warte auf Protokollausgabe…",
     logs_no_mpv:
-        "Kein mpv-Protokoll gefunden – klicken Sie auf „mpv-Protokoll wählen“, um eines zu laden",
+        "Kein mpv-Protokoll gefunden – klicken Sie auf „mpv-Protokoll wählen”, um eines zu laden",
     logs_lines: "Zeilen",
     logs_loading_older: "Ältere Protokolle werden geladen…",
     logs_scroll_older: "Nach oben scrollen, um ältere Protokolle zu laden",
@@ -372,7 +388,7 @@ export const de: typeof zhCN = {
     logs_reset_mpv_title: "Zurück zum Standard-mpv-Protokoll im Protokollordner wechseln",
     logs_anon: "Anonym",
     logs_anon_title:
-        "Geräte-ID, Tokens, IPs, Benutzer-ID, URL-Host und Bangumi-/Trakt-Benutzernamen nur in der Ansicht ausblenden, praktisch zum Teilen von Screenshots; die Protokolldatei bleibt unverändert – die Dateischwärzung folgt weiterhin dem Schalter „Sensibler Text“",
+        "Geräte-ID, Tokens, IPs, Benutzer-ID, URL-Host und Bangumi-/Trakt-Benutzernamen nur in der Ansicht ausblenden, praktisch zum Teilen von Screenshots; die Protokolldatei bleibt unverändert – die Dateischwärzung folgt weiterhin dem Schalter „Sensibler Text”",
 
     // About modal
     about_thanks: "Danksagungen",
@@ -393,9 +409,8 @@ export const de: typeof zhCN = {
     // Download
     page_download: "Downloads",
     dl_folder: "Download-Ordner",
-    dl_folder_desc:
-        "Speicherort für Mediendateien. Leer lassen für den Standard (~/Downloads)",
+    dl_folder_desc: "Leer lassen für Systemstandard",
     dl_browse: "Durchsuchen…",
-    dl_placeholder: "Leer lassen für Standard (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Pfad existiert nicht, bitte Eingabe prüfen",
 };

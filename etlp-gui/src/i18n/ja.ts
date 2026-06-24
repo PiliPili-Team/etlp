@@ -84,10 +84,10 @@ export const ja: typeof zhCN = {
     // Version prefer
     page_vp: "バージョン設定",
     vp_priority: "バージョン優先順位",
-    vp_keywords: "バージョンキーワード",
+    vp_keywords: "バージョン優先タグ",
     vp_keywords_desc:
-        "メディアのバージョンキーワードを順に照合 — 上にある項目が優先されます",
-    vp_keywords_placeholder: "例：VCB-Studio, ANi, DBD-Raws",
+        "同一話数に複数バージョンがある場合、このリストの上位にタグが一致したファイルを優先します。例：「TeamX → GroupA → StreamB」の順なら、3バージョンが存在する場合はTeamXを選択；なければGroupA；以下同様",
+    vp_keywords_placeholder: "例：TeamX、GroupA、StreamB",
     vp_playlist: "プレイリストに適用",
     vp_playlist_desc: "プレイリスト作成時にバージョン優先順位を使用します",
     vp_subtitle: "字幕の優先設定",
@@ -104,10 +104,10 @@ export const ja: typeof zhCN = {
     vp_last_ep: "最終話で無効化",
     vp_last_ep_desc:
         "オン：シーズン最終話の再生時はプレイリストを作成せず、その話のみを開きます（後続なし）。オフ：常にプレイリストを作成します（現在の話＋以降の話）",
-    vp_filter: "バージョンフィルター正規表現",
+    vp_filter: "バージョン指紋",
     vp_filter_desc:
-        "この正規表現に一致するバージョンのみプレイリストに追加します（空＝フィルターなし）",
-    vp_filter_placeholder: "例：|VCB-Studio|ANi|簡体字",
+        "現在再生中のファイルパスからバージョン特徴を抽出し「指紋」とします。同じ特徴セットに一致するエピソードのみプレイリストに追加され、シーズン全体が同一バージョンに固定されます。例：「TeamX|1080p」が現在のファイルに一致した場合、その両方を含むエピソードのみ対象（空欄で無効化）",
+    vp_filter_placeholder: "例：|TeamX|1080p|CHS",
     vp_filter_valid: "有効な正規表現",
     vp_filter_invalid: "無効な正規表現",
 
@@ -217,7 +217,7 @@ export const ja: typeof zhCN = {
         "スロットルは 120 秒未満にできません。120 に修正しました",
     sys_bangumi: "Bangumi.tv トラッキング",
     sys_bangumi_sync_note:
-        "再生が終わると、視聴状況が自動で Bangumi に同期されます。約 80% 以上に達するとエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンの他のエピソードでメディアサーバー上ですでに視聴済みのものもマークされますが、既存のものは重複しません。視聴済みにすると、その作品は「観てる」に設定されます。",
+        "再生が終わると、視聴状況が自動で Bangumi に同期されます。≥ 80% に達すると現在のエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンのメディアサーバー上ですでに視聴済みの他のエピソードも追加されますが、既存のものは重複しません。マークすべきものがない場合（< 80% かつ履歴なし）、実際の視聴時間が ≥ 20 秒のときのみ作品を「観てる」に設定し、それ以外はスキップして誤った追加を防ぎます。",
     sys_bangumi_host: "有効にするホスト",
     sys_bangumi_host_desc:
         "カンマ区切りのホストキーワード。空で無効、ドット 1 つですべて有効",
@@ -241,6 +241,22 @@ export const ja: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "確認して追加",
     map_remove: "削除",
+    map_group_add: "新規グループ",
+    map_group_name_placeholder: "グループ名",
+    map_group_add_confirm: "作成",
+    map_group_delete: "グループを削除",
+    map_group_delete_confirm: "グループ「{name}」とすべてのマッピングを削除しますか？",
+    map_group_default_label: "デフォルト",
+    map_export: "エクスポート",
+    map_export_done: "マッピングをエクスポートしました",
+    map_import: "インポート",
+    map_import_prefer: "インポートを優先（ローカルの競合を上書き）",
+    map_import_done: "インポート完了：{added} 件追加、{replaced} 件置換",
+    cfg_backup_busy: "バックアップ中…",
+    cfg_importing: "インポート中…",
+    bgm_mark_watching: "視聴中としてマーク",
+    bgm_mark_watching_desc:
+        "オン：部分的な視聴でも作品を視聴中としてマークします。オフ：エピソードを最後まで視聴した場合のみステータスが更新されます。",
     map_err_empty: "マッピングを入力してください",
     map_err_format: "形式が不正です — 「LHS -> RHS」の形式が必要です",
     map_err_provider: "不明なソースです。tmdb / imdb / tvdb のみ対応しています",
@@ -376,8 +392,8 @@ export const ja: typeof zhCN = {
     // Download
     page_download: "ダウンロード",
     dl_folder: "ダウンロードフォルダ",
-    dl_folder_desc: "メディアファイルの保存先。空欄はシステム既定（~/Downloads）",
+    dl_folder_desc: "空欄にするとシステムデフォルトを使用",
     dl_browse: "参照…",
-    dl_placeholder: "空欄でシステム既定（~/Downloads）",
+    dl_placeholder: "",
     dl_path_error: "パスが存在しません。入力を確認してください",
 };

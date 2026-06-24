@@ -79,10 +79,11 @@ export const zhCN = {
 
     // Version prefer
     page_vp: "版本偏好",
-    vp_priority: "版本优先级",
-    vp_keywords: "版本关键词",
-    vp_keywords_desc: "按顺序匹配视频版本关键词，排在前面的优先选择",
-    vp_keywords_placeholder: "例：VCB-Studio、ANi、DBD-Raws",
+    vp_priority: "版本优先顺序",
+    vp_keywords: "版本优先标签",
+    vp_keywords_desc:
+        "多版本集数时按此顺序挑选版本——靠前的标签优先匹配。例：「TeamX → GroupA → StreamB」，若某集同时存在三个版本，优先选 TeamX；无 TeamX 则选 GroupA；以此类推",
+    vp_keywords_placeholder: "例：TeamX、GroupA、StreamB",
     vp_playlist: "播放列表使用版本偏好",
     vp_playlist_desc: "组装播放列表时同样按版本优先级筛选",
     vp_subtitle: "字幕偏好",
@@ -99,9 +100,10 @@ export const zhCN = {
     vp_last_ep: "最后一集禁用列表",
     vp_last_ep_desc:
         "开启：播放本季最后一集时不构建播放列表，只打开当前这一集（后面已无可连播的集数）；关闭：任何集数都构建播放列表（当前集 + 后续集）",
-    vp_filter: "版本过滤正则",
-    vp_filter_desc: "只有匹配该正则的版本才会加入播放列表（留空不过滤）",
-    vp_filter_placeholder: "例：|VCB-Studio|ANi|简体",
+    vp_filter: "版本指纹",
+    vp_filter_desc:
+        "从当前播放文件的路径中提取版本特征作为「指纹」，播放列表只保留命中完全相同特征集合的后续集，从而让整季自动锁定到同一版本。例：正则包含「TeamX|1080p」，当前文件命中了 TeamX 和 1080p 两个特征，则只有路径同样包含这两个词的集数进入播放列表（留空不限制）",
+    vp_filter_placeholder: "例：|TeamX|1080p|简繁内封",
     vp_filter_valid: "正则有效",
     vp_filter_invalid: "正则无效",
 
@@ -204,7 +206,7 @@ export const zhCN = {
     sys_trakt_dup_throttle_floored: "节流时间不能小于 120 秒，已修正为 120",
     sys_bangumi: "Bangumi.tv 追番记录同步",
     sys_bangumi_sync_note:
-        "播放结束后自动同步到 Bangumi：进度约 80% 以上才标记为「看过」，不足 80% 则不标记；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。标记看过的同时整个条目会置为「在看」",
+        "播放结束后自动同步到 Bangumi：进度 ≥ 80% 才将当前集标记为「看过」，不足 80% 则不标记当前集；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。",
     sys_bangumi_host: "启用域名",
     sys_bangumi_host_desc: "逗号分隔的域名关键词；留空禁用，单独一个点表示全部启用",
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
@@ -225,6 +227,22 @@ export const zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "检查并添加",
     map_remove: "删除",
+    map_group_add: "新建分组",
+    map_group_name_placeholder: "分组名称",
+    map_group_add_confirm: "创建",
+    map_group_delete: "删除分组",
+    map_group_delete_confirm: "确定删除分组「{name}」及其所有映射条目吗？",
+    map_group_default_label: "默认",
+    map_export: "导出映射",
+    map_export_done: "映射已导出",
+    map_import: "导入映射",
+    map_import_prefer: "导入优先（冲突覆盖本地）",
+    map_import_done: "导入完成：新增 {added} 条，覆盖 {replaced} 条",
+    cfg_backup_busy: "备份中…",
+    cfg_importing: "导入中…",
+    bgm_mark_watching: "标记在看",
+    bgm_mark_watching_desc:
+        "开启后，未播完一集仍将对应剧集标记为在看；关闭后，仅当有已看过的集数时才将剧集置为在看",
     map_err_empty: "请输入映射内容",
     map_err_format: "格式有误，应为「左侧 -> 右侧」",
     map_err_provider: "未知来源，仅支持 tmdb / imdb / tvdb",
@@ -356,8 +374,8 @@ export const zhCN = {
     // Download
     page_download: "下载",
     dl_folder: "下载目录",
-    dl_folder_desc: "媒体文件保存位置，留空使用系统默认（~/Downloads）",
+    dl_folder_desc: "留空使用系统默认",
     dl_browse: "浏览…",
-    dl_placeholder: "留空使用系统默认（~/Downloads）",
+    dl_placeholder: "",
     dl_path_error: "路径不存在，请检查输入",
 };

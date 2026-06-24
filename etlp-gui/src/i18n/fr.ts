@@ -84,11 +84,11 @@ export const fr: typeof zhCN = {
 
     // Version prefer
     page_vp: "Préférence de version",
-    vp_priority: "Priorité de version",
-    vp_keywords: "Mots-clés de version",
+    vp_priority: "Ordre de priorité des versions",
+    vp_keywords: "Étiquettes de version",
     vp_keywords_desc:
-        "Faire correspondre les mots-clés de version du média dans l'ordre — les entrées précédentes l'emportent",
-    vp_keywords_placeholder: "ex. VCB-Studio, ANi, DBD-Raws",
+        "Lorsque plusieurs fichiers existent pour le même épisode, celui dont le chemin correspond à l'étiquette la plus haute dans la liste est sélectionné. Exemple : « TeamX → GroupA → StreamB » — si les trois versions sont disponibles, TeamX est choisi ; sinon GroupA ; etc.",
+    vp_keywords_placeholder: "ex. TeamX, GroupA, StreamB",
     vp_playlist: "Appliquer à la liste de lecture",
     vp_playlist_desc:
         "Utiliser la priorité de version lors de la création de la liste de lecture",
@@ -108,10 +108,10 @@ export const fr: typeof zhCN = {
     vp_last_ep: "Désactiver au dernier épisode",
     vp_last_ep_desc:
         "Activé : lors de la lecture du dernier épisode de la saison, ne crée aucune liste de lecture et ouvre uniquement cet épisode (rien ne suit) ; Désactivé : crée toujours la liste de lecture (épisode actuel + suivants)",
-    vp_filter: "Regex de filtre de version",
+    vp_filter: "Empreinte de version",
     vp_filter_desc:
-        "Seules les versions correspondant à cette regex sont ajoutées à la liste de lecture (vide = aucun filtre)",
-    vp_filter_placeholder: "ex. |VCB-Studio|ANi|Simplifié",
+        "Extrait les caractéristiques de version du chemin du fichier en cours de lecture comme « empreinte ». Seuls les épisodes dont le chemin correspond exactement au même ensemble de caractéristiques sont ajoutés à la liste de lecture, fixant ainsi toute la saison à la même version. Exemple : si le regex correspond à « TeamX » et « 1080p » dans le fichier actuel, seuls les épisodes contenant ces deux mots sont inclus (vide = désactivé)",
+    vp_filter_placeholder: "ex. |TeamX|1080p|CHS",
     vp_filter_valid: "Regex valide",
     vp_filter_invalid: "Regex invalide",
 
@@ -227,7 +227,7 @@ export const fr: typeof zhCN = {
         "La limitation ne peut être inférieure à 120 secondes ; corrigée à 120",
     sys_bangumi: "Suivi Bangumi.tv",
     sys_bangumi_sync_note:
-        "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Bangumi : atteindre environ 80 % ou plus marque l'épisode comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également marqués, sans dupliquer ceux déjà présents. Le marquer comme vu règle aussi l'œuvre sur « en cours de visionnage ».",
+        "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Bangumi : atteindre ≥ 80 % marque l'épisode en cours comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également ajoutés, sans doublon. S'il n'y a rien à marquer (< 80 % et aucun historique), l'œuvre est mise en « en cours de visionnage » uniquement si la durée de lecture effective est ≥ 20 secondes, sinon elle est ignorée pour éviter les ajouts accidentels.",
     sys_bangumi_host: "Activer l'hôte",
     sys_bangumi_host_desc:
         "Mots-clés d'hôtes séparés par des virgules ; laissez vide pour désactiver, un seul point active tout",
@@ -253,6 +253,23 @@ export const fr: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Vérifier et ajouter",
     map_remove: "Supprimer",
+    map_group_add: "Nouveau groupe",
+    map_group_name_placeholder: "Nom du groupe",
+    map_group_add_confirm: "Créer",
+    map_group_delete: "Supprimer le groupe",
+    map_group_delete_confirm:
+        "Supprimer le groupe « {name} » et toutes ses correspondances ?",
+    map_group_default_label: "Par défaut",
+    map_export: "Exporter",
+    map_export_done: "Correspondances exportées",
+    map_import: "Importer",
+    map_import_prefer: "Préférer l'importé (écraser les conflits locaux)",
+    map_import_done: "Import terminé : {added} ajoutées, {replaced} remplacées",
+    cfg_backup_busy: "Sauvegarde en cours…",
+    cfg_importing: "Importation…",
+    bgm_mark_watching: "Marquer comme en cours",
+    bgm_mark_watching_desc:
+        "Activé : un visionnage partiel marque l'œuvre comme en cours. Désactivé : le statut se met à jour uniquement après un épisode complet.",
     map_err_empty: "Saisissez un mappage",
     map_err_format: "Mal formé — attendu « LHS -> RHS »",
     map_err_provider: "Source inconnue ; seuls tmdb / imdb / tvdb sont pris en charge",
@@ -399,8 +416,8 @@ export const fr: typeof zhCN = {
     // Download
     page_download: "Téléchargements",
     dl_folder: "Dossier de téléchargement",
-    dl_folder_desc: "Emplacement de sauvegarde. Vide = dossier système (~/Downloads)",
+    dl_folder_desc: "Laisser vide pour utiliser le dossier système par défaut",
     dl_browse: "Parcourir…",
-    dl_placeholder: "Vide pour le dossier par défaut (~/Downloads)",
+    dl_placeholder: "",
     dl_path_error: "Le chemin n'existe pas, vérifiez la saisie",
 };
