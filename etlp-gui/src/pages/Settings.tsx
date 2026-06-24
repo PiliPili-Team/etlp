@@ -1987,40 +1987,52 @@ function SystemSection({
                 />
                 {updateResult && (
                     <div className="update-result-row">
-                        <span className="update-result-versions">
-                            <span className="update-result-cur">
+                        <div className="update-result-info">
+                            <span className="update-result-label">
+                                {t("cfg_update_current_ver")}
+                            </span>
+                            <span
+                                className={
+                                    !updateResult.has_update &&
+                                    updateResult.current !== updateResult.latest
+                                        ? "update-result-ver update-result-ver-ahead"
+                                        : "update-result-ver"
+                                }
+                            >
                                 {updateResult.current}
                             </span>
-                            <span className="update-result-arrow"> → </span>
+                            <span className="update-result-label">
+                                {t("cfg_update_latest_ver")}
+                            </span>
                             <span
                                 className={
                                     updateResult.has_update
-                                        ? "update-result-latest update-result-latest-new"
-                                        : updateResult.current !== updateResult.latest
-                                          ? "update-result-latest update-result-latest-ahead"
-                                          : "update-result-latest"
+                                        ? "update-result-ver update-result-ver-new"
+                                        : "update-result-ver"
                                 }
                             >
                                 {updateResult.latest}
                             </span>
-                        </span>
-                        {updateResult.has_update && (
+                        </div>
+                        <div className="update-result-actions">
+                            {updateResult.has_update && (
+                                <button
+                                    className="update-result-install"
+                                    onClick={() => void doInstallUpdate()}
+                                    disabled={downloadingUpdate}
+                                >
+                                    {downloadingUpdate
+                                        ? t("ov_update_downloading")
+                                        : t("cfg_update_install")}
+                                </button>
+                            )}
                             <button
-                                className="update-result-install"
-                                onClick={() => void doInstallUpdate()}
-                                disabled={downloadingUpdate}
+                                className="update-result-close"
+                                onClick={() => setUpdateResult(null)}
                             >
-                                {downloadingUpdate
-                                    ? t("ov_update_downloading")
-                                    : t("cfg_update_install")}
+                                ×
                             </button>
-                        )}
-                        <button
-                            className="update-result-close"
-                            onClick={() => setUpdateResult(null)}
-                        >
-                            ×
-                        </button>
+                        </div>
                     </div>
                 )}
             </div>
