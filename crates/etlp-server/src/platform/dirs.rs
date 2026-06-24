@@ -5,9 +5,15 @@
 //! | Linux    | `$XDG_CONFIG_HOME/etlp` (→ `~/.config/etlp`) | `$XDG_DATA_HOME/etlp` (→ `~/.local/share/etlp`) |
 //! | macOS    | `~/.config/etlp`     | `~/.local/share/etlp`   |
 //! | Windows  | `%APPDATA%\etlp`     | `%LOCALAPPDATA%\etlp`   |
+//! | Windows Portable | `<exe_dir>\config` | `<exe_dir>\data` |
 //!
 //! macOS deliberately uses XDG-style paths instead of `~/Library/Application Support`
 //! so configuration files are easy to locate and edit from a terminal.
+//!
+//! **Windows Portable mode** is detected when a `portable.txt` marker file or
+//! an existing `config/` directory is found alongside the executable. In that
+//! mode all paths are relative to the exe directory so the entire installation
+//! is self-contained and can be moved freely.
 
 use std::path::PathBuf;
 
@@ -17,6 +23,10 @@ const APP_NAME: &str = "etlp";
 /// binary. Set to `"app"` by the Tauri entry point before any threads spawn;
 /// absent or any other value means CLI binary.
 pub const ENV_RUNTIME: &str = "ETLP_RUNTIME";
+
+/// Environment variable set to `"1"` when the app starts in Windows Portable
+/// mode. Child processes (e.g. `updater.exe`) can read it to know the layout.
+pub const ENV_PORTABLE: &str = "ETLP_PORTABLE";
 
 /// Whether the current process was launched as the CLI binary or the GUI app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,11 +75,52 @@ fn base_data() -> Option<PathBuf> {
     dirs::data_dir()
 }
 
+/// Returns the executable's parent directory when the process is running in
+/// Windows Portable mode, or `None` otherwise.
+///
+/// Portable mode is declared by either a `portable.txt` marker file or an
+/// existing `config/` directory alongside the exe. The marker-file form is
+/// preferred for fresh installations; the directory form ensures an existing
+/// portable install keeps working after the marker is removed.
+///
+/// Only ever returns `Some` on Windows; other platforms always return `None`.
+#[cfg(target_os = "windows")]
+fn portable_root() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    if exe_dir.join("portable.txt").exists()
+        || exe_dir.join("config").is_dir()
+    {
+        Some(exe_dir.to_path_buf())
+    } else {
+        None
+    }
+}
+
+/// Returns `true` when the process is running in Windows Portable mode.
+///
+/// Always `false` on non-Windows platforms.
+#[must_use]
+pub fn is_portable() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        portable_root().is_some()
+    }
+    #[cfg(not(target_os = "windows"))]
+    false
+}
+
 /// Config directory: stores `config.toml`, Trakt/BGM credentials.
 ///
-/// Returns `None` only when the home directory cannot be determined.
+/// On Windows Portable this is `<exe_dir>\config`; elsewhere it is the
+/// platform-standard location. Returns `None` only when the path cannot be
+/// determined.
 #[must_use]
 pub fn config_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    if let Some(root) = portable_root() {
+        return Some(root.join("config"));
+    }
     base_config().map(|d| d.join(APP_NAME))
 }
 
@@ -77,9 +128,30 @@ pub fn config_dir() -> Option<PathBuf> {
 /// content: `log/` (etlp.log, mpv.log), `cache/` (per-feature caches such as
 /// `cache/bangumi/`), `backup/` (config backup archives), plus credential files
 /// (`device_id`, `trakt_token.json`) kept at the root.
+///
+/// On Windows Portable this is `<exe_dir>\data`; elsewhere it is the
+/// platform-standard location.
 #[must_use]
 pub fn data_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    if let Some(root) = portable_root() {
+        return Some(root.join("data"));
+    }
     base_data().map(|d| d.join(APP_NAME))
+}
+
+/// Update staging directory used exclusively by Windows Portable mode.
+///
+/// Returns `Some(<exe_dir>\update)` when [`is_portable()`] is `true`, otherwise
+/// `None`. The caller is responsible for creating the directory before use.
+#[must_use]
+pub fn portable_update_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        portable_root().map(|r| r.join("update"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    None
 }
 
 /// `log/` sub-directory under `base` — holds `etlp.log` and `mpv.log`.
@@ -173,6 +245,19 @@ fn relocate(from: &std::path::Path, to: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_portable_false_on_non_windows() {
+        // On non-Windows platforms portable mode can never be active.
+        #[cfg(not(target_os = "windows"))]
+        assert!(!is_portable());
+    }
+
+    #[test]
+    fn portable_update_dir_none_on_non_windows() {
+        #[cfg(not(target_os = "windows"))]
+        assert!(portable_update_dir().is_none());
+    }
 
     #[test]
     fn migrate_layout_relocates_legacy_files() {
