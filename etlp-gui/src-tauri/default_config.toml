@@ -36,7 +36,19 @@ redirect_check_host = []
 
 # Disable the playlist when the current episode is the last available one.
 last_ep_disable_playlist = true
-version_prefer = ["VCB", "ADE", "拨雪寻春", "北宇治", "霜庭云花", "@LoliHouse", "&LoliHouse", "字幕组", "字幕社", "组", "Sub", "简日", "双语", "Netflix", "NF", "Crunchyroll", "简繁日", "CR", "KKTV", "AMZN", "Amazon", "friDay", "Disney", "CatchPlay", "Viu", "AppleTV", "APTV", "HMAX", "B-Global", "BiliBili", "Abema", "iTunes", "内封", "简繁内封", "LoliHouse", "简繁", "Baha"]
+version_prefer = [
+    "mawen1250", "LittleBakas!", "ANE", "Fussoir", "Henshin", "ANK",
+    "Beatrice-Raws", "VCB", "ADE", "philosophy-raws", "Snow-Raws", "AI-Raws",
+    "7³ACG", "简繁特效", "Nest", "NEO·QSW", "诸神字幕组", "拨雪寻春",
+    "澄空学园", "北宇治", "霜庭云花", "绿茶字幕组", "SweetSub", "三明治摆烂组",
+    "星空字幕组", "喵萌奶茶屋", "桜都字幕组", "千夏字幕组", "简繁日",
+    "@LoliHouse", "&LoliHouse", "晚街与灯", "今晚月色真美", "出格君",
+    "简日", "双语", "字幕组", "字幕社", "组", "Sub", "简体", "内嵌",
+    "Netflix", "NF", "Crunchyroll", "CR", "LoliHouse", "HMAX", "Disney",
+    "iTunes", "APTV", "AppleTV", "AMZN", "Amazon", "friDay", "CatchPlay",
+    "LINETV", "Viu", "KKTV", "B-Global", "BiliBili", "Abema",
+    "内封", "简繁内封", "简繁", "Baha",
+]
 
 # Use version_prefer to fill playlist slots when a perfect version match fails.
 version_prefer_for_playlist = true
@@ -44,8 +56,9 @@ version_prefer_for_playlist = true
 # Ordered subtitle selection keywords (matched against the subtitle track name).
 subtitle_priority = [
     "中英特效", "双语特效", "简中特效", "简体特效", "特效",
-    "中上", "中英", "澄空", "诸神", "千夏", "桜都", "双语",
-    "简", "simp", "中", "chi", "ass", "srt", "sup", "und", "(",
+    "中上", "中英", "衣柜", "拨雪寻春", "诸神", "澄空", "北宇治",
+    "SweetSub", "千夏", "喵萌", "桜都", "豌豆",
+    "双语", "简", "simp", "中", "chi", "ass", "srt", "sup", "und", "(",
 ]
 skip_certificate_verify = true
 
@@ -57,7 +70,39 @@ item_limit = 1
 # Regex that selects one version per episode for the playlist (empty = no filter).
 # Matches case-insensitively; leading/trailing | and internal whitespace are ignored.
 # Use TOML literal string (single quotes) to avoid backslash escaping.
-version_filter = "|豌豆字幕组|北宇治字幕组|云光字幕组|织梦字幕组|千夏字幕组|风之圣殿字幕组|风车字幕组|银色子弹字幕组|枫叶字幕组|诸神字幕组|SW字幕组|DAY字幕组|轻之国度字幕组|星空字幕组|冷番补完字幕组|康复中心字幕组|極彩字幕组|桜都字幕组|幻之字幕组|魔穗字幕组|白恋字幕组|动漫国字幕组|FSD字幕组|酷漫字幕组|康复重症监护室字幕组|擦枪字幕组|幻樱字幕组|咪梦字幕组|漫游字幕组|爱恋字幕社|漫猫字幕社|极影字幕社|悠哈璃羽字幕社|六道是我大鸽汉化组|MCE汉化组|猫恋汉化组|猎户发布组|DBD制作组|DBD|Amor压制组|永恒译制|MingYSub|霜庭云花Sub|离谱Sub|新Sub|SweetSub|AI-Raws|Kawaiika-Raws|Zero-Raws|Deadmau-RAWS|IrizaRaws|Beatrice-Raws|jsum|Magic-Raws|喵萌奶茶屋|熔岩动画|Xrip|AKito秋人|智械尚未危机制作|雪飘工作室|亿次研同好会|VARYG|hchcsen|Arid|Knf|sxales|异域-11番小队|DreamHD|AliPan|Kagura|hydes|niizk|氢气烤肉架|LoliHouse|VCB-Studio|7³ACG|LittleBakas|FSD粉羽社|OPFans枫雪动漫|GM-Team|澄空学园|SilverBullet|APTX4869|NEO·QSW|720p|1080p|2160p|4k|remux|hevc|h.265|h.264|h265|h264|flac|aac|sdr|hdr|dv|vision|dvrip|bdrip|mkv|mp4|Baha|Crunchyroll|B-Global|KKTV|MyVideo|AMZN|friDay|Disney\\+|LINETV|Netflix|playWEB|Viu|Amazon|AppleTV\\+|HMAX|BiliBili|Abema|YouTube|CatchPlay|iTunes|ADWeb|NTb|FLUX|简体|繁体|繁體|简繁|中英|简英|繁英|中日|简日|繁日|双语|内封|内嵌"
+version_filter = '''喵萌奶茶屋|豌豆字幕组|爱恋字幕社|漫猫字幕社|北宇治字幕组|
+云光字幕组|织梦字幕组|千夏字幕组|极影字幕社|风之圣殿字幕组|
+风车字幕组|银色子弹字幕组|熔岩动画|MingYSub|今晚月色真美|
+枫叶字幕组|诸神字幕组|猎户发布组|SW字幕组|DAY字幕组|Xrip|
+AKito秋人|智械尚未危机制作|六道是我大鸽汉化组|霜庭云花Sub|
+轻之国度字幕组|星空字幕组|离谱Sub|雪飘工作室|jibaketa-粤语版|
+亿次研同好会|❀拨雪寻春❀|VARYG|新Sub|AI-Raws|B站小鱼儿呼唤爱|
+hchcsen|Arid|Knf|Kawaiika-Raws|冷番补完字幕组|sxales|
+异域-11番小队|Zero-Raws|DreamHD|AliPan|Kagura|hydes|niizk|
+康复中心字幕组|Xeon晚生|MCE汉化组|極彩字幕组|氢气烤肉架|
+悠哈璃羽字幕社|桜都字幕组|SweetSub|LoliHouse|VCB-Studio|
+7³ACG|幻之字幕组|魔穗字幕组|LittleBakas!|Deadmau-RAWS|
+白恋字幕组|动漫国字幕组|IrizaRaws|FSD字幕组|FSD粉羽社|
+一只出格君|猫恋汉化组|OPFans枫雪动漫|GM-Team|酷漫字幕组|
+澄空学园|弗里吉亚宫内厅字幕组|愛遊結同窓会|晚街与灯|
+Beatrice-Raws|康复重症监护室字幕组|擦枪字幕组|SilverBullet|
+APTX4869|X酱|幻樱字幕组|永恒译制|咪梦字幕组|NEO·QSW|
+漫游字幕组|Snow-Raws|philosophy-raws|B-Global|KKTV|MyVideo|
+AMZN|friDay|HIDIVE|Disney(\+)?|LINETV|NF|playWEB|Viu|
+Amazon|MAX|AppleTV(\+)?|HMAX|bilibili|BiliBili|Bilibili|
+ANi|Abema|YouTube|CatchPlay|iTunes|IQIYI|Remux|ADWeb|NTb|
+FLUX|Amor压制组|DSNP|银色子弹字幕组|HiveWeb|B站仮面ライダーX酱|
+Suzuya-Raws|前伪汉化组|RLWeb|SourGrape|三明治摆烂组|
+Prejudice-Studio|秋里乐叶galgame部|三明治代餐部|奶²|
+神椿观测站|西农YUI汉化组|华盟字幕社|百冬练习组|绿茶字幕组|
+虹作坊汉化组|黑白字幕组|H-Enc|Nest|Y-Raws|简繁特效|简繁内封|
+简繁日内封|简繁日英内封|简繁官字内封|官简内封|简日双语|简体内封|
+简体内嵌|繁体内嵌|简英双语|简体&英文|繁英|繁体&英文|繁體&英文|
+中日|简日|繁日|双语|内封|内嵌|..字幕组|..字幕社|..汉化组|
+..发布组|..制作组|..压制组|..译制|...Raws|..@..|
+HDR|DoVi|720p|1080p|2160p|4k|remux|hevc|
+h.265|h.264|h265|h264|flac|aac|sdr|hdr|dv|vision|
+dvrip|bdrip|mkv|mp4|avi'''
 
 # ── Path translation ──────────────────────────────────────────────────────────
 # Each [[path_map]] entry is one src→dst pair (replaces [src]/[dst] in INI).
