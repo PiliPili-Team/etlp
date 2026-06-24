@@ -1,0 +1,47 @@
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: windows-portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: etlp-gui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Cache main workspace (etlp-updater lives here).
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-portable-workspace
+
+      # Cache Tauri sub-workspace separately.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "etlp-gui/src-tauri -> target"
+          key: windows-portable-tauri
+
+      - name: Build portable zip
+        shell: bash
+        run: bash scripts/build-windows-portable.sh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-portable
+          path: dist/Genshin-portable-x64-*.zip
+          retention-days: 7
