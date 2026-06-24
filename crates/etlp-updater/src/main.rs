@@ -85,9 +85,10 @@ fn copy_dir(src: &Path, dest: &Path, root: &Path) -> Result<(), String> {
             .map_err(|e| format!("strip prefix: {e}"))?;
 
         // Zip-slip guard: reject any component that resolves up the tree.
-        if relative.components().any(|c| {
-            matches!(c, std::path::Component::ParentDir)
-        }) {
+        if relative
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(format!("unsafe path: {}", relative.display()));
         }
 
