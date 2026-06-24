@@ -69,7 +69,7 @@ export const fr: typeof zhCN = {
     pl_fullscreen: "Plein écran",
     pl_fullscreen_desc: "Démarrer le lecteur en mode plein écran",
     pl_mute: "Démarrer en silence",
-    pl_mute_desc: "Lancer avec le son désactivé (mpv --no-audio)",
+    pl_mute_desc: "Lancer en sourdine (mpv --mute=yes)",
     pl_pretty_title: "Titre élégant",
     pl_pretty_title_desc: "Ajouter le nom du serveur au titre de la fenêtre du lecteur",
     pl_kill_start: "Quitter au démarrage",

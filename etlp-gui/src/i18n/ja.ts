@@ -68,7 +68,7 @@ export const ja: typeof zhCN = {
     pl_fullscreen: "全画面",
     pl_fullscreen_desc: "プレーヤーを全画面モードで起動します",
     pl_mute: "ミュートで起動",
-    pl_mute_desc: "音声を無効にして起動します（mpv --no-audio）",
+    pl_mute_desc: "ミュートで起動します（mpv --mute=yes）",
     pl_pretty_title: "タイトルを整形",
     pl_pretty_title_desc: "プレーヤーのウィンドウタイトルにサーバー名を付加します",
     pl_kill_start: "起動時に終了",

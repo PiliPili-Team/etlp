@@ -69,7 +69,7 @@ export const pl: typeof zhCN = {
     pl_fullscreen: "Pełny ekran",
     pl_fullscreen_desc: "Uruchom odtwarzacz w trybie pełnoekranowym",
     pl_mute: "Uruchom wyciszony",
-    pl_mute_desc: "Uruchom z wyłączonym dźwiękiem (mpv --no-audio)",
+    pl_mute_desc: "Uruchom wyciszony (mpv --mute=yes)",
     pl_pretty_title: "Ładny tytuł",
     pl_pretty_title_desc: "Dodaj nazwę serwera na początku tytułu okna odtwarzacza",
     pl_kill_start: "Zamknij przy uruchamianiu",

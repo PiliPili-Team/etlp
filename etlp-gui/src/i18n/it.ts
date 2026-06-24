@@ -69,7 +69,7 @@ export const it: typeof zhCN = {
     pl_fullscreen: "Schermo intero",
     pl_fullscreen_desc: "Avvia il lettore in modalità schermo intero",
     pl_mute: "Avvia muto",
-    pl_mute_desc: "Avvia con l'audio disabilitato (mpv --no-audio)",
+    pl_mute_desc: "Avvia in modalità muto (mpv --mute=yes)",
     pl_pretty_title: "Titolo elegante",
     pl_pretty_title_desc:
         "Anteponi il nome del server al titolo della finestra del lettore",

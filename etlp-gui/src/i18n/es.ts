@@ -69,7 +69,7 @@ export const es: typeof zhCN = {
     pl_fullscreen: "Pantalla completa",
     pl_fullscreen_desc: "Iniciar el reproductor en modo de pantalla completa",
     pl_mute: "Iniciar silenciado",
-    pl_mute_desc: "Iniciar con el audio desactivado (mpv --no-audio)",
+    pl_mute_desc: "Iniciar silenciado (mpv --mute=yes)",
     pl_pretty_title: "Título elegante",
     pl_pretty_title_desc:
         "Anteponer el nombre del servidor al título de la ventana del reproductor",

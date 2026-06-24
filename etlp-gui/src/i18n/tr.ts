@@ -69,7 +69,7 @@ export const tr: typeof zhCN = {
     pl_fullscreen: "Tam Ekran",
     pl_fullscreen_desc: "Oynatıcıyı tam ekran modunda başlat",
     pl_mute: "Sessiz Başlat",
-    pl_mute_desc: "Ses kapalı olarak başlat (mpv --no-audio)",
+    pl_mute_desc: "Sessiz başlat (mpv --mute=yes)",
     pl_pretty_title: "Güzel Başlık",
     pl_pretty_title_desc: "Oynatıcı pencere başlığının başına sunucu adını ekle",
     pl_kill_start: "Başlatmada Sonlandır",

@@ -69,7 +69,7 @@ export const uk: typeof zhCN = {
     pl_fullscreen: "На весь екран",
     pl_fullscreen_desc: "Запускати програвач у повноекранному режимі",
     pl_mute: "Запуск без звуку",
-    pl_mute_desc: "Запускати з вимкненим звуком (mpv --no-audio)",
+    pl_mute_desc: "Запускати без звуку (mpv --mute=yes)",
     pl_pretty_title: "Гарний заголовок",
     pl_pretty_title_desc: "Додавати ім'я сервера на початок заголовка вікна програвача",
     pl_kill_start: "Завершувати під час запуску",

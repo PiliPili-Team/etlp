@@ -68,7 +68,7 @@ export const he: typeof zhCN = {
     pl_fullscreen: "מסך מלא",
     pl_fullscreen_desc: "הפעל את הנגן במצב מסך מלא",
     pl_mute: "הפעל בשקט",
-    pl_mute_desc: "הפעל עם שמע מושתק (mpv --no-audio)",
+    pl_mute_desc: "הפעל מושתק (mpv --mute=yes)",
     pl_pretty_title: "כותרת יפה",
     pl_pretty_title_desc: "הוסף את שם השרת לתחילת כותרת חלון הנגן",
     pl_kill_start: "סגור בהפעלה",

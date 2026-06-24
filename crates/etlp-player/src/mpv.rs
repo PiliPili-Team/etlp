@@ -346,7 +346,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         cmd.push("--fullscreen=yes".into());
     }
     if args.disable_audio {
-        cmd.push("--no-audio".into());
+        cmd.push("--mute=yes".into());
     }
     if args.is_multiple_episodes {
         cmd.push("--pause".into());
