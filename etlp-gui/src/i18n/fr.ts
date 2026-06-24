@@ -327,17 +327,17 @@ export const fr: typeof zhCN = {
     cfg_update_checking: "Vérification…",
     cfg_update_available: "Nouvelle version v{version} trouvée",
     cfg_update_latest: "Vous utilisez la dernière version v{version}",
-        cfg_update_current_ver: "Actuel : v{version}",
-        cfg_update_latest_ver: "Dernier : v{version}",
-        cfg_update_up_to_date: "À jour",
-        cfg_update_install: "Télécharger et installer",
+    cfg_update_current_ver: "Actuel : v{version}",
+    cfg_update_latest_ver: "Dernier : v{version}",
+    cfg_update_up_to_date: "À jour",
+    cfg_update_install: "Télécharger et installer",
 
     // Update banner (overview)
     ov_update_available: "Nouvelle version v{version} disponible",
     ov_update_action: "Installer la mise à jour",
     ov_update_dismiss: "Ignorer cette version",
-        ov_update_downloading: "Téléchargement de la mise à jour…",
-        ov_update_failed: "Échec de la mise à jour",
+    ov_update_downloading: "Téléchargement de la mise à jour…",
+    ov_update_failed: "Échec de la mise à jour",
     sys_privacy: "Confidentialité",
     sys_no_progress: "Désactiver le rapport de progression",
     sys_no_progress_desc:
