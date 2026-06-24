@@ -670,6 +670,7 @@ pub fn run() {
             commands::validate_bangumi_mapping,
             commands::export_bangumi_map,
             commands::import_bangumi_map,
+            commands::import_bangumi_map_url,
             commands::validate_regex,
         ])
         .on_window_event(|window, event| {
