@@ -322,14 +322,19 @@ export const de: typeof zhCN = {
     cfg_update_check: "Jetzt prüfen",
     cfg_update_check_desc: "Jetzt GitHub auf eine neuere Version prüfen",
     cfg_update_checking: "Wird geprüft…",
-    cfg_update_available:
-        "Neue Version v{version} gefunden – die Release-Seite wird geöffnet",
+    cfg_update_available: "Neue Version v{version} gefunden",
     cfg_update_latest: "Sie verwenden die neueste Version v{version}",
+        cfg_update_current_ver: "Aktuell: v{version}",
+        cfg_update_latest_ver: "Neueste: v{version}",
+        cfg_update_up_to_date: "Aktuell",
+        cfg_update_install: "Herunterladen & Installieren",
 
     // Update banner (overview)
     ov_update_available: "Neue Version v{version} verfügbar",
-    ov_update_action: "Aktualisieren",
+    ov_update_action: "Update installieren",
     ov_update_dismiss: "Diese Version ignorieren",
+        ov_update_downloading: "Update wird heruntergeladen…",
+        ov_update_failed: "Update fehlgeschlagen",
     sys_privacy: "Datenschutz",
     sys_no_progress: "Fortschrittsmeldung deaktivieren",
     sys_no_progress_desc:
