@@ -229,7 +229,9 @@ async fn run_player_chain(
             };
             let window_end =
                 (window_start + cfg.playlist_limit).min(episode_list.len());
-            let windowed = &episode_list[window_start..window_end];
+            let windowed = episode_list
+                .get(window_start..window_end)
+                .unwrap_or(&episode_list[..]);
 
             let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
             let mut m3u8 = String::from("#EXTM3U\n");
