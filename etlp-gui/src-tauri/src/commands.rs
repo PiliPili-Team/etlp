@@ -1364,6 +1364,322 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
     })
 }
 
+// ── Update download / install ─────────────────────────────────────────────────
+
+/// Asset filename for the current platform and installation mode.
+fn platform_asset_filename(version: &str) -> String {
+    inner_asset_name(version)
+}
+
+#[cfg(target_os = "macos")]
+fn inner_asset_name(version: &str) -> String {
+    let arch = if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x64"
+    };
+    format!("Genshin_{version}_{arch}.dmg")
+}
+
+#[cfg(target_os = "windows")]
+fn inner_asset_name(version: &str) -> String {
+    if etlp_server::platform::is_portable() {
+        format!("Genshin-portable-x64-{version}.zip")
+    } else {
+        format!("Genshin_{version}_x64-setup.exe")
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn inner_asset_name(version: &str) -> String {
+    format!("Genshin_{version}_amd64.AppImage")
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+)))]
+fn inner_asset_name(_version: &str) -> String {
+    String::new()
+}
+
+/// Download `url` to `dest`, creating parent directories as needed.
+async fn download_file(
+    url: &str,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent(format!("etlp/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("download request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "download failed: HTTP {}",
+            resp.status().as_u16()
+        ));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("read response body: {e}"))?;
+
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("create download dir: {e}"))?;
+    }
+    tokio::fs::write(dest, bytes.as_ref())
+        .await
+        .map_err(|e| format!("write downloaded file: {e}"))?;
+    Ok(())
+}
+
+/// Extract a zip archive to `output_dir`.
+///
+/// Path components containing `..` are rejected to prevent zip-slip attacks.
+#[cfg(target_os = "windows")]
+fn extract_zip(
+    zip_path: &std::path::Path,
+    output_dir: &std::path::Path,
+) -> Result<(), String> {
+    use std::io::Read as _;
+
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| format!("open zip archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("parse zip archive: {e}"))?;
+
+    std::fs::create_dir_all(output_dir)
+        .map_err(|e| format!("create extraction dir: {e}"))?;
+
+    let entry_count = archive.len();
+    for i in 0..entry_count {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("read zip entry {i}: {e}"))?;
+
+        let raw_name = entry.name().to_owned();
+        let safe_rel: std::path::PathBuf = raw_name
+            .trim_start_matches(['/', '\\'])
+            .split(['/', '\\'])
+            .filter(|seg| !seg.is_empty() && *seg != "..")
+            .collect();
+        let entry_path = output_dir.join(&safe_rel);
+
+        if entry.is_dir() {
+            std::fs::create_dir_all(&entry_path).map_err(|e| {
+                format!("mkdir {}: {e}", entry_path.display())
+            })?;
+        } else {
+            if let Some(parent) = entry_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir parent: {e}"))?;
+            }
+            let mut out = std::fs::File::create(&entry_path).map_err(|e| {
+                format!("create {}: {e}", entry_path.display())
+            })?;
+            let mut buf = Vec::new();
+            entry
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("read zip entry: {e}"))?;
+            std::io::Write::write_all(&mut out, &buf).map_err(|e| {
+                format!("write {}: {e}", entry_path.display())
+            })?;
+        }
+    }
+    Ok(())
+}
+
+/// Launch the downloaded installer on the current platform.
+fn apply_update_installer(
+    app: &tauri::AppHandle,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    apply_installer_inner(app, dest)
+}
+
+#[cfg(target_os = "macos")]
+fn apply_installer_inner(
+    _app: &tauri::AppHandle,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(dest)
+        .spawn()
+        .map_err(|e| format!("open DMG: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn apply_installer_inner(
+    app: &tauri::AppHandle,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    // Silent NSIS install. Exit the app immediately so the installer can
+    // replace the locked executable without a file-lock conflict.
+    std::process::Command::new(dest)
+        .arg("/S")
+        .spawn()
+        .map_err(|e| format!("launch NSIS installer: {e}"))?;
+    app.exit(0);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn apply_installer_inner(
+    _app: &tauri::AppHandle,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut perms = std::fs::metadata(dest)
+        .map_err(|e| format!("stat AppImage: {e}"))?
+        .permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(dest, perms)
+        .map_err(|e| format!("chmod AppImage: {e}"))?;
+    std::process::Command::new(dest)
+        .spawn()
+        .map_err(|e| format!("launch AppImage: {e}"))?;
+    Ok(())
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "windows",
+    target_os = "linux",
+)))]
+fn apply_installer_inner(
+    _app: &tauri::AppHandle,
+    _dest: &std::path::Path,
+) -> Result<(), String> {
+    Err("automatic update is not supported on this platform".to_owned())
+}
+
+/// Download the platform-appropriate release asset and launch the installer.
+///
+/// **Windows Portable**: downloads the portable zip, extracts it to
+/// `update/tmp/`, launches `updater.exe` to perform the in-place swap while
+/// the app exits, then quits.
+///
+/// **Installer builds** (NSIS / DMG / AppImage): downloads and launches the
+/// platform installer. On Windows the app exits immediately so NSIS can
+/// replace the locked executable.
+#[tauri::command]
+pub async fn download_and_apply_update(
+    app: tauri::AppHandle,
+    version: String,
+) -> Result<(), String> {
+    let filename = platform_asset_filename(&version);
+    if filename.is_empty() {
+        return Err(
+            "automatic update is not supported on this platform"
+                .to_owned(),
+        );
+    }
+
+    let url = format!(
+        "https://github.com/{GITHUB_REPO}/releases/download/v{version}/{filename}"
+    );
+
+    // Portable installations stage updates inside the exe directory;
+    // installer builds use the system temp directory (auto-cleaned on reboot).
+    let dl_dir =
+        etlp_server::platform::portable_update_dir()
+            .unwrap_or_else(|| std::env::temp_dir().join("etlp-update"));
+
+    tokio::fs::create_dir_all(&dl_dir)
+        .await
+        .map_err(|e| format!("create download directory: {e}"))?;
+
+    let dest = dl_dir.join(&filename);
+    info!(url = %url, dest = %dest.display(), "downloading update asset");
+    download_file(&url, &dest).await?;
+    info!(dest = %dest.display(), "update asset downloaded");
+
+    // Windows Portable: extract zip and delegate file-swap to updater.exe.
+    #[cfg(target_os = "windows")]
+    if etlp_server::platform::is_portable() {
+        let tmp_dir = dl_dir.join("tmp");
+        let dest_c = dest.clone();
+        let tmp_c = tmp_dir.clone();
+        tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+            if tmp_c.exists() {
+                std::fs::remove_dir_all(&tmp_c)
+                    .map_err(|e| format!("cleanup tmp dir: {e}"))?;
+            }
+            extract_zip(&dest_c, &tmp_c)
+        })
+        .await
+        .map_err(|e| format!("extract task panicked: {e}"))?
+        .map_err(|e| format!("extract update zip: {e}"))?;
+
+        let current_exe = std::env::current_exe()
+            .map_err(|e| format!("resolve current exe: {e}"))?;
+        let install_dir = current_exe
+            .parent()
+            .ok_or("executable has no parent directory")?;
+        let updater_exe = install_dir.join("updater.exe");
+
+        if !updater_exe.exists() {
+            return Err(
+                "updater.exe not found in the portable directory. \
+                 Please re-download the portable package to get a version \
+                 that includes the built-in updater."
+                    .to_owned(),
+            );
+        }
+
+        let pid = std::process::id();
+        std::process::Command::new(&updater_exe)
+            .arg("--pid")
+            .arg(pid.to_string())
+            .arg("--update-dir")
+            .arg(
+                tmp_dir
+                    .to_str()
+                    .ok_or("update tmp dir contains non-UTF-8 path")?,
+            )
+            .arg("--install-dir")
+            .arg(
+                install_dir
+                    .to_str()
+                    .ok_or("install dir contains non-UTF-8 path")?,
+            )
+            .arg("--exe")
+            .arg(
+                current_exe
+                    .to_str()
+                    .ok_or("exe path contains non-UTF-8 path")?,
+            )
+            .spawn()
+            .map_err(|e| format!("launch updater.exe: {e}"))?;
+
+        info!("updater.exe launched; exiting to allow file swap");
+        app.exit(0);
+        return Ok(());
+    }
+
+    apply_update_installer(&app, &dest)
+}
+
+/// Returns `true` when the process is running as a Windows Portable
+/// installation (all paths are relative to the exe directory).
+///
+/// Always returns `false` on non-Windows platforms.
+#[tauri::command]
+pub fn check_is_portable() -> bool {
+    etlp_server::platform::is_portable()
+}
+
 /// Font directories to scan, covering both system-wide and per-user locations.
 ///
 /// User locations matter: fonts a user installs themselves (e.g. via Font Book
