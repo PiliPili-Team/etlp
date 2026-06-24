@@ -45,6 +45,7 @@ sys-locale = "0.3"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
+etlp-core    = { path = "../../crates/etlp-core" }
 etlp-config  = { path = "../../crates/etlp-config" }
 etlp-logging = { path = "../../crates/etlp-logging" }
 etlp-net     = { path = "../../crates/etlp-net" }
