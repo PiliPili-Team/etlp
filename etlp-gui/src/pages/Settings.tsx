@@ -1,4 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import {
+    useState,
+    useEffect,
+    useLayoutEffect,
+    useCallback,
+    useRef,
+    useMemo,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -47,10 +54,11 @@ interface ConfigDto {
     bangumi_private: boolean;
     bangumi_genres: string;
     bangumi_subject_map: string[];
+    bangumi_mark_watching: boolean;
     config_path: string;
 }
 
-type SectionTab =
+export type SectionTab =
     | "player"
     | "version-prefer"
     | "network"
@@ -1345,6 +1353,7 @@ function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) =>
     };
 
     const handleImport = async () => {
+        setBusy(true);
         try {
             const selected = await openDialog({
                 multiple: false,
@@ -1356,6 +1365,8 @@ function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) =>
             }
         } catch (e) {
             addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
         }
     };
 
@@ -1439,7 +1450,8 @@ function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) =>
                 <ButtonRow
                     label={t("cfg_backup_now")}
                     desc={t("cfg_backup_now_desc")}
-                    button={t("cfg_backup_now")}
+                    button={busy ? t("cfg_backup_busy") : t("cfg_backup_now")}
+                    disabled={busy}
                     onClick={() => void handleBackup()}
                 />
                 <div
@@ -1540,7 +1552,8 @@ function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) =>
                 <ButtonRow
                     label={t("cfg_import")}
                     desc={t("cfg_import_desc")}
-                    button={t("cfg_import")}
+                    button={busy ? t("cfg_importing") : t("cfg_import")}
+                    disabled={busy}
                     onClick={() => void handleImport()}
                 />
             </div>
@@ -1636,7 +1649,12 @@ function DownloadSection({
     const [pathValid, setPathValid] = useState<boolean | null>(
         cfg.download_dir ? true : null,
     );
+    const [defaultDir, setDefaultDir] = useState("");
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        void invoke<string>("default_download_dir").then(setDefaultDir);
+    }, []);
 
     const validatePath = useCallback(async (p: string) => {
         if (!p.trim()) {
@@ -1700,7 +1718,7 @@ function DownloadSection({
                                 }`}
                                 style={{ flex: 1, minWidth: 140 }}
                                 value={local}
-                                placeholder={t("dl_placeholder")}
+                                placeholder={defaultDir || t("dl_placeholder")}
                                 onChange={(e) => handleChange(e.target.value)}
                                 onBlur={() => {
                                     if (local !== cfg.download_dir) commit(local);
@@ -1968,27 +1986,27 @@ function SystemSection({
                     disabled={checking}
                 />
                 {updateResult && (
-                    <div className="update-result-panel">
-                        <div className="update-result-versions">
-                            <span>
-                                {t("cfg_update_current_ver", {
-                                    version: updateResult.current,
-                                })}
+                    <div className="update-result-row">
+                        <span className="update-result-versions">
+                            <span className="update-result-cur">
+                                {updateResult.current}
                             </span>
-                            <span className="update-result-sep">→</span>
+                            <span className="update-result-arrow"> → </span>
                             <span
                                 className={
-                                    updateResult.has_update ? "update-result-new" : ""
+                                    updateResult.has_update
+                                        ? "update-result-latest update-result-latest-new"
+                                        : updateResult.current !== updateResult.latest
+                                          ? "update-result-latest update-result-latest-ahead"
+                                          : "update-result-latest"
                                 }
                             >
-                                {t("cfg_update_latest_ver", {
-                                    version: updateResult.latest,
-                                })}
+                                {updateResult.latest}
                             </span>
-                        </div>
-                        {updateResult.has_update ? (
+                        </span>
+                        {updateResult.has_update && (
                             <button
-                                className="btn btn-primary update-result-btn"
+                                className="update-result-install"
                                 onClick={() => void doInstallUpdate()}
                                 disabled={downloadingUpdate}
                             >
@@ -1996,11 +2014,13 @@ function SystemSection({
                                     ? t("ov_update_downloading")
                                     : t("cfg_update_install")}
                             </button>
-                        ) : (
-                            <span className="update-result-ok">
-                                {t("cfg_update_up_to_date")}
-                            </span>
                         )}
+                        <button
+                            className="update-result-close"
+                            onClick={() => setUpdateResult(null)}
+                        >
+                            ×
+                        </button>
                     </div>
                 )}
             </div>
@@ -2237,48 +2257,384 @@ function SyncTabHeader({
     );
 }
 
-/// Editable list of provider→Bangumi subject mappings. New entries are
-/// validated by the backend (`validate_bangumi_mapping`): a valid line is
-/// normalised and appended, an invalid one shows a localised inline error.
-function SubjectMapRow({
-    label,
-    desc,
-    items,
+// ── Grouped Bangumi subject map ────────────────────────────────────────────────
+
+interface GroupEntry {
+    name: string;
+    mappings: string[];
+}
+
+interface MapDragItem {
+    group: string;
+    idx: number;
+    startX: number;
+    startY: number;
+    el: HTMLElement;
+}
+
+function mapTargetAtPoint(x: number, y: number): { group: string; idx: number } | null {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const itemEl = el.closest<HTMLElement>("[data-map-group]");
+    if (itemEl?.dataset.mapGroup != null && itemEl.dataset.mapIdx != null) {
+        return { group: itemEl.dataset.mapGroup, idx: Number(itemEl.dataset.mapIdx) };
+    }
+    const groupEl = el.closest<HTMLElement>("[data-group-drop]");
+    if (groupEl?.dataset.groupDrop) {
+        return {
+            group: groupEl.dataset.groupDrop,
+            idx: Number(groupEl.dataset.groupCount ?? "0"),
+        };
+    }
+    return null;
+}
+
+/** Parse `@GroupName@<dsl>` → {group, mapping}. Default group is `#`. */
+function parseMappingEntry(raw: string): { group: string; mapping: string } {
+    const m = /^@([^@]*)@(.+)$/.exec(raw);
+    if (m) return { group: m[1] || "#", mapping: m[2] };
+    return { group: "#", mapping: raw };
+}
+
+/** Encode back to storage format. Group `#` → bare mapping, others → `@Group@mapping`. */
+function fmtMappingEntry(group: string, mapping: string): string {
+    if (!group || group === "#") return mapping;
+    return `@${group}@${mapping}`;
+}
+
+/** Build ordered `GroupEntry[]` from the flat stored array. `#` is always first. */
+function parseGroups(items: string[]): GroupEntry[] {
+    const map = new Map<string, string[]>();
+    const order: string[] = [];
+    for (const raw of items) {
+        const { group, mapping } = parseMappingEntry(raw);
+        if (!map.has(group)) {
+            map.set(group, []);
+            order.push(group);
+        }
+        map.get(group)!.push(mapping);
+    }
+    const result: GroupEntry[] = [];
+    if (map.has("#")) result.push({ name: "#", mappings: map.get("#")! });
+    for (const name of order) {
+        if (name !== "#") result.push({ name, mappings: map.get(name)! });
+    }
+    return result;
+}
+
+/** Per-group add-row — owns its own input/error/checking state. */
+function GroupAddRow({
+    allExisting,
     onAdd,
-    onRemove,
 }: {
-    label: string;
-    desc?: string;
-    items: string[];
+    allExisting: string[];
     onAdd: (canonical: string) => void;
-    onRemove: (index: number) => void;
 }) {
     const t = useI18n();
     const [input, setInput] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [checking, setChecking] = useState(false);
 
-    const handleCheck = async () => {
+    const handleAdd = async () => {
         const line = input.trim();
         if (!line) {
             setError(t("map_err_empty"));
             return;
         }
         setChecking(true);
+        setError(null);
         try {
             const canonical = await invoke<string>("validate_bangumi_mapping", {
                 line,
-                existing: items,
+                existing: allExisting,
             });
             onAdd(canonical);
             setInput("");
-            setError(null);
         } catch (code) {
-            // The backend rejects with a stable i18n key (e.g. map_err_provider).
             const key = (typeof code === "string" ? code : "map_err_format") as I18nKey;
             setError(t(key));
         } finally {
             setChecking(false);
+        }
+    };
+
+    return (
+        <>
+            <div className="map-add" style={{ marginTop: 4 }}>
+                <input
+                    className="input code"
+                    value={input}
+                    placeholder={t("map_placeholder")}
+                    onChange={(e) => {
+                        setInput(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") void handleAdd();
+                    }}
+                />
+                <button
+                    className="btn btn-primary map-check"
+                    disabled={checking}
+                    onClick={() => void handleAdd()}
+                >
+                    {t("map_check")}
+                </button>
+            </div>
+            {error && <div className="map-error">{error}</div>}
+        </>
+    );
+}
+
+/** Grouped, reorderable list of provider→Bangumi subject mappings. */
+function GroupedSubjectMap({
+    label,
+    desc,
+    items,
+    onUpdate,
+    addToast,
+}: {
+    label: string;
+    desc?: string;
+    items: string[];
+    onUpdate: (newItems: string[]) => void;
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+    const groups = useMemo(() => parseGroups(items), [items]);
+
+    // Extra groups created by the user but not yet containing any mappings.
+    const [extraGroups, setExtraGroups] = useState<string[]>([]);
+    const [showNewGroup, setShowNewGroup] = useState(false);
+    const [newGroupInput, setNewGroupInput] = useState("");
+    const [preferImported, setPreferImported] = useState(false);
+    const [exportBusy, setExportBusy] = useState(false);
+    const [importBusy, setImportBusy] = useState(false);
+    const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
+
+    // Drag-to-reorder state (within-group and cross-group).
+    const [dragItem, setDragItem] = useState<MapDragItem | null>(null);
+    const [overTarget, setOverTarget] = useState<{ group: string; idx: number } | null>(
+        null,
+    );
+    const [dragDelta, setDragDelta] = useState({ x: 0, y: 0 });
+    const mapDragRef = useRef<MapDragItem | null>(null);
+
+    // All group names to render — `#` always first.
+    const allGroupNames = useMemo(() => {
+        const inGroups = new Set(groups.map((g) => g.name));
+        const result = ["#"];
+        for (const g of groups) {
+            if (g.name !== "#") result.push(g.name);
+        }
+        for (const name of extraGroups) {
+            if (!inGroups.has(name)) result.push(name);
+        }
+        return result;
+    }, [groups, extraGroups]);
+
+    const getGroupMappings = (name: string) =>
+        groups.find((g) => g.name === name)?.mappings ?? [];
+
+    const save = useCallback(
+        (newGroups: GroupEntry[]) => {
+            const flat = newGroups.flatMap(({ name, mappings }) =>
+                mappings.map((m) => fmtMappingEntry(name, m)),
+            );
+            onUpdate(flat);
+        },
+        [onUpdate],
+    );
+
+    const handleRemove = (groupName: string, idx: number) => {
+        const cur = getGroupMappings(groupName);
+        const next = cur.filter((_, i) => i !== idx);
+        const newGroups = groups
+            .map((g) => (g.name === groupName ? { ...g, mappings: next } : g))
+            .filter((g) => g.mappings.length > 0);
+        save(newGroups);
+        // Keep empty non-default group visible so the user can add to it.
+        if (groupName !== "#" && next.length === 0) {
+            setExtraGroups((prev) =>
+                prev.includes(groupName) ? prev : [...prev, groupName],
+            );
+        }
+    };
+
+    // Drag start: record source group + index.
+    const startMapDrag = (e: React.PointerEvent, group: string, idx: number) => {
+        if ((e.target as HTMLElement).closest(".map-item-remove")) return;
+        e.preventDefault();
+        const item: MapDragItem = {
+            group,
+            idx,
+            startX: e.clientX,
+            startY: e.clientY,
+            el: e.currentTarget as HTMLElement,
+        };
+        mapDragRef.current = item;
+        setDragItem(item);
+        setOverTarget({ group, idx });
+        setDragDelta({ x: 0, y: 0 });
+    };
+
+    // Window-level pointer listeners: active only while dragging.
+    useEffect(() => {
+        if (!dragItem) return;
+        const onMove = (e: PointerEvent) => {
+            const d = mapDragRef.current;
+            if (!d) return;
+            setDragDelta({ x: e.clientX - d.startX, y: e.clientY - d.startY });
+            setOverTarget(mapTargetAtPoint(e.clientX, e.clientY));
+        };
+        const onUp = (e: PointerEvent) => {
+            const d = mapDragRef.current;
+            if (!d) {
+                setDragItem(null);
+                setOverTarget(null);
+                setDragDelta({ x: 0, y: 0 });
+                return;
+            }
+            const target = mapTargetAtPoint(e.clientX, e.clientY);
+            if (target) {
+                const srcMappings =
+                    groups.find((g) => g.name === d.group)?.mappings ?? [];
+                if (target.group === d.group && target.idx !== d.idx) {
+                    // Reorder within the same group.
+                    const next = [...srcMappings];
+                    const [moved] = next.splice(d.idx, 1);
+                    next.splice(target.idx, 0, moved);
+                    save(
+                        groups.map((g) =>
+                            g.name === d.group ? { ...g, mappings: next } : g,
+                        ),
+                    );
+                } else if (target.group !== d.group) {
+                    // Cross-group move.
+                    const dstMappings =
+                        groups.find((g) => g.name === target.group)?.mappings ?? [];
+                    const movedItem = srcMappings[d.idx];
+                    const newSrc = srcMappings.filter((_, i) => i !== d.idx);
+                    const newDst = [...dstMappings];
+                    newDst.splice(Math.min(target.idx, newDst.length), 0, movedItem);
+
+                    let newGroups = groups
+                        .map((g) => {
+                            if (g.name === d.group) return { ...g, mappings: newSrc };
+                            if (g.name === target.group)
+                                return { ...g, mappings: newDst };
+                            return g;
+                        })
+                        .filter((g) => g.mappings.length > 0);
+
+                    // Target was an empty extra-group: append it to the saved list.
+                    if (
+                        !groups.some((g) => g.name === target.group) &&
+                        newDst.length > 0
+                    ) {
+                        newGroups = [
+                            ...newGroups,
+                            { name: target.group, mappings: newDst },
+                        ];
+                    }
+
+                    if (d.group !== "#" && newSrc.length === 0) {
+                        setExtraGroups((prev) =>
+                            prev.includes(d.group) ? prev : [...prev, d.group],
+                        );
+                    }
+                    setExtraGroups((prev) => prev.filter((n) => n !== target.group));
+                    save(newGroups);
+                }
+            }
+            mapDragRef.current = null;
+            setDragItem(null);
+            setOverTarget(null);
+            setDragDelta({ x: 0, y: 0 });
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+        return () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+        };
+    }, [dragItem, groups, save]);
+
+    const handleAddToGroup = (groupName: string, canonical: string) => {
+        const existingGroup = groups.find((g) => g.name === groupName);
+        let newGroups: GroupEntry[];
+        if (existingGroup) {
+            newGroups = groups.map((g) =>
+                g.name === groupName ? { ...g, mappings: [...g.mappings, canonical] } : g,
+            );
+        } else {
+            // Brand-new group: append at end (parseGroups will keep # first).
+            newGroups = [...groups, { name: groupName, mappings: [canonical] }];
+            setExtraGroups((prev) => prev.filter((n) => n !== groupName));
+        }
+        save(newGroups);
+    };
+
+    const handleDeleteGroup = (groupName: string) => {
+        const mappings = getGroupMappings(groupName);
+        if (mappings.length === 0) {
+            setExtraGroups((prev) => prev.filter((n) => n !== groupName));
+        } else {
+            setDeleteGroupTarget(groupName);
+        }
+    };
+
+    const doDeleteGroup = () => {
+        const name = deleteGroupTarget;
+        setDeleteGroupTarget(null);
+        if (!name) return;
+        save(groups.filter((g) => g.name !== name));
+    };
+
+    const handleCreateGroup = () => {
+        const name = newGroupInput.trim();
+        setNewGroupInput("");
+        setShowNewGroup(false);
+        if (!name || name === "#") return;
+        if (groups.some((g) => g.name === name) || extraGroups.includes(name)) return;
+        setExtraGroups((prev) => [...prev, name]);
+    };
+
+    const handleExport = async () => {
+        setExportBusy(true);
+        try {
+            const ok = await invoke<boolean>("export_bangumi_map");
+            if (ok) addToast(t("map_export_done"));
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setExportBusy(false);
+        }
+    };
+
+    const handleImport = async () => {
+        setImportBusy(true);
+        try {
+            const result = await invoke<{
+                subject_map: string[];
+                added: number;
+                replaced: number;
+            } | null>("import_bangumi_map", { preferImported });
+            if (result) {
+                onUpdate(result.subject_map);
+                addToast(
+                    t("map_import_done", {
+                        added: result.added,
+                        replaced: result.replaced,
+                    }),
+                );
+            }
+        } catch (e) {
+            addToast(String(e), true);
+        } finally {
+            setImportBusy(false);
         }
     };
 
@@ -2289,45 +2645,188 @@ function SubjectMapRow({
                 {desc && <div className="row-desc">{desc}</div>}
             </div>
             <div className="row-control map-control">
-                {items.length > 0 && (
-                    <div className="map-list">
-                        {items.map((m, i) => (
-                            <div className="map-item" key={`${m}-${i}`}>
-                                <span className="map-item-text">{m}</span>
-                                <button
-                                    className="map-item-remove"
-                                    title={t("map_remove")}
-                                    onClick={() => onRemove(i)}
-                                >
-                                    ×
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                <div className="map-add">
-                    <input
-                        className="input code"
-                        value={input}
-                        placeholder={t("map_placeholder")}
-                        onChange={(e) => {
-                            setInput(e.target.value);
-                            if (error) setError(null);
-                        }}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleCheck();
-                        }}
-                    />
+                {/* Toolbar: export / import */}
+                <div className="map-toolbar">
                     <button
-                        className="btn btn-primary map-check"
-                        disabled={checking}
-                        onClick={() => void handleCheck()}
+                        className="btn"
+                        disabled={exportBusy}
+                        onClick={() => void handleExport()}
                     >
-                        {t("map_check")}
+                        {t("map_export")}
                     </button>
+                    <button
+                        className="btn"
+                        disabled={importBusy}
+                        onClick={() => void handleImport()}
+                    >
+                        {importBusy ? t("cfg_importing") : t("map_import")}
+                    </button>
+                    <label className="map-import-prefer">
+                        <span className="toggle">
+                            <input
+                                type="checkbox"
+                                checked={preferImported}
+                                onChange={(e) => setPreferImported(e.target.checked)}
+                            />
+                            <span className="toggle-track">
+                                <span className="toggle-thumb" />
+                            </span>
+                        </span>
+                        <span className="map-import-prefer-label">
+                            {t("map_import_prefer")}
+                        </span>
+                    </label>
                 </div>
-                {error && <div className="map-error">{error}</div>}
+
+                {/* Groups */}
+                <div className="map-groups">
+                    {allGroupNames.map((groupName) => {
+                        const mappings = getGroupMappings(groupName);
+                        const isDefault = groupName === "#";
+                        const isDropActive =
+                            dragItem !== null &&
+                            overTarget?.group === groupName &&
+                            dragItem.group !== groupName;
+                        return (
+                            <div
+                                key={groupName}
+                                className={`map-group${isDropActive ? " map-group-drop-active" : ""}`}
+                                data-group-drop={groupName}
+                                data-group-count={String(mappings.length)}
+                            >
+                                <div className="map-group-header">
+                                    <span className="map-group-name">
+                                        {isDefault
+                                            ? `# ${t("map_group_default_label")}`
+                                            : groupName}
+                                    </span>
+                                    {!isDefault && (
+                                        <button
+                                            className="map-group-delete"
+                                            title={t("map_group_delete")}
+                                            onClick={() => handleDeleteGroup(groupName)}
+                                        >
+                                            {t("cfg_delete")}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {mappings.length > 0 && (
+                                    <div className="map-list">
+                                        {mappings.map((m, idx) => {
+                                            const isDraggingThis =
+                                                dragItem?.group === groupName &&
+                                                dragItem?.idx === idx;
+                                            const isOver =
+                                                !isDraggingThis &&
+                                                overTarget?.group === groupName &&
+                                                overTarget?.idx === idx;
+                                            return (
+                                                <div
+                                                    key={`${groupName}-${idx}`}
+                                                    className={`map-item${isDraggingThis ? " map-item-dragging" : ""}${isOver ? " map-item-over" : ""}`}
+                                                    data-map-group={groupName}
+                                                    data-map-idx={String(idx)}
+                                                    style={
+                                                        isDraggingThis
+                                                            ? {
+                                                                  transform: `translate(${dragDelta.x}px,${dragDelta.y}px)`,
+                                                                  pointerEvents: "none",
+                                                                  position: "relative",
+                                                                  zIndex: 20,
+                                                              }
+                                                            : undefined
+                                                    }
+                                                    onPointerDown={(e) =>
+                                                        startMapDrag(e, groupName, idx)
+                                                    }
+                                                >
+                                                    <span className="map-drag-handle">
+                                                        ⠿
+                                                    </span>
+                                                    <span className="map-item-text">
+                                                        {m}
+                                                    </span>
+                                                    <button
+                                                        className="map-item-remove"
+                                                        title={t("map_remove")}
+                                                        onClick={() =>
+                                                            handleRemove(groupName, idx)
+                                                        }
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                <GroupAddRow
+                                    allExisting={items}
+                                    onAdd={(canonical) =>
+                                        handleAddToGroup(groupName, canonical)
+                                    }
+                                />
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* New group button / input */}
+                {showNewGroup ? (
+                    <div className="map-new-group-row">
+                        <input
+                            className="input"
+                            value={newGroupInput}
+                            placeholder={t("map_group_name_placeholder")}
+                            autoFocus
+                            onChange={(e) => setNewGroupInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") handleCreateGroup();
+                                if (e.key === "Escape") {
+                                    setNewGroupInput("");
+                                    setShowNewGroup(false);
+                                }
+                            }}
+                        />
+                        <button className="btn btn-primary" onClick={handleCreateGroup}>
+                            {t("map_group_add_confirm")}
+                        </button>
+                        <button
+                            className="btn"
+                            onClick={() => {
+                                setNewGroupInput("");
+                                setShowNewGroup(false);
+                            }}
+                        >
+                            {t("cache_confirm_cancel")}
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        className="btn"
+                        style={{ alignSelf: "flex-start", marginTop: 4 }}
+                        onClick={() => setShowNewGroup(true)}
+                    >
+                        + {t("map_group_add")}
+                    </button>
+                )}
             </div>
+
+            {deleteGroupTarget && (
+                <ConfirmModal
+                    title={t("map_group_delete")}
+                    message={t("map_group_delete_confirm", {
+                        name: deleteGroupTarget,
+                    })}
+                    confirmLabel={t("cfg_delete")}
+                    cancelLabel={t("cache_confirm_cancel")}
+                    danger
+                    onConfirm={doDeleteGroup}
+                    onCancel={() => setDeleteGroupTarget(null)}
+                />
+            )}
         </div>
     );
 }
@@ -2411,6 +2910,12 @@ function BangumiSection({
                     checked={cfg.bangumi_private}
                     onChange={(v) => update("bangumi", "private", v)}
                 />
+                <ToggleRow
+                    label={t("bgm_mark_watching")}
+                    desc={t("bgm_mark_watching_desc")}
+                    checked={cfg.bangumi_mark_watching}
+                    onChange={(v) => update("bangumi", "mark_watching", v)}
+                />
                 <InputRow
                     label={t("sys_bangumi_genres")}
                     desc={t("sys_bangumi_genres_desc")}
@@ -2419,23 +2924,12 @@ function BangumiSection({
                     mono
                     onCommit={(v) => update("bangumi", "genres", v)}
                 />
-                <SubjectMapRow
+                <GroupedSubjectMap
                     label={t("sys_bangumi_map")}
                     desc={t("sys_bangumi_map_desc")}
                     items={cfg.bangumi_subject_map}
-                    onAdd={(line) =>
-                        update("bangumi", "subject_map", [
-                            ...cfg.bangumi_subject_map,
-                            line,
-                        ])
-                    }
-                    onRemove={(i) =>
-                        update(
-                            "bangumi",
-                            "subject_map",
-                            cfg.bangumi_subject_map.filter((_, j) => j !== i),
-                        )
-                    }
+                    onUpdate={(newItems) => update("bangumi", "subject_map", newItems)}
+                    addToast={addToast}
                 />
                 <ButtonRow
                     label={t("sync_test")}

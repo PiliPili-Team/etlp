@@ -6,7 +6,7 @@ import { useI18n } from "./i18n";
 import { I18nProvider } from "./i18n/provider";
 import { type DisplaySettings, loadDisplay, applyDisplay } from "./display";
 import Overview from "./pages/Overview";
-import Settings from "./pages/Settings";
+import Settings, { type SectionTab } from "./pages/Settings";
 import Logs from "./pages/Logs";
 
 export type { ThemeMode, LangMode, AccentColor, DisplaySettings } from "./display";
@@ -320,6 +320,20 @@ type TabId =
     | "logs";
 
 const LAST_TAB_KEY = "etlp-last-tab";
+
+/** All tabs that render <Settings>. Adding a new settings route only requires
+ *  updating this set — the JSX below resolves automatically. */
+const SETTINGS_TABS = new Set<TabId>([
+    "player",
+    "version-prefer",
+    "network",
+    "download",
+    "config",
+    "system",
+    "bangumi",
+    "trakt",
+]);
+
 const VALID_TABS: TabId[] = [
     "overview",
     "player",
@@ -568,15 +582,9 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                             onDismissUpdate={dismissUpdate}
                         />
                     )}
-                    {(tab === "player" ||
-                        tab === "version-prefer" ||
-                        tab === "network" ||
-                        tab === "config" ||
-                        tab === "system" ||
-                        tab === "bangumi" ||
-                        tab === "trakt") && (
+                    {SETTINGS_TABS.has(tab) && (
                         <Settings
-                            section={tab}
+                            section={tab as SectionTab}
                             addToast={addToast}
                             display={display}
                             onDisplayChange={onDisplayChange}
