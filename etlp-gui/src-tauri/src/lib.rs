@@ -16,7 +16,7 @@ use commands::GuiState;
 /// Detects whether the system UI language is Chinese using platform-native
 /// APIs (via sys-locale). Falls back to LANG/LC_ALL/LANGUAGE env vars for
 /// environments where the native API is unavailable.
-fn sys_is_chinese() -> bool {
+pub fn sys_is_chinese() -> bool {
     // sys-locale uses NSLocale on macOS, GetUserDefaultLocaleName on Windows,
     // and setlocale() on Linux — all more reliable than env vars for GUI apps.
     let native = sys_locale::get_locale()
@@ -318,10 +318,90 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+// ── Windows UAC elevation ─────────────────────────────────────────────────────
+
+/// Check whether `portable.bin` is present alongside the exe but the directory
+/// is not writable, and if so relaunch the process via the UAC "runas" verb.
+///
+/// Returns `true` if an elevated copy was launched (caller should exit).
+/// Returns `false` when elevation is not needed or the user cancelled UAC.
+#[cfg(target_os = "windows")]
+fn try_request_elevation() -> bool {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows::Win32::UI::Shell::{IsUserAnAdmin, ShellExecuteW};
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{PCWSTR, w};
+
+    // Only intervene when portable mode was requested but is not active
+    // (i.e. portable.bin marker exists but exe dir is not writable).
+    if !etlp_server::platform::portable_requested() {
+        return false;
+    }
+    if etlp_server::platform::is_portable() {
+        return false; // already writable — nothing to do
+    }
+    // Already elevated but still can't write — a different problem; don't loop.
+    // SAFETY: returns BOOL with no preconditions.
+    if unsafe { IsUserAnAdmin() }.as_bool() {
+        return false;
+    }
+
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let mut exe_wide: Vec<u16> = exe.as_os_str().encode_wide().collect();
+    exe_wide.push(0);
+
+    // Reconstruct the argument string (skip argv[0]).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args_joined = args.join(" ");
+    let args_wide: Vec<u16> = if args_joined.is_empty() {
+        Vec::new()
+    } else {
+        let mut v: Vec<u16> = args_joined.encode_utf16().collect();
+        v.push(0);
+        v
+    };
+
+    // SAFETY: exe_wide and args_wide are valid null-terminated UTF-16 buffers
+    // that outlive the call; all other parameters are constants or null.
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("runas"),
+            PCWSTR(exe_wide.as_ptr()),
+            if args_wide.is_empty() {
+                PCWSTR::null()
+            } else {
+                PCWSTR(args_wide.as_ptr())
+            },
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+
+    // ShellExecuteW returns a value > 32 on success.
+    result.0.addr() > 32
+}
+
+#[cfg(not(target_os = "windows"))]
+fn try_request_elevation() -> bool {
+    false
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run() {
     augment_path();
+
+    // Windows Portable: if portable.bin is present but the exe directory is not
+    // writable, request UAC elevation and relaunch. The elevated copy will have
+    // write access; this process exits immediately after the UAC prompt.
+    // If the user cancels UAC the app continues normally with the %APPDATA%
+    // directory fallback (no data is lost — config never existed there yet).
+    if try_request_elevation() {
+        std::process::exit(0);
+    }
 
     // SAFETY: single-threaded at this point.
     unsafe { std::env::set_var(etlp_server::platform::ENV_RUNTIME, "app") };
