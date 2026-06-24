@@ -1702,7 +1702,8 @@ async fn resolve_bangumi_subject(
             warn!(
                 series = %data.series_name,
                 season,
-                "bangumi: title search found no subject"
+                "bangumi: title search found no subject — \
+                 add an ID mapping in Settings → Bangumi to resolve this item"
             );
             None
         }
