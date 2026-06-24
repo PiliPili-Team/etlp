@@ -24,6 +24,40 @@ use etlp_server::{AppState, SharedState, build_router, platform};
 
 use crate::config_patch::patch_field;
 
+// ── Localized error helpers ───────────────────────────────────────────────────
+
+fn err_no_config_dir() -> String {
+    if crate::sys_is_chinese() {
+        "无法确定配置目录路径".to_owned()
+    } else {
+        "cannot determine config directory".to_owned()
+    }
+}
+
+fn err_no_data_dir() -> String {
+    if crate::sys_is_chinese() {
+        "无法确定数据目录路径".to_owned()
+    } else {
+        "cannot determine data directory".to_owned()
+    }
+}
+
+fn err_create_config_dir(e: impl std::fmt::Display) -> String {
+    if crate::sys_is_chinese() {
+        format!("无法创建配置目录：{e}")
+    } else {
+        format!("create config dir: {e}")
+    }
+}
+
+fn err_create_data_dir(e: impl std::fmt::Display) -> String {
+    if crate::sys_is_chinese() {
+        format!("无法创建数据目录：{e}")
+    } else {
+        format!("create data dir: {e}")
+    }
+}
+
 // ── Managed state ─────────────────────────────────────────────────────────────
 
 pub struct GuiState {
@@ -179,14 +213,14 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     }
 
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     std::fs::create_dir_all(&cfg_dir)
-        .map_err(|e| format!("create config dir: {e}"))?;
+        .map_err(|e| err_create_config_dir(e))?;
 
     let data_dir = platform::data_dir()
-        .ok_or_else(|| "cannot determine data directory".to_owned())?;
+        .ok_or_else(err_no_data_dir)?;
     std::fs::create_dir_all(&data_dir)
-        .map_err(|e| format!("create data dir: {e}"))?;
+        .map_err(|e| err_create_data_dir(e))?;
     // Relocate any legacy flat-layout files and ensure the log/ dir exists.
     platform::migrate_layout(&data_dir);
     std::fs::create_dir_all(platform::log_dir_in(&data_dir)).ok();
@@ -349,9 +383,9 @@ pub fn get_server_status(state: State<'_, GuiState>) -> serde_json::Value {
 #[tauri::command]
 pub async fn get_config() -> Result<ConfigDto, String> {
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     std::fs::create_dir_all(&cfg_dir)
-        .map_err(|e| format!("create config dir: {e}"))?;
+        .map_err(|e| err_create_config_dir(e))?;
 
     let config = load_or_default_config(&cfg_dir)?;
     Ok(ConfigDto::from(&config))
@@ -395,7 +429,7 @@ pub async fn update_config_field(
     value: serde_json::Value,
 ) -> Result<(), String> {
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     // The app reads and writes the same single `config.toml`, so the path we
     // patch always matches the one that was loaded.
     let path = etlp_config::existing_config_path(&cfg_dir)
@@ -547,7 +581,7 @@ pub async fn export_bangumi_map(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_dialog::DialogExt as _;
 
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     let config = crate::commands::load_or_default_config(&cfg_dir)?;
     let subject_map = config.bangumi.subject_map.clone();
 
@@ -607,7 +641,7 @@ pub async fn import_bangumi_map(
         .map_err(|e| format!("JSON parse error: {e}"))?;
 
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     let config = crate::commands::load_or_default_config(&cfg_dir)?;
     let existing = config.bangumi.subject_map.clone();
 
@@ -647,7 +681,7 @@ pub fn validate_regex(pattern: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     let working_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     let new_config = load_or_default_config(&working_dir)?;
 
     // Apply log level before writing the new config so the level change is
@@ -697,9 +731,9 @@ pub async fn restart_server(state: State<'_, GuiState>) -> Result<u16, String> {
 pub async fn open_config_folder(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt as _;
     let dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("create config dir: {e}"))?;
+        .map_err(|e| err_create_config_dir(e))?;
     app.opener()
         .open_path(dir.to_string_lossy(), None::<&str>)
         .map_err(|e| format!("open folder: {e}"))
@@ -747,7 +781,7 @@ pub async fn edit_config(app: tauri::AppHandle) -> Result<(), String> {
     let path = config_file_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create config dir: {e}"))?;
+            .map_err(|e| err_create_config_dir(e))?;
     }
     if !path.exists() {
         write_default_config(&path)?;
@@ -793,13 +827,13 @@ pub const AUTH_OPENED: &str = "AUTH_OPENED";
 /// Returns `Ok(None)` when Trakt is not configured (empty `client_id`).
 fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
     if config.trakt.client_id.is_empty() {
         return Ok(None);
     }
     let token_dir = platform::data_dir()
-        .ok_or_else(|| "cannot determine data directory".to_owned())?;
+        .ok_or_else(err_no_data_dir)?;
     let token_path = token_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
     let api = etlp_sync::TraktApi::new(
         &config.trakt.client_id,
@@ -817,7 +851,7 @@ fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
 /// Returns `Ok(None)` when Bangumi is not configured (empty `access_token`).
 fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
     let cfg_dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
     if config.bangumi.access_token.is_empty() {
         return Ok(None);
@@ -854,9 +888,8 @@ pub async fn refresh_trakt_auth(
             Ok(AUTH_VALID.to_owned())
         }
         Ok(false) => {
-            let cfg_dir = platform::config_dir().ok_or_else(|| {
-                "cannot determine config directory".to_owned()
-            })?;
+            let cfg_dir =
+                platform::config_dir().ok_or_else(err_no_config_dir)?;
             let config = load_or_default_config(&cfg_dir)?;
             let url = etlp_sync::trakt_authorize_url(
                 &config.trakt.client_id,
@@ -2111,7 +2144,7 @@ pub async fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
 
 fn config_file_path() -> Result<PathBuf, String> {
     let dir = platform::config_dir()
-        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+        .ok_or_else(err_no_config_dir)?;
     // Resolve to the config the app loaded so "edit config" opens the file the
     // user is actually using, not an empty shadow `config.toml`.
     Ok(etlp_config::existing_config_path(&dir)
@@ -2126,11 +2159,14 @@ pub(crate) fn load_or_default_config(
     cfg_dir: &std::path::Path,
 ) -> Result<Config, String> {
     use etlp_config::ConfigError;
-    let result = match Config::load_from_dir(cfg_dir) {
+    match Config::load_from_dir(cfg_dir) {
         Ok(c) => Ok(c),
         Err(ConfigError::NotFound(_)) => {
             let path = cfg_dir.join("config.toml");
-            write_default_config(&path)?;
+            // Attempt to persist defaults; failure is non-fatal. This covers
+            // the case where the user cleared the config directory but it still
+            // exists — the app should start with defaults rather than erroring.
+            let _ = write_default_config(&path);
             match Config::load_file(&path) {
                 Ok(c) => {
                     debug!(
@@ -2140,8 +2176,14 @@ pub(crate) fn load_or_default_config(
                     Ok(c)
                 }
                 Err(e) => {
-                    error!("load default config {}: {e}", path.display());
-                    Err(format!("load default config: {e}"))
+                    // Write failed (e.g. read-only mount) or the file still
+                    // doesn't exist — continue with in-memory defaults.
+                    warn!(
+                        path = %path.display(),
+                        "cannot persist default config ({e}); running with \
+                         in-memory defaults"
+                    );
+                    Ok(Config::with_defaults(path))
                 }
             }
         }
@@ -2159,9 +2201,7 @@ pub(crate) fn load_or_default_config(
             );
             Ok(Config::with_defaults(path))
         }
-    }?;
-
-    Ok(result)
+    }
 }
 
 pub(crate) fn write_default_config(
