@@ -189,12 +189,14 @@ function ButtonRow({
     desc,
     button,
     danger,
+    disabled,
     onClick,
 }: {
     label: string;
     desc?: string;
     button: string;
     danger?: boolean;
+    disabled?: boolean;
     onClick: () => void;
 }) {
     return (
@@ -207,6 +209,7 @@ function ButtonRow({
                 <button
                     className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
                     onClick={onClick}
+                    disabled={disabled}
                 >
                     {button}
                 </button>
@@ -1679,21 +1682,33 @@ function SystemSection({
 
     // ── Update ─────────────────────────────────────────────────────────────────
     const [checking, setChecking] = useState(false);
+    const [updateResult, setUpdateResult] = useState<UpdateInfo | null>(null);
+    const [downloadingUpdate, setDownloadingUpdate] = useState(false);
 
     const doCheckUpdate = async () => {
         setChecking(true);
+        setUpdateResult(null);
         try {
             const info = await invoke<UpdateInfo>("check_update");
-            if (info.has_update) {
-                addToast(t("cfg_update_available", { version: info.latest }));
-                await openUrl(info.url);
-            } else {
-                addToast(t("cfg_update_latest", { version: info.current }));
-            }
+            setUpdateResult(info);
         } catch (e) {
             addToast(mapBackendError(e, t), true);
         } finally {
             setChecking(false);
+        }
+    };
+
+    const doInstallUpdate = async () => {
+        if (!updateResult?.has_update || downloadingUpdate) return;
+        setDownloadingUpdate(true);
+        try {
+            await invoke("download_and_apply_update", {
+                version: updateResult.latest,
+            });
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setDownloadingUpdate(false);
         }
     };
 
@@ -1828,7 +1843,46 @@ function SystemSection({
                     desc={t("cfg_update_check_desc")}
                     button={checking ? t("cfg_update_checking") : t("cfg_update_check")}
                     onClick={() => void doCheckUpdate()}
+                    disabled={checking}
                 />
+                {updateResult && (
+                    <div className="update-result-panel">
+                        <div className="update-result-versions">
+                            <span>
+                                {t("cfg_update_current_ver", {
+                                    version: updateResult.current,
+                                })}
+                            </span>
+                            <span className="update-result-sep">→</span>
+                            <span
+                                className={
+                                    updateResult.has_update
+                                        ? "update-result-new"
+                                        : ""
+                                }
+                            >
+                                {t("cfg_update_latest_ver", {
+                                    version: updateResult.latest,
+                                })}
+                            </span>
+                        </div>
+                        {updateResult.has_update ? (
+                            <button
+                                className="btn btn-primary update-result-btn"
+                                onClick={() => void doInstallUpdate()}
+                                disabled={downloadingUpdate}
+                            >
+                                {downloadingUpdate
+                                    ? t("ov_update_downloading")
+                                    : t("cfg_update_install")}
+                            </button>
+                        ) : (
+                            <span className="update-result-ok">
+                                {t("cfg_update_up_to_date")}
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Logs */}
