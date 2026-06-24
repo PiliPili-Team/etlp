@@ -653,6 +653,58 @@ pub async fn import_bangumi_map(
     })))
 }
 
+/// Import `bangumi_subject_map` entries from a remote JSON URL.
+///
+/// Fetches `url`, parses it as `Vec<String>`, and merges it into the current
+/// config using the same logic as [`import_bangumi_map`].  On success returns
+/// `{ subject_map, added, replaced }`.
+#[tauri::command]
+pub async fn import_bangumi_map_url(
+    url: String,
+    prefer_imported: bool,
+) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .user_agent(etlp_core::UA_ETLP)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("fetch error: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+
+    let content = resp.text().await.map_err(|e| format!("read error: {e}"))?;
+    let imported: Vec<String> = serde_json::from_str(&content)
+        .map_err(|e| format!("JSON parse error: {e}"))?;
+
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
+    let config = crate::commands::load_or_default_config(&cfg_dir)?;
+    let existing = config.bangumi.subject_map.clone();
+
+    let (merged, added, replaced) =
+        merge_bangumi_maps(&existing, &imported, prefer_imported);
+
+    debug!(
+        added,
+        replaced,
+        total = merged.len(),
+        "bangumi map url import merged"
+    );
+
+    Ok(serde_json::json!({
+        "subject_map": merged,
+        "added": added,
+        "replaced": replaced,
+    }))
+}
+
 /// Validate a `version_filter` regular expression against the same engine the
 /// server uses (the Rust `regex` crate, which—unlike JS—has no lookaround or
 /// backreferences). Newlines are stripped first to mirror `version_filter`'s
