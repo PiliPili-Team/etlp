@@ -1856,9 +1856,7 @@ function SystemSection({
                             <span className="update-result-sep">→</span>
                             <span
                                 className={
-                                    updateResult.has_update
-                                        ? "update-result-new"
-                                        : ""
+                                    updateResult.has_update ? "update-result-new" : ""
                                 }
                             >
                                 {t("cfg_update_latest_ver", {
