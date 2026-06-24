@@ -20,6 +20,7 @@ export const pt: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Depuração",
+    nav_download: "Downloads",
 
     // Common
     add: "Adicionar",
@@ -386,4 +387,12 @@ export const pt: typeof zhCN = {
     font_14: "14px (confortável)",
     font_15: "15px (grande)",
     font_16: "16px (muito grande)",
+
+    // Download
+    page_download: "Downloads",
+    dl_folder: "Pasta de downloads",
+    dl_folder_desc: "Local de guarda de ficheiros. Vazio = predefinição (~/Downloads)",
+    dl_browse: "Procurar…",
+    dl_placeholder: "Vazio para o predefinido (~/Downloads)",
+    dl_path_error: "O caminho não existe, verifique a entrada",
 };

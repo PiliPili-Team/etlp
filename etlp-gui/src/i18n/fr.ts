@@ -20,6 +20,7 @@ export const fr: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Débogage",
+    nav_download: "Téléchargements",
 
     // Common
     add: "Ajouter",
@@ -394,4 +395,12 @@ export const fr: typeof zhCN = {
     font_14: "14px (confortable)",
     font_15: "15px (grand)",
     font_16: "16px (très grand)",
+
+    // Download
+    page_download: "Téléchargements",
+    dl_folder: "Dossier de téléchargement",
+    dl_folder_desc: "Emplacement de sauvegarde. Vide = dossier système (~/Downloads)",
+    dl_browse: "Parcourir…",
+    dl_placeholder: "Vide pour le dossier par défaut (~/Downloads)",
+    dl_path_error: "Le chemin n'existe pas, vérifiez la saisie",
 };

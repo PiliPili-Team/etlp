@@ -20,6 +20,7 @@ export const he: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "ניפוי שגיאות",
+    nav_download: "הורדות",
 
     // Common
     add: "הוסף",
@@ -362,4 +363,12 @@ export const he: typeof zhCN = {
     font_14: "14px (נוח)",
     font_15: "15px (גדול)",
     font_16: "16px (גדול מאוד)",
+
+    // Download
+    page_download: "הורדות",
+    dl_folder: "תיקיית הורדות",
+    dl_folder_desc: "מיקום שמירת קבצי מדיה. ריק = ברירת מחדל (~/Downloads)",
+    dl_browse: "עיון…",
+    dl_placeholder: "ריק לברירת מחדל (~/Downloads)",
+    dl_path_error: "הנתיב אינו קיים, אנא בדוק את הקלט",
 };

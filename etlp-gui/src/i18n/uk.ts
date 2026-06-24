@@ -20,6 +20,7 @@ export const uk: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Налагодження",
+    nav_download: "Завантаження",
 
     // Common
     add: "Додати",
@@ -382,4 +383,12 @@ export const uk: typeof zhCN = {
     font_14: "14px (комфортний)",
     font_15: "15px (великий)",
     font_16: "16px (дуже великий)",
+
+    // Download
+    page_download: "Завантаження",
+    dl_folder: "Тека завантажень",
+    dl_folder_desc: "Місце збереження файлів. Порожньо = типово (~/Downloads)",
+    dl_browse: "Огляд…",
+    dl_placeholder: "Порожньо для типового (~/Downloads)",
+    dl_path_error: "Шлях не існує, перевірте введені дані",
 };

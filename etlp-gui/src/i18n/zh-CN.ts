@@ -16,6 +16,7 @@ export const zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "调试",
+    nav_download: "下载",
 
     // Common
     add: "添加",
@@ -351,4 +352,12 @@ export const zhCN = {
     font_14: "14px（舒适）",
     font_15: "15px（大）",
     font_16: "16px（特大）",
+
+    // Download
+    page_download: "下载",
+    dl_folder: "下载目录",
+    dl_folder_desc: "媒体文件保存位置，留空使用系统默认（~/Downloads）",
+    dl_browse: "浏览…",
+    dl_placeholder: "留空使用系统默认（~/Downloads）",
+    dl_path_error: "路径不存在，请检查输入",
 };

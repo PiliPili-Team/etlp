@@ -20,6 +20,7 @@ export const id: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Debug",
+    nav_download: "Unduhan",
 
     // Common
     add: "Tambah",
@@ -379,4 +380,12 @@ export const id: typeof zhCN = {
     font_14: "14px (nyaman)",
     font_15: "15px (besar)",
     font_16: "16px (sangat besar)",
+
+    // Download
+    page_download: "Unduhan",
+    dl_folder: "Folder Unduhan",
+    dl_folder_desc: "Lokasi penyimpanan file. Kosong = default sistem (~/Downloads)",
+    dl_browse: "Jelajahi…",
+    dl_placeholder: "Kosong untuk default (~/Downloads)",
+    dl_path_error: "Jalur tidak ada, periksa input Anda",
 };

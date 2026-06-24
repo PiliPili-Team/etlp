@@ -20,6 +20,7 @@ export const sk: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Ladenie",
+    nav_download: "Sťahovanie",
 
     // Common
     add: "Pridať",
@@ -380,4 +381,12 @@ export const sk: typeof zhCN = {
     font_14: "14px (pohodlné)",
     font_15: "15px (veľké)",
     font_16: "16px (veľmi veľké)",
+
+    // Download
+    page_download: "Sťahovanie",
+    dl_folder: "Priečinok sťahovania",
+    dl_folder_desc: "Miesto uloženia súborov. Prázdne = predvolené (~/Downloads)",
+    dl_browse: "Prehľadávať…",
+    dl_placeholder: "Prázdne pre predvolený priečinok (~/Downloads)",
+    dl_path_error: "Cesta neexistuje, skontrolujte vstup",
 };

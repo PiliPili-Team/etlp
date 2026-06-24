@@ -96,6 +96,7 @@ pub struct ConfigDto {
     pub version_filter: String,
     // [gui]
     pub speed_limit_mb: u64,
+    pub download_dir: String,
     pub silent_start: bool,
     pub check_update: bool,
     // [trakt]
@@ -142,6 +143,12 @@ impl From<&Config> for ConfigDto {
             item_limit: c.playlist.item_limit,
             version_filter: c.playlist.version_filter.clone(),
             speed_limit_mb: c.gui.speed_limit_mb,
+            download_dir: c
+                .gui
+                .download_dir
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             silent_start: c.gui.silent_start,
             check_update: c.gui.check_update,
             trakt_client_id: c.trakt.client_id.clone(),
@@ -1044,6 +1051,22 @@ pub async fn pick_player_path(
         .file()
         .set_title("选择播放器可执行文件")
         .blocking_pick_file();
+
+    Ok(path.map(|p| p.to_string()))
+}
+
+/// Open a native folder-picker dialog and return the chosen directory path.
+#[tauri::command]
+pub async fn pick_folder(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt as _;
+
+    let path = app
+        .dialog()
+        .file()
+        .set_title("选择下载目录")
+        .blocking_pick_folder();
 
     Ok(path.map(|p| p.to_string()))
 }

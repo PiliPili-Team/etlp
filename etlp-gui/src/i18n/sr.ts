@@ -20,6 +20,7 @@ export const sr: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Отклањање грешака",
+    nav_download: "Преузимања",
 
     // Common
     add: "Додај",
@@ -374,4 +375,12 @@ export const sr: typeof zhCN = {
     font_14: "14px (удобно)",
     font_15: "15px (велико)",
     font_16: "16px (веома велико)",
+
+    // Download
+    page_download: "Преузимања",
+    dl_folder: "Фасцикла за преузимање",
+    dl_folder_desc: "Место чувања датотека. Празно = подразумевано (~/Downloads)",
+    dl_browse: "Прегледај…",
+    dl_placeholder: "Празно за подразумевано (~/Downloads)",
+    dl_path_error: "Путања не постоји, проверите унос",
 };

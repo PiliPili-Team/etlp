@@ -20,6 +20,7 @@ export const th: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "การดีบัก",
+    nav_download: "ดาวน์โหลด",
 
     // Common
     add: "เพิ่ม",
@@ -368,4 +369,12 @@ export const th: typeof zhCN = {
     font_14: "14px (สบาย)",
     font_15: "15px (ใหญ่)",
     font_16: "16px (ใหญ่มาก)",
+
+    // Download
+    page_download: "ดาวน์โหลด",
+    dl_folder: "โฟลเดอร์ดาวน์โหลด",
+    dl_folder_desc: "ที่บันทึกไฟล์มีเดีย ว่างเปล่า = ค่าเริ่มต้น (~/Downloads)",
+    dl_browse: "เรียกดู…",
+    dl_placeholder: "ว่างเปล่าสำหรับค่าเริ่มต้น (~/Downloads)",
+    dl_path_error: "ไม่พบเส้นทาง กรุณาตรวจสอบการป้อนข้อมูล",
 };

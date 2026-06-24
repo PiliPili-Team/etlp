@@ -20,6 +20,7 @@ export const zhTW: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "除錯",
+    nav_download: "下載",
 
     // Common
     add: "新增",
@@ -352,4 +353,12 @@ export const zhTW: typeof zhCN = {
     font_14: "14px（舒適）",
     font_15: "15px（大）",
     font_16: "16px（特大）",
+
+    // Download
+    page_download: "下載",
+    dl_folder: "下載目錄",
+    dl_folder_desc: "媒體檔案儲存位置，留空使用系統預設（~/Downloads）",
+    dl_browse: "瀏覽…",
+    dl_placeholder: "留空使用系統預設（~/Downloads）",
+    dl_path_error: "路徑不存在，請檢查輸入",
 };

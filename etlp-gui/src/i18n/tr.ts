@@ -20,6 +20,7 @@ export const tr: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Hata Ayıklama",
+    nav_download: "İndirmeler",
 
     // Common
     add: "Ekle",
@@ -375,4 +376,12 @@ export const tr: typeof zhCN = {
     font_14: "14px (rahat)",
     font_15: "15px (büyük)",
     font_16: "16px (çok büyük)",
+
+    // Download
+    page_download: "İndirmeler",
+    dl_folder: "İndirme Klasörü",
+    dl_folder_desc: "Medya dosyalarının kaydedileceği yer. Boş = varsayılan (~/Downloads)",
+    dl_browse: "Gözat…",
+    dl_placeholder: "Boş bırakın = varsayılan (~/Downloads)",
+    dl_path_error: "Yol mevcut değil, lütfen girişi kontrol edin",
 };

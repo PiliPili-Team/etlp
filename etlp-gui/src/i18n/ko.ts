@@ -20,6 +20,7 @@ export const ko: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "디버그",
+    nav_download: "다운로드",
 
     // Common
     add: "추가",
@@ -368,4 +369,12 @@ export const ko: typeof zhCN = {
     font_14: "14px (편안하게)",
     font_15: "15px (크게)",
     font_16: "16px (아주 크게)",
+
+    // Download
+    page_download: "다운로드",
+    dl_folder: "다운로드 폴더",
+    dl_folder_desc: "미디어 파일 저장 위치. 비워 두면 기본값 (~/Downloads)",
+    dl_browse: "찾아보기…",
+    dl_placeholder: "비워 두면 기본값 (~/Downloads)",
+    dl_path_error: "경로가 존재하지 않습니다. 입력을 확인하세요",
 };
