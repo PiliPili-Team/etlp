@@ -99,10 +99,14 @@ package_portable() {
 
         mkdir -p "${DIST_DIR}"
 
-        # Use PowerShell's Compress-Archive which is available everywhere on
-        # modern Windows, including GitHub Actions runners.
+        # cygpath converts MSYS2/Git-Bash Unix paths (e.g. /d/a/…) to Windows
+        # paths (D:\a\…) so PowerShell's Compress-Archive can resolve them.
+        local win_stage_dir win_zip_path
+        win_stage_dir="$(cygpath -w "${stage_dir}")"
+        win_zip_path="$(cygpath -w "${zip_path}")"
+
         powershell.exe -NoProfile -Command \
-            "Compress-Archive -Force -Path '${stage_dir}/*' -DestinationPath '${zip_path}'"
+            "Compress-Archive -Force -Path '${win_stage_dir}\\*' -DestinationPath '${win_zip_path}'"
 
         rm -rf "${stage_dir}"
     else
