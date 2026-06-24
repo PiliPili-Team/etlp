@@ -7,7 +7,7 @@
 # Structure inside the zip:
 #   Genshin.exe
 #   updater.exe
-#   portable.txt
+#   portable.bin
 #   config/   (empty marker directory)
 #   data/     (empty marker directory)
 #   update/   (empty marker directory)
@@ -91,8 +91,8 @@ package_portable() {
         cp "${main_exe}"    "${stage_dir}/${PRODUCT_NAME}.exe"
         cp "${updater_exe}" "${stage_dir}/updater.exe"
 
-        # portable.txt signals the Portable detection logic in dirs.rs.
-        printf "portable\n" > "${stage_dir}/portable.txt"
+        # portable.bin signals the Portable detection logic in dirs.rs.
+        printf "" > "${stage_dir}/portable.bin"
 
         mkdir -p "${DIST_DIR}"
 
