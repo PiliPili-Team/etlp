@@ -20,6 +20,7 @@ export const de: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Debug",
+    nav_download: "Downloads",
 
     // Common
     add: "Hinzufügen",
@@ -388,4 +389,12 @@ export const de: typeof zhCN = {
     font_14: "14px (komfortabel)",
     font_15: "15px (groß)",
     font_16: "16px (sehr groß)",
+
+    // Download
+    page_download: "Downloads",
+    dl_folder: "Download-Ordner",
+    dl_folder_desc: "Speicherort für Mediendateien. Leer lassen für den Standard (~/Downloads)",
+    dl_browse: "Durchsuchen…",
+    dl_placeholder: "Leer lassen für Standard (~/Downloads)",
+    dl_path_error: "Pfad existiert nicht, bitte Eingabe prüfen",
 };

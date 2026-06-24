@@ -20,6 +20,7 @@ export const it: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Debug",
+    nav_download: "Download",
 
     // Common
     add: "Aggiungi",
@@ -385,4 +386,12 @@ export const it: typeof zhCN = {
     font_14: "14px (comodo)",
     font_15: "15px (grande)",
     font_16: "16px (molto grande)",
+
+    // Download
+    page_download: "Download",
+    dl_folder: "Cartella download",
+    dl_folder_desc: "Posizione salvataggio file. Vuoto = predefinito (~/Downloads)",
+    dl_browse: "Sfoglia…",
+    dl_placeholder: "Vuoto per predefinito (~/Downloads)",
+    dl_path_error: "Percorso inesistente, verifica l'input",
 };

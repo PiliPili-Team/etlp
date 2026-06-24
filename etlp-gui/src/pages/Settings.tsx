@@ -31,6 +31,7 @@ interface ConfigDto {
     item_limit: number;
     version_filter: string;
     speed_limit_mb: number;
+    download_dir: string;
     silent_start: boolean;
     check_update: boolean;
     disable_progress_report: boolean;
@@ -53,6 +54,7 @@ type SectionTab =
     | "player"
     | "version-prefer"
     | "network"
+    | "download"
     | "config"
     | "system"
     | "bangumi"
@@ -972,6 +974,8 @@ export default function Settings({
         return <BangumiSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "trakt")
         return <TraktSection cfg={cfg} update={update} addToast={addToast} />;
+    if (section === "download")
+        return <DownloadSection cfg={cfg} update={update} />;
     if (section === "system")
         return (
             <SystemSection
@@ -1615,6 +1619,117 @@ function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) =>
                     onCancel={() => setConfirmReset(false)}
                 />
             )}
+        </>
+    );
+}
+
+// ── Download ───────────────────────────────────────────────────────────────────
+
+function DownloadSection({
+    cfg,
+    update,
+}: {
+    cfg: ConfigDto;
+    update: (s: string, k: string, v: unknown) => void;
+}) {
+    const t = useI18n();
+    const [local, setLocal] = useState(cfg.download_dir);
+    const [pathValid, setPathValid] = useState<boolean | null>(
+        cfg.download_dir ? true : null,
+    );
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const validatePath = useCallback(async (p: string) => {
+        if (!p.trim()) {
+            setPathValid(null);
+            return;
+        }
+        const exists = await invoke<boolean>("path_exists", { path: p });
+        setPathValid(exists);
+    }, []);
+
+    const handleChange = (p: string) => {
+        setLocal(p);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => void validatePath(p), 400);
+    };
+
+    const commit = (val: string) => {
+        update("gui", "download_dir", val || null);
+    };
+
+    const handlePick = async () => {
+        const picked = await invoke<string | null>("pick_folder");
+        if (picked) {
+            setLocal(picked);
+            setPathValid(true);
+            commit(picked);
+        }
+    };
+
+    return (
+        <>
+            <div className="page-title">{t("page_download")}</div>
+            <div className="section">
+                <div
+                    className="row"
+                    style={{
+                        flexDirection: "column",
+                        alignItems: "stretch",
+                        gap: 0,
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            minHeight: 54,
+                        }}
+                    >
+                        <div className="row-label">
+                            <div>{t("dl_folder")}</div>
+                            <div className="row-desc">{t("dl_folder_desc")}</div>
+                        </div>
+                        <div
+                            className="row-control"
+                            style={{ flexShrink: 1, minWidth: 0, gap: 6 }}
+                        >
+                            <input
+                                className={`input code${
+                                    pathValid === false ? " error" : ""
+                                }`}
+                                style={{ flex: 1, minWidth: 140 }}
+                                value={local}
+                                placeholder={t("dl_placeholder")}
+                                onChange={(e) => handleChange(e.target.value)}
+                                onBlur={() => {
+                                    if (local !== cfg.download_dir) commit(local);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter")
+                                        (e.target as HTMLInputElement).blur();
+                                }}
+                            />
+                            <button
+                                className="btn"
+                                style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                                onClick={() => void handlePick()}
+                            >
+                                {t("dl_browse")}
+                            </button>
+                        </div>
+                    </div>
+                    {pathValid === false && (
+                        <div
+                            className="path-error-hint"
+                            style={{ paddingLeft: 16, paddingBottom: 8 }}
+                        >
+                            {t("dl_path_error")}
+                        </div>
+                    )}
+                </div>
+            </div>
         </>
     );
 }

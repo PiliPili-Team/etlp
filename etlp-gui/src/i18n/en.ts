@@ -20,6 +20,7 @@ export const en: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Debug",
+    nav_download: "Download",
 
     // Common
     add: "Add",
@@ -373,4 +374,12 @@ export const en: typeof zhCN = {
     font_14: "14px (comfortable)",
     font_15: "15px (large)",
     font_16: "16px (extra large)",
+
+    // Download
+    page_download: "Download",
+    dl_folder: "Download Folder",
+    dl_folder_desc: "Where media files are saved. Leave empty to use system default (~/Downloads)",
+    dl_browse: "Browse…",
+    dl_placeholder: "Leave empty for system default (~/Downloads)",
+    dl_path_error: "Path does not exist, please check the input",
 };

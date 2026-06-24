@@ -20,6 +20,7 @@ export const ru: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Отладка",
+    nav_download: "Загрузки",
 
     // Common
     add: "Добавить",
@@ -380,4 +381,12 @@ export const ru: typeof zhCN = {
     font_14: "14px (удобный)",
     font_15: "15px (крупный)",
     font_16: "16px (очень крупный)",
+
+    // Download
+    page_download: "Загрузки",
+    dl_folder: "Папка загрузок",
+    dl_folder_desc: "Место сохранения файлов. Пусто = по умолчанию (~/Downloads)",
+    dl_browse: "Обзор…",
+    dl_placeholder: "Пусто для папки по умолчанию (~/Downloads)",
+    dl_path_error: "Путь не существует, проверьте ввод",
 };

@@ -20,6 +20,7 @@ export const pl: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "Debugowanie",
+    nav_download: "Pobieranie",
 
     // Common
     add: "Dodaj",
@@ -385,4 +386,12 @@ export const pl: typeof zhCN = {
     font_14: "14px (wygodny)",
     font_15: "15px (duży)",
     font_16: "16px (bardzo duży)",
+
+    // Download
+    page_download: "Pobieranie",
+    dl_folder: "Folder pobierania",
+    dl_folder_desc: "Miejsce zapisu plików. Puste = domyślne (~/Downloads)",
+    dl_browse: "Przeglądaj…",
+    dl_placeholder: "Puste dla domyślnego (~/Downloads)",
+    dl_path_error: "Ścieżka nie istnieje, sprawdź dane wejściowe",
 };

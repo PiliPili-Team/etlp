@@ -577,6 +577,7 @@ pub fn run() {
             commands::reveal_config_backup,
             commands::reset_config,
             commands::pick_player_path,
+            commands::pick_folder,
             commands::path_exists,
             commands::get_app_version,
             commands::check_update,

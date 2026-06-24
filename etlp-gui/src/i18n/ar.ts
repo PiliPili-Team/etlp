@@ -20,6 +20,7 @@ export const ar: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "تصحيح الأخطاء",
+    nav_download: "تنزيل",
 
     // Common
     add: "إضافة",
@@ -371,4 +372,12 @@ export const ar: typeof zhCN = {
     font_14: "14px (مريح)",
     font_15: "15px (كبير)",
     font_16: "16px (كبير جدًا)",
+
+    // Download
+    page_download: "تنزيل",
+    dl_folder: "مجلد التنزيل",
+    dl_folder_desc: "مكان حفظ ملفات الوسائط. اتركه فارغًا لاستخدام الافتراضي (~/Downloads)",
+    dl_browse: "استعراض…",
+    dl_placeholder: "اتركه فارغًا للاستخدام الافتراضي (~/Downloads)",
+    dl_path_error: "المسار غير موجود، يرجى التحقق من الإدخال",
 };

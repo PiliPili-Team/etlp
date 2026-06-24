@@ -20,6 +20,7 @@ export const ja: typeof zhCN = {
     nav_bangumi: "Bangumi",
     nav_trakt: "Trakt",
     nav_sec_debug: "デバッグ",
+    nav_download: "ダウンロード",
 
     // Common
     add: "追加",
@@ -371,4 +372,12 @@ export const ja: typeof zhCN = {
     font_14: "14px（快適）",
     font_15: "15px（大）",
     font_16: "16px（特大）",
+
+    // Download
+    page_download: "ダウンロード",
+    dl_folder: "ダウンロードフォルダ",
+    dl_folder_desc: "メディアファイルの保存先。空欄はシステム既定（~/Downloads）",
+    dl_browse: "参照…",
+    dl_placeholder: "空欄でシステム既定（~/Downloads）",
+    dl_path_error: "パスが存在しません。入力を確認してください",
 };

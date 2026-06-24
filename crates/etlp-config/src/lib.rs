@@ -290,6 +290,11 @@ pub struct GuiSection {
     pub speed_limit_mb: u64,
     /// Directory for the download cache; defaults to `{working_dir}/cache`.
     pub server_cache_path: Option<PathBuf>,
+    /// Directory for saving downloaded media files.
+    ///
+    /// When absent etlp uses the platform default (`~/Downloads` on macOS/Linux,
+    /// `%USERPROFILE%\Downloads` on Windows).
+    pub download_dir: Option<PathBuf>,
     /// Launch hidden to the tray instead of showing the main window. Pairs with
     /// OS autostart so the app starts quietly on login.
     pub silent_start: bool,
@@ -306,6 +311,7 @@ impl Default for GuiSection {
         Self {
             speed_limit_mb: 0,
             server_cache_path: None,
+            download_dir: None,
             silent_start: false,
             check_update: true,
             autostart: false,
