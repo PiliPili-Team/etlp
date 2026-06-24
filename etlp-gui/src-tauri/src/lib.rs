@@ -171,13 +171,10 @@ fn refresh_portable_autostart(app: &tauri::AppHandle) {
         return;
     }
     let launcher = app.autolaunch();
-    match launcher.is_enabled() {
-        Ok(true) => {
-            if let Err(e) = launcher.enable() {
-                eprintln!("[etlp] portable autostart path refresh failed: {e}");
-            }
-        }
-        Ok(false) | Err(_) => {}
+    if let Ok(true) = launcher.is_enabled()
+        && let Err(e) = launcher.enable()
+    {
+        eprintln!("[etlp] portable autostart path refresh failed: {e}");
     }
 }
 
@@ -333,9 +330,7 @@ pub fn run() {
     // (e.g. updater.exe) can inherit the layout information.
     if etlp_server::platform::is_portable() {
         // SAFETY: single-threaded at this point.
-        unsafe {
-            std::env::set_var(etlp_server::platform::ENV_PORTABLE, "1")
-        };
+        unsafe { std::env::set_var(etlp_server::platform::ENV_PORTABLE, "1") };
     }
 
     // Initialise logging to a file in the data directory so the Logs tab can

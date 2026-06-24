@@ -1476,24 +1476,21 @@ fn extract_zip(
         let entry_path = output_dir.join(&safe_rel);
 
         if entry.is_dir() {
-            std::fs::create_dir_all(&entry_path).map_err(|e| {
-                format!("mkdir {}: {e}", entry_path.display())
-            })?;
+            std::fs::create_dir_all(&entry_path)
+                .map_err(|e| format!("mkdir {}: {e}", entry_path.display()))?;
         } else {
             if let Some(parent) = entry_path.parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("mkdir parent: {e}"))?;
             }
-            let mut out = std::fs::File::create(&entry_path).map_err(|e| {
-                format!("create {}: {e}", entry_path.display())
-            })?;
+            let mut out = std::fs::File::create(&entry_path)
+                .map_err(|e| format!("create {}: {e}", entry_path.display()))?;
             let mut buf = Vec::new();
             entry
                 .read_to_end(&mut buf)
                 .map_err(|e| format!("read zip entry: {e}"))?;
-            std::io::Write::write_all(&mut out, &buf).map_err(|e| {
-                format!("write {}: {e}", entry_path.display())
-            })?;
+            std::io::Write::write_all(&mut out, &buf)
+                .map_err(|e| format!("write {}: {e}", entry_path.display()))?;
         }
     }
     Ok(())
@@ -1581,8 +1578,7 @@ pub async fn download_and_apply_update(
     let filename = platform_asset_filename(&version);
     if filename.is_empty() {
         return Err(
-            "automatic update is not supported on this platform"
-                .to_owned(),
+            "automatic update is not supported on this platform".to_owned()
         );
     }
 
@@ -1592,9 +1588,8 @@ pub async fn download_and_apply_update(
 
     // Portable installations stage updates inside the exe directory;
     // installer builds use the system temp directory (auto-cleaned on reboot).
-    let dl_dir =
-        etlp_server::platform::portable_update_dir()
-            .unwrap_or_else(|| std::env::temp_dir().join("etlp-update"));
+    let dl_dir = etlp_server::platform::portable_update_dir()
+        .unwrap_or_else(|| std::env::temp_dir().join("etlp-update"));
 
     tokio::fs::create_dir_all(&dl_dir)
         .await
@@ -1630,12 +1625,10 @@ pub async fn download_and_apply_update(
         let updater_exe = install_dir.join("updater.exe");
 
         if !updater_exe.exists() {
-            return Err(
-                "updater.exe not found in the portable directory. \
+            return Err("updater.exe not found in the portable directory. \
                  Please re-download the portable package to get a version \
                  that includes the built-in updater."
-                    .to_owned(),
-            );
+                .to_owned());
         }
 
         let pid = std::process::id();
