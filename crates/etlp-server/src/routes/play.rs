@@ -216,16 +216,17 @@ async fn run_player_chain(
             // Window the episode list around the current episode.
             // Fill forward first, then backfill with earlier episodes up to
             // the limit. Total entries never exceeds `cfg.playlist_limit`.
-            let (window_start, windowed_cur_idx) =
-                if cfg.playlist_limit >= episode_list.len() {
-                    (0, cur_idx)
-                } else {
-                    let limit = cfg.playlist_limit;
-                    let forward = (episode_list.len() - cur_idx - 1)
-                        .min(limit.saturating_sub(1));
-                    let backward = cur_idx.min(limit.saturating_sub(1) - forward);
-                    (cur_idx - backward, backward)
-                };
+            let (window_start, windowed_cur_idx) = if cfg.playlist_limit
+                >= episode_list.len()
+            {
+                (0, cur_idx)
+            } else {
+                let limit = cfg.playlist_limit;
+                let forward = (episode_list.len() - cur_idx - 1)
+                    .min(limit.saturating_sub(1));
+                let backward = cur_idx.min(limit.saturating_sub(1) - forward);
+                (cur_idx - backward, backward)
+            };
             let window_end =
                 (window_start + cfg.playlist_limit).min(episode_list.len());
             let windowed = &episode_list[window_start..window_end];
