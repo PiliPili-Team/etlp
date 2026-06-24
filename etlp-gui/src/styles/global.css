@@ -44,8 +44,8 @@
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
 
     font-family:
-        var(--app-font, -apple-system), BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-        Roboto, "Helvetica Neue", Arial, sans-serif;
+        var(--app-font, system-ui), system-ui, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: var(--base-font-size, 13px);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -130,10 +130,12 @@ body {
 }
 
 body.platform-windows {
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--app-font, "Segoe UI Variable"), "Segoe UI Variable",
+        "Segoe UI", system-ui, sans-serif;
 }
 body.platform-linux {
-    font-family: "Roboto", "Noto Sans", system-ui, sans-serif;
+    font-family: var(--app-font, "Roboto"), "Roboto", "Noto Sans",
+        system-ui, sans-serif;
 }
 
 .app {
