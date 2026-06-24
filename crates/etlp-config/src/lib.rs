@@ -159,14 +159,39 @@ impl Default for DevSection {
             log_max_files: 7,
             kill_process_at_start: true,
             proxy: None,
-            skip_certificate_verify: false,
+            skip_certificate_verify: true,
             strm_direct_host: Vec::new(),
             stream_redirect: Vec::new(),
             redirect_check_host: Vec::new(),
             stream_prefix: Vec::new(),
             force_disk_mode_path: Vec::new(),
-            version_prefer: Vec::new(),
-            subtitle_priority: Vec::new(),
+            version_prefer: [
+                "mawen1250", "LittleBakas!", "ANE", "Fussoir", "Henshin",
+                "ANK", "Beatrice-Raws", "VCB", "ADE", "philosophy-raws",
+                "Snow-Raws", "AI-Raws", "7³ACG", "简繁特效", "Nest",
+                "NEO·QSW", "诸神字幕组", "拨雪寻春", "澄空学园", "北宇治",
+                "霜庭云花", "绿茶字幕组", "SweetSub", "三明治摆烂组",
+                "星空字幕组", "喵萌奶茶屋", "桜都字幕组", "千夏字幕组",
+                "简繁日", "@LoliHouse", "&LoliHouse", "晚街与灯",
+                "今晚月色真美", "出格君", "简日", "双语", "字幕组", "字幕社",
+                "组", "Sub", "简体", "内嵌", "Netflix", "NF", "Crunchyroll",
+                "CR", "LoliHouse", "HMAX", "Disney", "iTunes", "APTV",
+                "AppleTV", "AMZN", "Amazon", "friDay", "CatchPlay", "LINETV",
+                "Viu", "KKTV", "B-Global", "BiliBili", "Abema", "内封",
+                "简繁内封", "简繁", "Baha",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+            subtitle_priority: [
+                "中英特效", "双语特效", "简中特效", "简体特效", "特效",
+                "中上", "中英", "衣柜", "拨雪寻春", "诸神", "澄空", "北宇治",
+                "SweetSub", "千夏", "喵萌", "桜都", "豌豆", "双语", "简",
+                "simp", "中", "chi", "ass", "srt", "sup", "und", "(",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
             pretty_title: true,
             last_ep_disable_playlist: false,
             version_prefer_for_playlist: true,
@@ -198,7 +223,42 @@ impl Default for PlaylistSection {
     fn default() -> Self {
         Self {
             item_limit: 0,
-            version_filter: String::new(),
+            version_filter: concat!(
+                "喵萌奶茶屋|豌豆字幕组|爱恋字幕社|漫猫字幕社|北宇治字幕组|",
+                "云光字幕组|织梦字幕组|千夏字幕组|极影字幕社|风之圣殿字幕组|",
+                "风车字幕组|银色子弹字幕组|熔岩动画|MingYSub|今晚月色真美|",
+                "枫叶字幕组|诸神字幕组|猎户发布组|SW字幕组|DAY字幕组|Xrip|",
+                "AKito秋人|智械尚未危机制作|六道是我大鸽汉化组|霜庭云花Sub|",
+                "轻之国度字幕组|星空字幕组|离谱Sub|雪飘工作室|jibaketa-粤语版|",
+                "亿次研同好会|❀拨雪寻春❀|VARYG|新Sub|AI-Raws|B站小鱼儿呼唤爱|",
+                "hchcsen|Arid|Knf|Kawaiika-Raws|冷番补完字幕组|sxales|",
+                "异域-11番小队|Zero-Raws|DreamHD|AliPan|Kagura|hydes|niizk|",
+                "康复中心字幕组|Xeon晚生|MCE汉化组|極彩字幕组|氢气烤肉架|",
+                "悠哈璃羽字幕社|桜都字幕组|SweetSub|LoliHouse|VCB-Studio|",
+                "7³ACG|幻之字幕组|魔穗字幕组|LittleBakas!|Deadmau-RAWS|",
+                "白恋字幕组|动漫国字幕组|IrizaRaws|FSD字幕组|FSD粉羽社|",
+                "一只出格君|猫恋汉化组|OPFans枫雪动漫|GM-Team|酷漫字幕组|",
+                "澄空学园|弗里吉亚宫内厅字幕组|愛遊結同窓会|晚街与灯|",
+                "Beatrice-Raws|康复重症监护室字幕组|擦枪字幕组|SilverBullet|",
+                "APTX4869|X酱|幻樱字幕组|永恒译制|咪梦字幕组|NEO·QSW|",
+                "漫游字幕组|Snow-Raws|philosophy-raws|B-Global|KKTV|MyVideo|",
+                r"AMZN|KKTV|friDay|HIDIVE|Disney(\+)?|LINETV|NF|playWEB|Viu|",
+                r"Amazon|MAX|AppleTV(\+)?|HMAX|bilibili|BiliBili|Bilibili|",
+                "ANi|Abema|YouTube|CatchPlay|iTunes|IQIYI|Remux|ADWeb|NTb|",
+                "FLUX|Amor压制组|DSNP|银色子弹字幕组|HiveWeb|B站仮面ライダーX酱|",
+                "Suzuya-Raws|前伪汉化组|RLWeb|SourGrape|三明治摆烂组|",
+                "Prejudice-Studio|秋里乐叶galgame部|三明治代餐部|奶²|",
+                "神椿观测站|西农YUI汉化组|华盟字幕社|百冬练习组|绿茶字幕组|",
+                "虹作坊汉化组|黑白字幕组|H-Enc|Nest|Y-Raws|简繁特效|简繁内封|",
+                "简繁日内封|简繁日英内封|简繁官字内封|官简内封|简日双语|简体内封|",
+                "简体内嵌|繁体内嵌|简英双语|简体&英文|繁英|繁体&英文|繁體&英文|",
+                "中日|简日|繁日|双语|内封|内嵌|..字幕组|..字幕社|..汉化组|",
+                "..发布组|..制作组|..压制组|..译制|...Raws|..@..|",
+                "HDR|DoVi|720p|1080p|2160p|4k|remux|hevc|",
+                "h.265|h.264|h265|h264|flac|aac|sdr|hdr|dv|vision|",
+                "dvrip|bdrip|mkv|mp4|avi"
+            )
+            .to_owned(),
         }
     }
 }
@@ -642,7 +702,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.playlist.item_limit, 0);
         assert_eq!(cfg.dandan.port, 8080);
         assert_eq!(cfg.gui.speed_limit_mb, 0);
-        assert!(cfg.dev.version_prefer.is_empty());
+        assert!(!cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
         assert!(cfg.trakt.user_name.is_empty());
         // A config predating the field migrates to the default window.
