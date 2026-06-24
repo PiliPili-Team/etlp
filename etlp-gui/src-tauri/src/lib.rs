@@ -158,6 +158,32 @@ fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
+/// On Windows Portable, re-register the autostart entry to the current exe
+/// path so moving the portable directory doesn't break launch-at-login.
+///
+/// `tauri-plugin-autostart` stores the exe path in the registry when `enable()`
+/// is called. Re-calling `enable()` on each launch keeps the stored path in sync
+/// with the exe's actual location. No-op on non-Windows or non-portable builds.
+#[cfg(target_os = "windows")]
+fn refresh_portable_autostart(app: &tauri::AppHandle) {
+    use tauri_plugin_autostart::ManagerExt as _;
+    if !etlp_server::platform::is_portable() {
+        return;
+    }
+    let launcher = app.autolaunch();
+    match launcher.is_enabled() {
+        Ok(true) => {
+            if let Err(e) = launcher.enable() {
+                eprintln!("[etlp] portable autostart path refresh failed: {e}");
+            }
+        }
+        Ok(false) | Err(_) => {}
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn refresh_portable_autostart(_app: &tauri::AppHandle) {}
+
 /// One-time migration from the legacy AppleScript launch-at-login backend to
 /// LaunchAgent.
 ///
@@ -303,6 +329,15 @@ pub fn run() {
     // SAFETY: single-threaded at this point.
     unsafe { std::env::set_var(etlp_server::platform::ENV_RUNTIME, "app") };
 
+    // Announce portable mode via environment variable so child processes
+    // (e.g. updater.exe) can inherit the layout information.
+    if etlp_server::platform::is_portable() {
+        // SAFETY: single-threaded at this point.
+        unsafe {
+            std::env::set_var(etlp_server::platform::ENV_PORTABLE, "1")
+        };
+    }
+
     // Initialise logging to a file in the data directory so the Logs tab can
     // tail it. Do this before any Tauri threads start.
     let data_dir = etlp_server::platform::data_dir()
@@ -402,6 +437,10 @@ pub fn run() {
             // state reliably, so afterwards the OS registration is the single
             // source of truth and there is no per-startup reconcile.
             migrate_autostart(app.handle(), want_autostart);
+
+            // Keep the portable autostart registry entry pointing at the
+            // current exe location (no-op on non-Windows / non-portable).
+            refresh_portable_autostart(app.handle());
 
             // ── Tray icon ──────────────────────────────────────────────────────
             let menu = build_tray_menu(app.handle(), &labels)?;
@@ -546,6 +585,8 @@ pub fn run() {
             commands::path_exists,
             commands::get_app_version,
             commands::check_update,
+            commands::download_and_apply_update,
+            commands::check_is_portable,
             commands::list_system_fonts,
             commands::set_autostart,
             commands::get_autostart,
