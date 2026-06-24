@@ -409,7 +409,7 @@ pub async fn update_config_field(
 
     match patch_field(&path, &section, &key, &value) {
         Ok(()) => {
-            info!(
+            debug!(
                 path = %path.display(),
                 section = %section,
                 key = %key,
@@ -574,7 +574,7 @@ pub async fn export_bangumi_map(app: tauri::AppHandle) -> Result<bool, String> {
     };
 
     std::fs::write(&path, json).map_err(|e| format!("write error: {e}"))?;
-    info!(path = %path.display(), "bangumi map exported");
+    debug!(path = %path.display(), "bangumi map exported");
     Ok(true)
 }
 
@@ -614,7 +614,7 @@ pub async fn import_bangumi_map(
     let (merged, added, replaced) =
         merge_bangumi_maps(&existing, &imported, prefer_imported);
 
-    info!(
+    debug!(
         added,
         replaced,
         total = merged.len(),
@@ -1410,7 +1410,7 @@ pub async fn backup_config() -> Result<crate::backup::BackupEntry, String> {
         tauri::async_runtime::spawn_blocking(crate::backup::create_backup)
             .await
             .map_err(|e| format!("backup task panicked: {e}"))??;
-    info!(name = %entry.name, "config backed up");
+    debug!(name = %entry.name, "config backed up");
     Ok(entry)
 }
 
@@ -1429,7 +1429,7 @@ pub async fn restore_config(
     })
     .await
     .map_err(|e| format!("restore task panicked: {e}"))??;
-    info!(path = %path, "config restored from backup");
+    debug!(path = %path, "config restored from backup");
     // Push the restored config into a running server, if any.
     let _ = reload_config(state).await;
     Ok(())
@@ -1439,7 +1439,7 @@ pub async fn restore_config(
 #[tauri::command]
 pub async fn delete_config_backup(path: String) -> Result<(), String> {
     crate::backup::delete_backup(&path)?;
-    info!(path = %path, "config backup deleted");
+    debug!(path = %path, "config backup deleted");
     Ok(())
 }
 
@@ -1459,7 +1459,7 @@ pub async fn reveal_config_backup(
 #[tauri::command]
 pub async fn reset_config(state: State<'_, GuiState>) -> Result<(), String> {
     crate::backup::reset_config()?;
-    info!("config reset to default");
+    debug!("config reset to default");
     let _ = reload_config(state).await;
     Ok(())
 }
@@ -2133,7 +2133,7 @@ pub(crate) fn load_or_default_config(
             write_default_config(&path)?;
             match Config::load_file(&path) {
                 Ok(c) => {
-                    info!(
+                    debug!(
                         path = %c.path().display(),
                         "default config written and loaded"
                     );
@@ -2170,7 +2170,7 @@ pub(crate) fn write_default_config(
     let template = default_config_template();
     match etlp_config::write_config_str(path, &template) {
         Ok(()) => {
-            info!(path = %path.display(), "default config written");
+            debug!(path = %path.display(), "default config written");
             Ok(())
         }
         Err(e) => {
@@ -2191,7 +2191,7 @@ fn default_config_template() -> String {
         if user_template.is_file() {
             match std::fs::read_to_string(&user_template) {
                 Ok(contents) => {
-                    info!(
+                    debug!(
                         path = %user_template.display(),
                         "seeding config from user template in Downloads"
                     );
