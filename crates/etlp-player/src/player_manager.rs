@@ -239,11 +239,13 @@ impl PlayerManager {
             }
 
             if self.disable_progress_report {
-                // Progress reporting disabled: only fire mark_as_played when
-                // the user watched past 90 % of the runtime.
-                if ep.total_sec > 0
-                    && stop_sec as f64 / ep.total_sec as f64 >= 0.9
-                {
+                let ratio = if ep.total_sec > 0 {
+                    stop_sec as f64 / ep.total_sec as f64
+                } else {
+                    0.0
+                };
+                if ratio >= 0.8 {
+                    // Watched ≥ 80 %: mark as played.
                     match mark_as_played(http, ep).await {
                         Ok(()) => info!(
                             "marked as played: {:?} @ {stop_sec}s",
@@ -251,6 +253,18 @@ impl PlayerManager {
                         ),
                         Err(e) => warn!(
                             "mark_as_played failed for {:?}: {e}",
+                            ep.basename
+                        ),
+                    }
+                } else {
+                    // Watched < 80 %: report final position once.
+                    match update_progress(http, ep, stop_sec, false).await {
+                        Ok(()) => info!(
+                            "progress written (dpr): {:?} @ {stop_sec}s",
+                            ep.basename
+                        ),
+                        Err(e) => warn!(
+                            "progress write failed for {:?}: {e}",
                             ep.basename
                         ),
                     }
