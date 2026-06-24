@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
 import type { UpdateInfo } from "../App";
 
@@ -38,9 +37,23 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
     const [startTime, setStartTime] = useState<Date | null>(null);
     const [elapsed, setElapsed] = useState("");
 
-    const openUpdate = () => {
-        if (update) void openUrl(update.url);
-    };
+    const [downloading, setDownloading] = useState(false);
+    const [downloadErr, setDownloadErr] = useState<string | null>(null);
+
+    const doInstallUpdate = useCallback(async () => {
+        if (!update || downloading) return;
+        setDownloading(true);
+        setDownloadErr(null);
+        try {
+            await invoke("download_and_apply_update", {
+                version: update.latest,
+            });
+        } catch (e) {
+            setDownloadErr(String(e));
+        } finally {
+            setDownloading(false);
+        }
+    }, [update, downloading]);
 
     // Anchor `startTime` to `now - uptime`, keeping the existing anchor when it
     // is already within tolerance so the local ticker does not jump each poll.
@@ -136,15 +149,26 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
                 <div className="update-banner">
                     <span className="update-banner-dot" />
                     <span className="update-banner-text">
-                        {t("ov_update_available", { version: update.latest })}
+                        {downloading
+                            ? t("ov_update_downloading")
+                            : downloadErr
+                              ? `${t("ov_update_failed")}: ${downloadErr}`
+                              : t("ov_update_available", {
+                                    version: update.latest,
+                                })}
                     </span>
-                    <button className="update-banner-btn" onClick={openUpdate}>
+                    <button
+                        className="update-banner-btn"
+                        onClick={() => void doInstallUpdate()}
+                        disabled={downloading}
+                    >
                         {t("ov_update_action")}
                     </button>
                     <button
                         className="update-banner-close"
                         title={t("ov_update_dismiss")}
                         onClick={onDismissUpdate}
+                        disabled={downloading}
                     >
                         ✕
                     </button>
