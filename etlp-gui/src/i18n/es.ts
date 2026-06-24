@@ -395,7 +395,8 @@ export const es: typeof zhCN = {
     // Download
     page_download: "Descargas",
     dl_folder: "Carpeta de descargas",
-    dl_folder_desc: "Ubicación para guardar archivos. Vacío usa el predeterminado (~/Downloads)",
+    dl_folder_desc:
+        "Ubicación para guardar archivos. Vacío usa el predeterminado (~/Downloads)",
     dl_browse: "Explorar…",
     dl_placeholder: "Vacío para usar predeterminado (~/Downloads)",
     dl_path_error: "La ruta no existe, verifique la entrada",

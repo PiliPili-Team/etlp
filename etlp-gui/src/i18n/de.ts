@@ -393,7 +393,8 @@ export const de: typeof zhCN = {
     // Download
     page_download: "Downloads",
     dl_folder: "Download-Ordner",
-    dl_folder_desc: "Speicherort für Mediendateien. Leer lassen für den Standard (~/Downloads)",
+    dl_folder_desc:
+        "Speicherort für Mediendateien. Leer lassen für den Standard (~/Downloads)",
     dl_browse: "Durchsuchen…",
     dl_placeholder: "Leer lassen für Standard (~/Downloads)",
     dl_path_error: "Pfad existiert nicht, bitte Eingabe prüfen",

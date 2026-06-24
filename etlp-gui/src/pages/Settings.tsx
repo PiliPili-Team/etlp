@@ -974,8 +974,7 @@ export default function Settings({
         return <BangumiSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "trakt")
         return <TraktSection cfg={cfg} update={update} addToast={addToast} />;
-    if (section === "download")
-        return <DownloadSection cfg={cfg} update={update} />;
+    if (section === "download") return <DownloadSection cfg={cfg} update={update} />;
     if (section === "system")
         return (
             <SystemSection

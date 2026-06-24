@@ -376,7 +376,8 @@ export const ar: typeof zhCN = {
     // Download
     page_download: "تنزيل",
     dl_folder: "مجلد التنزيل",
-    dl_folder_desc: "مكان حفظ ملفات الوسائط. اتركه فارغًا لاستخدام الافتراضي (~/Downloads)",
+    dl_folder_desc:
+        "مكان حفظ ملفات الوسائط. اتركه فارغًا لاستخدام الافتراضي (~/Downloads)",
     dl_browse: "استعراض…",
     dl_placeholder: "اتركه فارغًا للاستخدام الافتراضي (~/Downloads)",
     dl_path_error: "المسار غير موجود، يرجى التحقق من الإدخال",

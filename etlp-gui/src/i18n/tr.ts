@@ -380,7 +380,8 @@ export const tr: typeof zhCN = {
     // Download
     page_download: "İndirmeler",
     dl_folder: "İndirme Klasörü",
-    dl_folder_desc: "Medya dosyalarının kaydedileceği yer. Boş = varsayılan (~/Downloads)",
+    dl_folder_desc:
+        "Medya dosyalarının kaydedileceği yer. Boş = varsayılan (~/Downloads)",
     dl_browse: "Gözat…",
     dl_placeholder: "Boş bırakın = varsayılan (~/Downloads)",
     dl_path_error: "Yol mevcut değil, lütfen girişi kontrol edin",

@@ -22,6 +22,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/build-app.sh"
 
 TARGET="x86_64-pc-windows-msvc"
+# Cargo builds the binary as etlp-gui.exe (package.name); PRODUCT_NAME is the
+# display name used for the zip archive and the entry point inside it.
+BIN_NAME="etlp-gui"
 PRODUCT_NAME="Genshin"
 DIST_DIR="${REPO_ROOT}/dist"
 
@@ -77,7 +80,7 @@ package_portable() {
     local zip_path="${DIST_DIR}/${zip_name}"
 
     local tauri_target="${GUI_DIR}/src-tauri/target/${TARGET}/release"
-    local main_exe="${tauri_target}/${PRODUCT_NAME}.exe"
+    local main_exe="${tauri_target}/${BIN_NAME}.exe"
     local updater_exe="${REPO_ROOT}/target/${TARGET}/release/updater.exe"
 
     _log "Staging" "${zip_name}"

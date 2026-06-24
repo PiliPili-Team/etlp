@@ -378,7 +378,8 @@ export const en: typeof zhCN = {
     // Download
     page_download: "Download",
     dl_folder: "Download Folder",
-    dl_folder_desc: "Where media files are saved. Leave empty to use system default (~/Downloads)",
+    dl_folder_desc:
+        "Where media files are saved. Leave empty to use system default (~/Downloads)",
     dl_browse: "Browse…",
     dl_placeholder: "Leave empty for system default (~/Downloads)",
     dl_path_error: "Path does not exist, please check the input",
