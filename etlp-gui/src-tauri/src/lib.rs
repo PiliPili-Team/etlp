@@ -579,6 +579,7 @@ pub fn run() {
             commands::pick_player_path,
             commands::pick_folder,
             commands::path_exists,
+            commands::default_download_dir,
             commands::get_app_version,
             commands::check_update,
             commands::download_and_apply_update,
@@ -587,6 +588,8 @@ pub fn run() {
             commands::set_autostart,
             commands::get_autostart,
             commands::validate_bangumi_mapping,
+            commands::export_bangumi_map,
+            commands::import_bangumi_map,
             commands::validate_regex,
         ])
         .on_window_event(|window, event| {

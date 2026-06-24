@@ -113,6 +113,7 @@ pub struct ConfigDto {
     pub bangumi_private: bool,
     pub bangumi_genres: String,
     pub bangumi_subject_map: Vec<String>,
+    pub bangumi_mark_watching: bool,
     // runtime (not from config file)
     pub config_path: String,
 }
@@ -163,6 +164,7 @@ impl From<&Config> for ConfigDto {
             bangumi_private: c.bangumi.private,
             bangumi_genres: c.bangumi.genres.clone(),
             bangumi_subject_map: c.bangumi.subject_map.clone(),
+            bangumi_mark_watching: c.bangumi.mark_watching,
             config_path: c.path().to_string_lossy().into_owned(),
         }
     }
@@ -471,6 +473,159 @@ pub fn validate_bangumi_mapping(
         return Err("map_err_duplicate".to_owned());
     }
     Ok(parsed.to_canonical())
+}
+
+// ── Bangumi ID mapping export / import ────────────────────────────────────────
+
+/// Merge an imported mapping list into the existing one.
+///
+/// Returns `(merged_list, added, replaced)`.
+/// When `prefer_imported` is `false` (default), local entries win on conflict.
+/// When `prefer_imported` is `true`, the imported entry overwrites the local one.
+///
+/// Two entries conflict when they share the same (provider, id, is_movie,
+/// season, ep_range) key — that is, when `validate_bangumi_mapping` would
+/// return `map_err_duplicate` for the second one.
+fn merge_bangumi_maps(
+    existing: &[String],
+    imported: &[String],
+    prefer_imported: bool,
+) -> (Vec<String>, usize, usize) {
+    use etlp_sync::{SubjectMapping, parse_mapping, strip_group_prefix};
+
+    // Build a mutable working list.  Each slot stores the raw stored string
+    // (with optional group prefix) and its parsed key for comparison.
+    let mut slots: Vec<(String, SubjectMapping)> = existing
+        .iter()
+        .filter_map(|raw| {
+            let stripped = strip_group_prefix(raw);
+            parse_mapping(stripped).ok().map(|m| (raw.clone(), m))
+        })
+        .collect();
+
+    let mut added: usize = 0;
+    let mut replaced: usize = 0;
+
+    for raw_import in imported {
+        let stripped = strip_group_prefix(raw_import);
+        let Ok(imp) = parse_mapping(stripped) else {
+            continue; // drop invalid
+        };
+        let pos = slots.iter().position(|(_, m)| {
+            m.provider == imp.provider
+                && m.provider_id == imp.provider_id
+                && m.is_movie == imp.is_movie
+                && m.season == imp.season
+                && m.ep_range == imp.ep_range
+        });
+        match pos {
+            Some(idx) => {
+                if prefer_imported {
+                    slots[idx] = (raw_import.clone(), imp);
+                    replaced += 1;
+                }
+                // else: local wins; do nothing
+            }
+            None => {
+                slots.push((raw_import.clone(), imp));
+                added += 1;
+            }
+        }
+    }
+
+    let merged = slots.into_iter().map(|(raw, _)| raw).collect();
+    (merged, added, replaced)
+}
+
+/// Export the current `bangumi_subject_map` to a minified JSON file chosen by
+/// the user via a save dialog.
+///
+/// Returns `true` if the file was saved, `false` if the user cancelled the
+/// dialog.
+#[tauri::command]
+pub async fn export_bangumi_map(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt as _;
+
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    let config = crate::commands::load_or_default_config(&cfg_dir)?;
+    let subject_map = config.bangumi.subject_map.clone();
+
+    let json = serde_json::to_string(&subject_map)
+        .map_err(|e| format!("JSON serialisation error: {e}"))?;
+
+    let Some(dest) = app
+        .dialog()
+        .file()
+        .set_title("导出 Bangumi ID 映射")
+        .add_filter("JSON", &["json"])
+        .set_file_name("bangumi_map.json")
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+
+    let path_str = dest.to_string();
+    // Ensure .json extension.
+    let path = if path_str.to_lowercase().ends_with(".json") {
+        std::path::PathBuf::from(&path_str)
+    } else {
+        std::path::PathBuf::from(format!("{path_str}.json"))
+    };
+
+    std::fs::write(&path, json).map_err(|e| format!("write error: {e}"))?;
+    info!(path = %path.display(), "bangumi map exported");
+    Ok(true)
+}
+
+/// Import `bangumi_subject_map` entries from a JSON file chosen by the user.
+///
+/// On success returns `{ subject_map, added, replaced }` so the frontend can
+/// update its in-memory state and show a summary toast.  Returns `null` when
+/// the user cancels the dialog.
+#[tauri::command]
+pub async fn import_bangumi_map(
+    app: tauri::AppHandle,
+    prefer_imported: bool,
+) -> Result<Option<serde_json::Value>, String> {
+    use tauri_plugin_dialog::DialogExt as _;
+
+    let Some(src) = app
+        .dialog()
+        .file()
+        .set_title("导入 Bangumi ID 映射")
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+
+    let path_str = src.to_string();
+    let content = std::fs::read_to_string(&path_str)
+        .map_err(|e| format!("read error: {e}"))?;
+    let imported: Vec<String> = serde_json::from_str(&content)
+        .map_err(|e| format!("JSON parse error: {e}"))?;
+
+    let cfg_dir = platform::config_dir()
+        .ok_or_else(|| "cannot determine config directory".to_owned())?;
+    let config = crate::commands::load_or_default_config(&cfg_dir)?;
+    let existing = config.bangumi.subject_map.clone();
+
+    let (merged, added, replaced) =
+        merge_bangumi_maps(&existing, &imported, prefer_imported);
+
+    info!(
+        added,
+        replaced,
+        total = merged.len(),
+        "bangumi map import merged"
+    );
+
+    Ok(Some(serde_json::json!({
+        "subject_map": merged,
+        "added": added,
+        "replaced": replaced,
+    })))
 }
 
 /// Validate a `version_filter` regular expression against the same engine the
@@ -1071,6 +1226,15 @@ pub async fn pick_folder(
     Ok(path.map(|p| p.to_string()))
 }
 
+/// Return the system default downloads directory path, or an empty string if
+/// the platform cannot determine one. Used as a placeholder in the GUI.
+#[tauri::command]
+pub fn default_download_dir() -> String {
+    dirs::download_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
 /// Return the log file paths the GUI knows about.
 ///
 /// Returns `{ app_log: String|null, mpv_log: String|null }`.
@@ -1237,20 +1401,34 @@ pub async fn list_config_backups()
 }
 
 /// Create a timestamped backup of the current config; returns the new entry.
+///
+/// The underlying I/O is synchronous (zip + write); `spawn_blocking` keeps
+/// it off the async executor thread so the Tokio runtime stays responsive.
 #[tauri::command]
 pub async fn backup_config() -> Result<crate::backup::BackupEntry, String> {
-    let entry = crate::backup::create_backup()?;
+    let entry =
+        tauri::async_runtime::spawn_blocking(crate::backup::create_backup)
+            .await
+            .map_err(|e| format!("backup task panicked: {e}"))??;
     info!(name = %entry.name, "config backed up");
     Ok(entry)
 }
 
 /// Restore the config from a backup archive at `path`, then reload the server.
+///
+/// Same rationale as `backup_config`: sync zip + write wrapped in
+/// `spawn_blocking`.
 #[tauri::command]
 pub async fn restore_config(
     state: State<'_, GuiState>,
     path: String,
 ) -> Result<(), String> {
-    crate::backup::restore_backup(&path)?;
+    let path_clone = path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::backup::restore_backup(&path_clone)
+    })
+    .await
+    .map_err(|e| format!("restore task panicked: {e}"))??;
     info!(path = %path, "config restored from backup");
     // Push the restored config into a running server, if any.
     let _ = reload_config(state).await;

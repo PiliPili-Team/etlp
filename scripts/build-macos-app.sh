@@ -44,6 +44,15 @@ _native_arch() {
 # original icon. The override replaces only the `bundle.icon` list.
 _ICON_OVERRIDE_AMD64='{"bundle":{"icon":["icons/32x32.png","icons/128x128.png","icons/128x128@2x.png","icons/icon-macos-rounded.icns","icons/icon.ico"]}}'
 
+_clean_dmg_cache() {
+    local target="$1"
+    local dmg_dir="${GUI_DIR}/src-tauri/target/${target}/release/bundle/dmg"
+    if [[ -d "${dmg_dir}" ]]; then
+        _log "Cleaning" "stale DMG cache in ${dmg_dir}"
+        _run rm -f "${dmg_dir}"/*.dmg "${dmg_dir}"/rw.*.dmg
+    fi
+}
+
 _build_one() {
     local arch="$1" target
     case "${arch}" in
@@ -52,6 +61,7 @@ _build_one() {
         *)     _log_err "unknown arch: ${arch}"; exit 1 ;;
     esac
     add_rust_target "${target}"
+    _clean_dmg_cache "${target}"
     if [[ "${arch}" == "amd64" ]]; then
         build_tauri_app "${target}" --config "${_ICON_OVERRIDE_AMD64}"
     else
