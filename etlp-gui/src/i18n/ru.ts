@@ -315,14 +315,19 @@ export const ru: typeof zhCN = {
     cfg_update_check: "Проверить сейчас",
     cfg_update_check_desc: "Проверить на GitHub более новую версию прямо сейчас",
     cfg_update_checking: "Проверка…",
-    cfg_update_available:
-        "Найдена новая версия v{version} — открывается страница выпуска",
+    cfg_update_available: "Найдена новая версия v{version}",
     cfg_update_latest: "У вас последняя версия v{version}",
+        cfg_update_current_ver: "Текущая: v{version}",
+        cfg_update_latest_ver: "Последняя: v{version}",
+        cfg_update_up_to_date: "Актуальная версия",
+        cfg_update_install: "Скачать и установить",
 
     // Update banner (overview)
     ov_update_available: "Доступна новая версия v{version}",
-    ov_update_action: "Обновить",
+    ov_update_action: "Установить обновление",
     ov_update_dismiss: "Пропустить эту версию",
+        ov_update_downloading: "Загрузка обновления…",
+        ov_update_failed: "Ошибка обновления",
     sys_privacy: "Конфиденциальность",
     sys_no_progress: "Отключить отчёт о прогрессе",
     sys_no_progress_desc: "Не сообщать о прогрессе воспроизведения серверу Emby/Jellyfin",

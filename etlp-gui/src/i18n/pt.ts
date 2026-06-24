@@ -319,14 +319,19 @@ export const pt: typeof zhCN = {
     cfg_update_check: "Procurar agora",
     cfg_update_check_desc: "Procurar agora no GitHub uma versão mais recente",
     cfg_update_checking: "A procurar…",
-    cfg_update_available:
-        "Nova versão v{version} encontrada — a abrir a página da versão",
+    cfg_update_available: "Nova versão v{version} encontrada",
     cfg_update_latest: "Está na versão mais recente v{version}",
+        cfg_update_current_ver: "Atual: v{version}",
+        cfg_update_latest_ver: "Mais recente: v{version}",
+        cfg_update_up_to_date: "Atualizado",
+        cfg_update_install: "Baixar e instalar",
 
     // Update banner (overview)
     ov_update_available: "Nova versão v{version} disponível",
-    ov_update_action: "Atualizar",
+    ov_update_action: "Instalar atualização",
     ov_update_dismiss: "Ignorar esta versão",
+        ov_update_downloading: "Baixando atualização…",
+        ov_update_failed: "Falha na atualização",
     sys_privacy: "Privacidade",
     sys_no_progress: "Desativar relatório de progresso",
     sys_no_progress_desc:

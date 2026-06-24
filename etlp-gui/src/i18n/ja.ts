@@ -307,14 +307,19 @@ export const ja: typeof zhCN = {
     cfg_update_check: "今すぐ確認",
     cfg_update_check_desc: "今すぐ GitHub で新しいバージョンを確認します",
     cfg_update_checking: "確認中…",
-    cfg_update_available:
-        "新しいバージョン v{version} が見つかりました — リリースページを開きます",
+    cfg_update_available: "新しいバージョン v{version} が見つかりました",
     cfg_update_latest: "最新バージョン v{version} を使用しています",
+        cfg_update_current_ver: "現在: v{version}",
+        cfg_update_latest_ver: "最新: v{version}",
+        cfg_update_up_to_date: "最新版です",
+        cfg_update_install: "ダウンロードしてインストール",
 
     // Update banner (overview)
     ov_update_available: "新しいバージョン v{version} が利用可能です",
-    ov_update_action: "更新",
+    ov_update_action: "アップデートをインストール",
     ov_update_dismiss: "このバージョンを無視",
+        ov_update_downloading: "アップデートをダウンロード中…",
+        ov_update_failed: "アップデート失敗",
     sys_privacy: "プライバシー",
     sys_no_progress: "進捗レポートを無効化",
     sys_no_progress_desc: "Emby/Jellyfin サーバーに再生進捗を報告しません",
