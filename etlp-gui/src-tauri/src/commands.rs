@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use tauri::State;
 use tower::Layer;
 use tower_http::normalize_path::NormalizePathLayer;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use etlp_config::Config;
 
