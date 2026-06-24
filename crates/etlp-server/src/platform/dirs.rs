@@ -88,8 +88,7 @@ fn base_data() -> Option<PathBuf> {
 fn portable_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_dir = exe.parent()?;
-    if exe_dir.join("portable.txt").exists()
-        || exe_dir.join("config").is_dir()
+    if exe_dir.join("portable.txt").exists() || exe_dir.join("config").is_dir()
     {
         Some(exe_dir.to_path_buf())
     } else {
