@@ -1161,6 +1161,426 @@ impl BangumiApi {
     }
 }
 
+// ── Web-scrape resolution algorithm ────────────────────────────────────────────
+
+/// Input to [`resolve_by_web_scrape`] — distinguishes TV episodes from movies.
+pub enum WebResolveTarget<'a> {
+    /// TV episode: match by ep_range, then optionally score episode title.
+    Episode {
+        episode: u32,
+        premiere_date: Option<&'a str>,
+        episode_title: Option<&'a str>,
+    },
+    /// Movie: no ep_range check; match by date + title similarity only.
+    Movie { premiere_date: Option<&'a str> },
+}
+
+/// Bundles all parameters for [`resolve_by_web_scrape`] to keep arg count low.
+pub struct WebScrapeReq<'a> {
+    pub series: &'a str,
+    pub season: u32,
+    /// Primary search keywords (deduplicated original_title + series_name).
+    pub keywords: &'a [&'a str],
+    /// TMDB alternative titles — used in Round 1 exact matching only.
+    pub alt_titles: &'a [String],
+    pub target: WebResolveTarget<'a>,
+}
+
+/// Episode-specific parameters for [`resolve_episode_matching`].
+struct EpisodeMatchInput<'a> {
+    episode: u32,
+    premiere_date: Option<&'a str>,
+    episode_title: Option<&'a str>,
+}
+
+/// `true` when `premiere_date` is within the date window of `start_date`.
+///
+/// Passes when either date is absent (cannot reject what cannot be verified).
+fn date_window_ok(
+    premiere_date: Option<&str>,
+    start_date: Option<&str>,
+) -> bool {
+    match (premiere_date, start_date) {
+        (Some(ep), Some(start)) => {
+            match (date_to_days(ep), date_to_days(start)) {
+                (Some(e), Some(s)) => {
+                    e >= s - crate::bangumi_web::BANGUMI_DATE_WINDOW_DAYS
+                }
+                _ => true,
+            }
+        }
+        _ => true,
+    }
+}
+
+/// `true` when any of `titles` is an exact normalised match for `detail`'s
+/// name or Japanese name.
+fn is_exact_title_match(
+    titles: &[&str],
+    detail: &crate::bangumi_web::SubjectDetail,
+) -> bool {
+    let name_n = normalize_title(&detail.name);
+    let jp_n = detail.name_jp.as_deref().map(normalize_title);
+    titles.iter().any(|t| {
+        let t_n = normalize_title(t);
+        t_n == name_n || jp_n.as_deref() == Some(t_n.as_str())
+    })
+}
+
+/// Highest title similarity between any `keyword` and `detail`'s name/name_jp.
+fn best_subject_score(
+    keywords: &[&str],
+    detail: &crate::bangumi_web::SubjectDetail,
+) -> f64 {
+    keywords
+        .iter()
+        .map(|k| {
+            crate::bangumi_web::base_match_score(
+                k,
+                &detail.name,
+                detail.name_jp.as_deref().unwrap_or(""),
+            )
+        })
+        .fold(0.0_f64, f64::max)
+}
+
+/// Collect [`SubjectDetail`]s for all candidates found by `keywords`.
+///
+/// Uses `scrape_cache` to avoid duplicate searches and detail fetches within
+/// the same sync pass.
+async fn collect_details(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    keywords: &[&str],
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+) -> Vec<crate::bangumi_web::SubjectDetail> {
+    use crate::bangumi_web;
+    use std::collections::hash_map::Entry;
+
+    let mut seen: std::collections::HashSet<u64> =
+        std::collections::HashSet::new();
+    let mut details = Vec::new();
+
+    for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
+        let key = (*keyword).to_owned();
+        if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
+        {
+            let results =
+                bangumi_web::web_search_all_pages(http, bgm_base_url, keyword)
+                    .await;
+            e.insert(results);
+        }
+        let candidates = scrape_cache
+            .search_results
+            .get(&key)
+            .map(|v| v.to_vec())
+            .unwrap_or_default();
+
+        for candidate in candidates {
+            let id = candidate.subject_id;
+            if !seen.insert(id) {
+                continue;
+            }
+            if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
+                && let Some(d) = bangumi_web::fetch_subject_detail(
+                    http,
+                    bgm_base_url,
+                    &candidate,
+                )
+                .await
+            {
+                e.insert(d);
+            }
+            if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
+                details.push(d);
+            }
+        }
+    }
+    details
+}
+
+/// Resolve a Bangumi subject by scraping bgm.tv search + detail pages.
+///
+/// Implements the Priority-3 resolution path described in the spec:
+/// - Episode: ep-range filter → Round 1 exact title → Round 2 combined score
+/// - Movie: Round 1 exact title + date → Round 2 title similarity + date
+///
+/// `scrape_cache` is shared across all per-episode calls in one `sync_bangumi`
+/// pass so the same search / detail page is never fetched twice.
+pub async fn resolve_by_web_scrape(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    req: &WebScrapeReq<'_>,
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+) -> Option<u64> {
+    let episode_for_log = match &req.target {
+        WebResolveTarget::Episode { episode, .. } => *episode,
+        WebResolveTarget::Movie { .. } => 0,
+    };
+    debug!(
+        series = req.series,
+        season = req.season,
+        episode = episode_for_log,
+        keywords = ?req.keywords,
+        "bangumi: resolve_subject"
+    );
+
+    let details =
+        collect_details(http, bgm_base_url, req.keywords, scrape_cache).await;
+
+    let all_titles: Vec<&str> = req
+        .keywords
+        .iter()
+        .copied()
+        .chain(req.alt_titles.iter().map(|s| s.as_str()))
+        .collect();
+
+    match &req.target {
+        WebResolveTarget::Episode {
+            episode,
+            premiere_date,
+            episode_title,
+        } => resolve_episode_matching(
+            req.series,
+            req.season,
+            &EpisodeMatchInput {
+                episode: *episode,
+                premiere_date: *premiere_date,
+                episode_title: *episode_title,
+            },
+            req.keywords,
+            &all_titles,
+            &details,
+        ),
+        WebResolveTarget::Movie { premiere_date } => resolve_movie_matching(
+            req.series,
+            *premiere_date,
+            req.keywords,
+            &all_titles,
+            &details,
+        ),
+    }
+}
+
+fn pick_top(
+    scored: &[(f64, u64)],
+    min_score: f64,
+    series: &str,
+) -> Option<u64> {
+    let &(best, _) = scored.first()?;
+    if best < min_score {
+        return None;
+    }
+    let top: Vec<u64> = scored
+        .iter()
+        .filter(|(s, _)| (s - best).abs() < 1e-9)
+        .map(|(_, id)| *id)
+        .collect();
+    match top.as_slice() {
+        [id] => Some(*id),
+        _ => {
+            warn!(
+                series,
+                tied = ?top,
+                "bangumi: subject resolution tied — \
+                 add an ID mapping in Settings → Bangumi"
+            );
+            None
+        }
+    }
+}
+
+fn sort_scored(scored: &mut [(f64, u64)]) {
+    scored.sort_by(|(a, _), (b, _)| {
+        b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
+fn resolve_episode_matching(
+    series: &str,
+    season: u32,
+    input: &EpisodeMatchInput<'_>,
+    scoring_keywords: &[&str],
+    all_titles: &[&str],
+    details: &[crate::bangumi_web::SubjectDetail],
+) -> Option<u64> {
+    let episode = input.episode;
+    let premiere_date = input.premiere_date;
+    let episode_title = input.episode_title;
+
+    let in_range: Vec<&crate::bangumi_web::SubjectDetail> = details
+        .iter()
+        .filter(|d| {
+            d.ep_range
+                .is_some_and(|(min, max)| min <= episode && episode <= max)
+        })
+        .collect();
+
+    debug!(
+        count = in_range.len(),
+        episode, "bangumi: episode_range_filter"
+    );
+
+    // Round 1: exact title match + date window + in range
+    let r1: Vec<_> = in_range
+        .iter()
+        .filter(|d| {
+            let exact = is_exact_title_match(all_titles, d);
+            let date_ok =
+                date_window_ok(premiere_date, d.start_date.as_deref());
+            debug!(
+                subject_id = d.subject_id,
+                name = %d.name,
+                exact_match = exact,
+                in_range = true,
+                date_ok,
+                "bangumi: round1_check"
+            );
+            exact && date_ok
+        })
+        .copied()
+        .collect();
+
+    debug!(count = r1.len(), "bangumi: round1_result");
+
+    if let [single] = r1.as_slice() {
+        let id = single.subject_id;
+        debug!(subject_id = id, via = "round1", "bangumi: resolve_result");
+        return Some(id);
+    }
+
+    // Round 2 candidates: in_range + date_window
+    let r2: Vec<_> = in_range
+        .iter()
+        .filter(|d| date_window_ok(premiere_date, d.start_date.as_deref()))
+        .copied()
+        .collect();
+
+    if r2.is_empty() {
+        warn!(
+            series,
+            season,
+            episode,
+            "bangumi: no subject matched for {series} S{season}E{episode} — \
+             add an ID mapping in Settings → Bangumi"
+        );
+        return None;
+    }
+
+    let mut scored: Vec<(f64, u64)> = r2
+        .iter()
+        .map(|d| {
+            let ep_title_score = episode_title
+                .and_then(|et| {
+                    d.episodes.iter().find(|(n, _)| *n == episode).map(
+                        |(_, t)| crate::bangumi_web::title_similarity(et, t),
+                    )
+                })
+                .unwrap_or(0.0);
+            let subj_title_score = best_subject_score(scoring_keywords, d);
+            let combined = if episode_title.is_some() {
+                0.6 * ep_title_score + 0.4 * subj_title_score
+            } else {
+                subj_title_score
+            };
+            debug!(
+                subject_id = d.subject_id,
+                ep_title = ep_title_score,
+                subj_title = subj_title_score,
+                combined,
+                "bangumi: round2_scoring"
+            );
+            (combined, d.subject_id)
+        })
+        .collect();
+
+    sort_scored(&mut scored);
+
+    match pick_top(&scored, crate::bangumi_web::BANGUMI_TITLE_MIN_SCORE, series)
+    {
+        None => {
+            warn!(
+                series,
+                season,
+                episode,
+                "bangumi: no subject matched for {series} S{season}E{episode} \
+                 — add an ID mapping in Settings → Bangumi"
+            );
+            None
+        }
+        Some(id) => {
+            let best = scored.first().map(|(s, _)| *s).unwrap_or(0.0);
+            debug!(
+                subject_id = id,
+                score = best,
+                via = "round2",
+                "bangumi: resolve_result"
+            );
+            Some(id)
+        }
+    }
+}
+
+fn resolve_movie_matching(
+    series: &str,
+    premiere_date: Option<&str>,
+    scoring_keywords: &[&str],
+    all_titles: &[&str],
+    details: &[crate::bangumi_web::SubjectDetail],
+) -> Option<u64> {
+    // Round 1: exact title + date window
+    let r1: Vec<_> = details
+        .iter()
+        .filter(|d| {
+            is_exact_title_match(all_titles, d)
+                && date_window_ok(premiere_date, d.start_date.as_deref())
+        })
+        .collect();
+
+    debug!(count = r1.len(), "bangumi: round1_result (movie)");
+
+    if let [single] = r1.as_slice() {
+        let id = single.subject_id;
+        debug!(subject_id = id, via = "round1", "bangumi: resolve_result");
+        return Some(id);
+    }
+
+    // Round 2: date window filter + title similarity
+    let r2: Vec<_> = details
+        .iter()
+        .filter(|d| date_window_ok(premiere_date, d.start_date.as_deref()))
+        .collect();
+
+    let mut scored: Vec<(f64, u64)> = r2
+        .iter()
+        .map(|d| (best_subject_score(scoring_keywords, d), d.subject_id))
+        .collect();
+
+    sort_scored(&mut scored);
+
+    match pick_top(&scored, crate::bangumi_web::BANGUMI_TITLE_MIN_SCORE, series)
+    {
+        None => {
+            warn!(
+                series,
+                "bangumi: no movie subject matched for {series} — \
+                 add an ID mapping in Settings → Bangumi"
+            );
+            None
+        }
+        Some(id) => {
+            let best = scored.first().map(|(s, _)| *s).unwrap_or(0.0);
+            debug!(
+                subject_id = id,
+                score = best,
+                via = "round2",
+                "bangumi: resolve_result (movie)"
+            );
+            Some(id)
+        }
+    }
+}
+
 // ── Subject ID cache ────────────────────────────────────────────────────────────
 
 /// On-disk cache mapping `series_id:season:episode` to a resolved Bangumi
@@ -2135,5 +2555,632 @@ mod tests {
         let path = std::path::Path::new("/nonexistent/etlp/bgm_cache.json");
         let cache = SubjectCache::load(path);
         assert_eq!(cache.get("x", 1, 1), None);
+    }
+
+    // ── T4: web-scrape resolution algorithm ───────────────────────────────────
+
+    fn web_search_html(candidates: &[(u64, &str, Option<&str>)]) -> String {
+        let items: String = candidates
+            .iter()
+            .map(|(id, name, jp)| {
+                let jp_html = jp
+                    .map(|j| format!(r#"<small class="grey">{j}</small>"#))
+                    .unwrap_or_default();
+                format!(
+                    r#"<li class="item anime"><a class="l" href="/subject/{id}">{name}</a>{jp_html}</li>"#
+                )
+            })
+            .collect();
+        format!("<ul>{items}</ul>")
+    }
+
+    fn subject_main_html(start_date_jp: Option<&str>) -> String {
+        match start_date_jp {
+            Some(d) => format!(
+                r#"<ul><li><span class="tip">放送开始: </span>{d}</li></ul>"#
+            ),
+            None => "<html></html>".to_owned(),
+        }
+    }
+
+    fn ep_page_html(episodes: &[(u32, &str)]) -> String {
+        let items: String = episodes
+            .iter()
+            .map(|(num, title)| {
+                format!(
+                    r#"<a class="load-epinfo" title="ep.{num} {title}">{num}</a>"#
+                )
+            })
+            .collect();
+        format!("<html>{items}</html>")
+    }
+
+    async fn mount_search(
+        server: &MockServer,
+        path_seg: &str,
+        candidates: Vec<(u64, &str, Option<&str>)>,
+    ) {
+        use wiremock::matchers::query_param;
+        Mock::given(method("GET"))
+            .and(path(path_seg))
+            .and(query_param("cat", "2"))
+            .and(query_param("page", "1"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(web_search_html(&candidates)),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(path_seg))
+            .and(query_param("cat", "2"))
+            .and(query_param("page", "2"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string("<html></html>"),
+            )
+            .mount(server)
+            .await;
+    }
+
+    async fn mount_detail(
+        server: &MockServer,
+        id: u64,
+        start_jp: Option<&str>,
+        eps: Vec<(u32, &str)>,
+    ) {
+        use wiremock::matchers::query_param;
+        Mock::given(method("GET"))
+            .and(path(format!("/subject/{id}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(subject_main_html(start_jp)),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/subject/{id}/ep")))
+            .and(query_param("page", "1"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(ep_page_html(&eps)),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/subject/{id}/ep")))
+            .and(query_param("page", "2"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string("<html></html>"),
+            )
+            .mount(server)
+            .await;
+    }
+
+    fn http() -> reqwest::Client {
+        reqwest::Client::new()
+    }
+
+    // ── date_window tests (pure) ──────────────────────────────────────────────
+
+    #[test]
+    fn date_window_accepts_episode_on_start_date() {
+        assert!(date_window_ok(Some("2024-04-01"), Some("2024-04-01")));
+    }
+
+    #[test]
+    fn date_window_accepts_episode_5_days_before_start() {
+        assert!(date_window_ok(Some("2024-03-27"), Some("2024-04-01")));
+    }
+
+    #[test]
+    fn date_window_rejects_episode_6_days_before_start() {
+        assert!(!date_window_ok(Some("2024-03-26"), Some("2024-04-01")));
+    }
+
+    #[test]
+    fn date_window_skips_check_when_dates_unavailable() {
+        assert!(date_window_ok(None, None));
+        assert!(date_window_ok(Some("2024-01-01"), None));
+        assert!(date_window_ok(None, Some("2024-01-01")));
+    }
+
+    // ── Episode Round 1 ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resolve_episode_round1_exact_title_in_range_selected() {
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "AnimeA", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            vec![(1, "Ep1"), (2, "Ep2"), (3, "Ep3")],
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 2,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(100));
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round1_exact_title_out_of_range_skipped() {
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "AnimeA", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            vec![(1, "Ep1"), (2, "Ep2"), (3, "Ep3")],
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 5,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, None);
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round1_multiple_exact_matches_falls_to_round2() {
+        // Two subjects both named "AnimeA" both covering episode 7.
+        // Round 1 yields 2 matches → falls to Round 2.
+        // Subject 100 has ep 7 titled "EpSeven"; episode_title="EpSeven" → higher score.
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "AnimeA", None), (200, "AnimeA", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            vec![(1, ""), (7, "EpSeven"), (10, "")],
+        )
+        .await;
+        mount_detail(
+            &server,
+            200,
+            None,
+            vec![(5, ""), (7, "Different"), (15, "")],
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 7,
+                premiere_date: None,
+                episode_title: Some("EpSeven"),
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(100));
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round1_date_outside_window_skipped() {
+        // Premiere is 30 days before start_date: outside the 5-day window.
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "AnimeA", None)],
+        )
+        .await;
+        // start date = 2024-04-01 in Japanese kanji
+        mount_detail(
+            &server,
+            100,
+            Some("2024年4月1日"),
+            vec![(1, ""), (2, ""), (3, "")],
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 2,
+                premiere_date: Some("2024-03-01"), // 31 days before 2024-04-01
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, None);
+    }
+
+    // ── Episode Round 2 ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resolve_episode_round2_picks_highest_combined_score() {
+        // AnimeABC covers ep 1-10 (higher combined score),
+        // AnimeDEF covers ep 1-10 (lower combined score).
+        // keyword = "AnimeABC" → subject 100 wins.
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeABC",
+            vec![(100, "AnimeABC", None), (200, "AnimeDEF", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            (1..=10).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+        mount_detail(
+            &server,
+            200,
+            None,
+            (1..=10).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeABC"];
+        let req = WebScrapeReq {
+            series: "AnimeABC",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 5,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(100));
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round2_returns_none_on_tied_scores() {
+        // Both subjects have the same name → same score → tied → None.
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "AnimeA", None), (200, "AnimeA", None)],
+        )
+        .await;
+        mount_detail(&server, 100, None, vec![(1, ""), (2, "")]).await;
+        mount_detail(&server, 200, None, vec![(1, ""), (2, "")]).await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 1,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, None);
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round2_returns_none_below_threshold() {
+        // Subject "ZZZZZ" has near-zero similarity to keyword "AnimeA".
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeA",
+            vec![(100, "ZZZZZ", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            (1..=5).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 3,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, None);
+    }
+
+    #[tokio::test]
+    async fn resolve_episode_round2_degrades_gracefully_without_episode_title()
+    {
+        // No episode_title → score = subj_title_score only → still picks best.
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/AnimeABC",
+            vec![(100, "AnimeABC", None), (200, "AnimeXYZ", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            100,
+            None,
+            (1..=5).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+        mount_detail(
+            &server,
+            200,
+            None,
+            (1..=5).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeABC"];
+        let req = WebScrapeReq {
+            series: "AnimeABC",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 3,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(100));
+    }
+
+    // ── Movie tests ───────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resolve_movie_round1_exact_match_selected() {
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/MovieA",
+            vec![(300, "MovieA", None)],
+        )
+        .await;
+        mount_detail(&server, 300, Some("2024年6月1日"), vec![]).await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["MovieA"];
+        let req = WebScrapeReq {
+            series: "MovieA",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Movie {
+                premiere_date: Some("2024-07-01"),
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(300));
+    }
+
+    #[tokio::test]
+    async fn resolve_movie_round2_picks_highest_levenshtein() {
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/MovieABC",
+            vec![(300, "MovieABC", None), (400, "MovieXYZ", None)],
+        )
+        .await;
+        mount_detail(&server, 300, None, vec![]).await;
+        mount_detail(&server, 400, None, vec![]).await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["MovieABC"];
+        let req = WebScrapeReq {
+            series: "MovieABC",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Movie {
+                premiere_date: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(300));
+    }
+
+    #[tokio::test]
+    async fn resolve_movie_round2_returns_none_below_threshold() {
+        let server = MockServer::start().await;
+        mount_search(
+            &server,
+            "/subject_search/MovieABC",
+            vec![(300, "ZZZZZZZ", None)],
+        )
+        .await;
+        mount_detail(&server, 300, None, vec![]).await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["MovieABC"];
+        let req = WebScrapeReq {
+            series: "MovieABC",
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Movie {
+                premiere_date: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, None);
+    }
+
+    // ── Concrete scenario tests ───────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn scenario_shixiong_s1e127_selects_nianfan2_subject() {
+        // 师兄啊师兄 S1E127:
+        // subject A  (id=501): "师兄啊师兄",       ep_range 1..91  → E127 not in range
+        // subject B  (id=502): "师兄啊师兄 年番2",  ep_range 92..143 → E127 in range, wins
+        let server = MockServer::start().await;
+        let kw = "师兄啊师兄";
+        let encoded = super::percent_encode_path(kw);
+        let search_path = format!("/subject_search/{encoded}");
+
+        mount_search(
+            &server,
+            &search_path,
+            vec![(501, "师兄啊师兄", None), (502, "师兄啊师兄 年番2", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            501,
+            None,
+            (1u32..=91).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+        mount_detail(
+            &server,
+            502,
+            None,
+            (92u32..=143).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &[kw];
+        let req = WebScrapeReq {
+            series: kw,
+            season: 1,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 127,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(502));
+    }
+
+    #[tokio::test]
+    async fn scenario_doupo_s5e135_selects_zhongzhou_subject() {
+        // 斗破苍穹 S5E135:
+        // subject 601: "斗破苍穹 中州风云志", ep_range 106..157 → contains 135 → wins
+        let server = MockServer::start().await;
+        let kw = "斗破苍穹";
+        let encoded = super::percent_encode_path(kw);
+        let search_path = format!("/subject_search/{encoded}");
+
+        mount_search(
+            &server,
+            &search_path,
+            vec![(601, "斗破苍穹 中州风云志", None)],
+        )
+        .await;
+        mount_detail(
+            &server,
+            601,
+            None,
+            (106u32..=157).map(|n| (n, "")).collect::<Vec<_>>(),
+        )
+        .await;
+
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &[kw];
+        let req = WebScrapeReq {
+            series: kw,
+            season: 5,
+            keywords: kws,
+            alt_titles: &[],
+            target: WebResolveTarget::Episode {
+                episode: 135,
+                premiere_date: None,
+                episode_title: None,
+            },
+        };
+        let id =
+            resolve_by_web_scrape(&http(), &server.uri(), &req, &mut cache)
+                .await;
+        assert_eq!(id, Some(601));
     }
 }

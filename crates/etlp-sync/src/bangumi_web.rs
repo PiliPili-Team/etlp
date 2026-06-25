@@ -57,7 +57,7 @@ fn levenshtein(a: &[char], b: &[char]) -> usize {
     prev.last().copied().unwrap_or(0)
 }
 
-fn title_similarity(a: &str, b: &str) -> f64 {
+pub(crate) fn title_similarity(a: &str, b: &str) -> f64 {
     let a: Vec<char> = a.trim().to_lowercase().chars().collect();
     let b: Vec<char> = b.trim().to_lowercase().chars().collect();
     let max = a.len().max(b.len());
