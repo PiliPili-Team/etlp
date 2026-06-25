@@ -127,7 +127,7 @@ export const ar: typeof zhCN = {
     net_proxy_enabled_desc:
         "عند الإيقاف، تُحتفظ بعنوان البروكسي لكن تُجرى الاتصالات مباشرةً؛ عناوين IP الخاصة (192.168.x وَ10.x) تتجاوز البروكسي تلقائياً",
     net_skip_tls: "تخطّي التحقق من TLS",
-    net_skip_tls_desc: "لخوادم Emby الموقّعة ذاتيًا — غير آمن",
+    net_skip_tls_desc: "لخوادم الوسائط الموقّعة ذاتيًا — غير آمن",
     net_redirect: "كشف إعادة التوجيه",
     net_redirect_hosts: "المضيفات التي يُتحقق من إعادة توجيهها",
     net_redirect_hosts_desc:

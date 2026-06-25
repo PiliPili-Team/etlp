@@ -130,7 +130,7 @@ export const uk: typeof zhCN = {
     net_proxy_enabled_desc:
         "Коли вимкнено, URL зберігається, але всі підключення прямі; приватні IP (192.168.x, 10.x тощо) завжди автоматично обходять проксі",
     net_skip_tls: "Пропускати перевірку TLS",
-    net_skip_tls_desc: "Для самопідписаних серверів Emby — небезпечно",
+    net_skip_tls_desc: "Для самопідписаних медіасерверів — небезпечно",
     net_redirect: "Виявлення перенаправлень",
     net_redirect_hosts: "Хости для перевірки перенаправлень",
     net_redirect_hosts_desc:

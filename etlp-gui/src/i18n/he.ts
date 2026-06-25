@@ -126,7 +126,7 @@ export const he: typeof zhCN = {
     net_proxy_enabled_desc:
         "כשמושבת, ה-URL נשמר אך כל החיבורים ישירים; כתובות IP פרטיות (192.168.x, 10.x) עוקפות את הפרוקסי אוטומטית",
     net_skip_tls: "דלג על אימות TLS",
-    net_skip_tls_desc: "לשרתי Emby עם אישורים עצמאיים — לא מאובטח",
+    net_skip_tls_desc: "לשרתי מדיה עם אישורים עצמאיים — לא מאובטח",
     net_redirect: "זיהוי הפניות",
     net_redirect_hosts: "מארחים לבדיקת הפניות",
     net_redirect_hosts_desc:

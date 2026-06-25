@@ -129,7 +129,7 @@ export const pl: typeof zhCN = {
         "Po wyłączeniu URL jest zachowany, ale wszystkie połączenia są bezpośrednie; prywatne adresy IP (192.168.x, 10.x) są zawsze automatycznie pomijane",
     net_skip_tls: "Pomiń weryfikację TLS",
     net_skip_tls_desc:
-        "Dla serwerów Emby z certyfikatami samopodpisanymi — niebezpieczne",
+        "Dla serwerów multimedialnych z certyfikatami samopodpisanymi — niebezpieczne",
     net_redirect: "Wykrywanie przekierowań",
     net_redirect_hosts: "Hosty do sprawdzania przekierowań",
     net_redirect_hosts_desc:

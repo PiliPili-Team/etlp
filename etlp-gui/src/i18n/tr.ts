@@ -128,7 +128,7 @@ export const tr: typeof zhCN = {
     net_proxy_enabled_desc:
         "Devre dışıyken URL korunur ancak tüm bağlantılar doğrudan yapılır; özel IP'ler (192.168.x, 10.x) her zaman otomatik olarak atlanır",
     net_skip_tls: "TLS Doğrulamasını Atla",
-    net_skip_tls_desc: "Öz imzalı sertifikalı Emby sunucuları için — güvensiz",
+    net_skip_tls_desc: "Öz imzalı sertifikalı medya sunucuları için — güvensiz",
     net_redirect: "Yönlendirme Tespiti",
     net_redirect_hosts: "Yönlendirme Kontrol Ana Bilgisayarları",
     net_redirect_hosts_desc:

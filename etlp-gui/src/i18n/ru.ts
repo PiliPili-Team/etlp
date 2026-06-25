@@ -128,7 +128,7 @@ export const ru: typeof zhCN = {
     net_proxy_enabled_desc:
         "При отключении URL сохраняется, но все соединения прямые; приватные IP (192.168.x, 10.x и др.) всегда обходят прокси автоматически",
     net_skip_tls: "Пропускать проверку TLS",
-    net_skip_tls_desc: "Для самоподписанных серверов Emby — небезопасно",
+    net_skip_tls_desc: "Для самоподписанных медиасерверов — небезопасно",
     net_redirect: "Обнаружение перенаправлений",
     net_redirect_hosts: "Хосты для проверки перенаправлений",
     net_redirect_hosts_desc:

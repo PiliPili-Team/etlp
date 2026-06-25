@@ -129,7 +129,7 @@ export const sk: typeof zhCN = {
     net_proxy_enabled_desc:
         "Pri deaktivácii sa URL zachová, ale všetky spojenia sú priame; privátne IP adresy (192.168.x, 10.x) vždy automaticky obchádzajú proxy",
     net_skip_tls: "Preskočiť overenie TLS",
-    net_skip_tls_desc: "Pre samopodpísané servery Emby — nezabezpečené",
+    net_skip_tls_desc: "Pre samopodpísané mediálne servery — nezabezpečené",
     net_redirect: "Detekcia presmerovaní",
     net_redirect_hosts: "Hostitelia na sondovanie presmerovaní",
     net_redirect_hosts_desc:

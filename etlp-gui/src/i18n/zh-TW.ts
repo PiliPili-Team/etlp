@@ -124,7 +124,7 @@ export const zhTW: typeof zhCN = {
     net_proxy_enabled_desc:
         "啟用時：mpv 的 HTTP/HTTPS 流量走 HTTP 代理，Bangumi / Trakt / TMDB 等 API 請求按協議走對應代理；私有 IP（192.168.x、10.x、172.16–31.x 等）始終直連，內網媒體伺服器無需關閉此項。關閉後位址仍保留，所有連線直接發出。",
     net_skip_tls: "略過 TLS 憑證驗證",
-    net_skip_tls_desc: "用於自簽憑證的 Emby 伺服器（存在安全風險）",
+    net_skip_tls_desc: "用於自簽憑證的媒體伺服器（存在安全風險）",
     net_redirect: "重新導向偵測",
     net_redirect_hosts: "需偵測重新導向的主機",
     net_redirect_hosts_desc:

@@ -126,7 +126,7 @@ export const ko: typeof zhCN = {
     net_proxy_enabled_desc:
         "비활성화해도 URL은 유지되지만 모든 연결이 직접 이루어집니다；사설 IP(192.168.x, 10.x 등)는 항상 자동으로 프록시를 우회합니다",
     net_skip_tls: "TLS 검증 건너뛰기",
-    net_skip_tls_desc: "자체 서명된 Emby 서버용 — 안전하지 않음",
+    net_skip_tls_desc: "자체 서명된 미디어 서버용 — 안전하지 않음",
     net_redirect: "리다이렉트 감지",
     net_redirect_hosts: "리다이렉트를 확인할 호스트",
     net_redirect_hosts_desc:

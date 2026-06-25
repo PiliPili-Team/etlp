@@ -129,7 +129,7 @@ export const id: typeof zhCN = {
         "Saat dinonaktifkan, URL disimpan tetapi semua koneksi langsung; IP privat (192.168.x, 10.x dll.) selalu melewati proxy secara otomatis",
     net_skip_tls: "Lewati Verifikasi TLS",
     net_skip_tls_desc:
-        "Untuk server Emby dengan sertifikat yang ditandatangani sendiri — tidak aman",
+        "Untuk server media dengan sertifikat yang ditandatangani sendiri — tidak aman",
     net_redirect: "Deteksi Pengalihan",
     net_redirect_hosts: "Host untuk Memeriksa Pengalihan",
     net_redirect_hosts_desc:

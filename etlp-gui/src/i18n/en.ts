@@ -128,7 +128,7 @@ export const en: typeof zhCN = {
     net_proxy_enabled_desc:
         "When enabled: mpv HTTP/HTTPS traffic uses the HTTP proxy; Bangumi / Trakt / TMDB API requests use the matching-protocol proxy; private IPs (192.168.x, 10.x, 172.16–31.x, etc.) are always direct — no need to disable for LAN servers. When off, all connections are direct.",
     net_skip_tls: "Skip TLS Verification",
-    net_skip_tls_desc: "For self-signed Emby servers — insecure",
+    net_skip_tls_desc: "For self-signed media servers — insecure",
     net_redirect: "Redirect Detection",
     net_redirect_hosts: "Hosts to Probe for Redirects",
     net_redirect_hosts_desc:

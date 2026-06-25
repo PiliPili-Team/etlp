@@ -125,7 +125,7 @@ export const ja: typeof zhCN = {
     net_proxy_enabled_desc:
         "無効にしてもURLは保存されすべての接続が直接行われます；プライベートIP（192.168.x、10.xなど）は常に自動的にプロキシを回避します",
     net_skip_tls: "TLS 検証をスキップ",
-    net_skip_tls_desc: "自己署名の Emby サーバー用 — 安全ではありません",
+    net_skip_tls_desc: "自己署名証明書のメディアサーバー用 — 安全ではありません",
     net_redirect: "リダイレクト検出",
     net_redirect_hosts: "リダイレクトを調べるホスト",
     net_redirect_hosts_desc:

@@ -130,7 +130,7 @@ export const fr: typeof zhCN = {
     net_proxy_enabled_desc:
         "Désactivé, l'URL est conservée mais toutes les connexions sont directes ; les IP privées (192.168.x, 10.x…) sont toujours contournées automatiquement",
     net_skip_tls: "Ignorer la vérification TLS",
-    net_skip_tls_desc: "Pour les serveurs Emby auto-signés — non sécurisé",
+    net_skip_tls_desc: "Pour les serveurs multimédias auto-signés — non sécurisé",
     net_redirect: "Détection des redirections",
     net_redirect_hosts: "Hôtes à sonder pour les redirections",
     net_redirect_hosts_desc:

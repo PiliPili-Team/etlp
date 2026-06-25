@@ -121,7 +121,7 @@ export const zhCN = {
     net_proxy_enabled_desc:
         "启用时：mpv 的 HTTP/HTTPS 流量走 HTTP 代理，Bangumi / Trakt / TMDB 等 API 请求按协议走对应代理；私有 IP（192.168.x、10.x、172.16–31.x 等）始终直连，内网媒体服务器无需关闭此项。关闭后地址仍保留，所有连接直接发出。",
     net_skip_tls: "跳过 TLS 证书验证",
-    net_skip_tls_desc: "用于自签名证书的 Emby 服务器（存在安全风险）",
+    net_skip_tls_desc: "用于自签名证书的媒体服务器（存在安全风险）",
     net_redirect: "重定向检测",
     net_redirect_hosts: "需检测重定向的主机",
     net_redirect_hosts_desc:
