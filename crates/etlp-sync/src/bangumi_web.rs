@@ -93,7 +93,7 @@ pub(crate) fn base_match_score(
     best
 }
 
-fn percent_encode_path(s: &str) -> String {
+pub(crate) fn percent_encode_path(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for byte in s.bytes() {
         if byte.is_ascii_alphanumeric()
