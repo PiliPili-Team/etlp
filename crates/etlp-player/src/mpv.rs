@@ -322,7 +322,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
             let scheme = proxy
                 .split("://")
                 .next()
-                .filter(|s| proxy.contains("://"))
+                .filter(|_| proxy.contains("://"))
                 .unwrap_or("http");
             match scheme {
                 "http" | "https" => {
