@@ -363,9 +363,7 @@ fn extract_popup_airdate(text: &str) -> Option<String> {
 
 /// Build a map from `prginfo_*` div ID → broadcast date for all popup divs in
 /// the parsed document.
-fn popup_date_map(
-    doc: &Html,
-) -> std::collections::HashMap<String, String> {
+fn popup_date_map(doc: &Html) -> std::collections::HashMap<String, String> {
     let Ok(sel) = Selector::parse("div.prg_popup") else {
         return std::collections::HashMap::new();
     };
@@ -412,7 +410,11 @@ fn parse_ep_entries(html: &str) -> Vec<EpEntry> {
             .and_then(|rel| rel.strip_prefix('#'))
             .and_then(|id| dates.get(id))
             .cloned();
-        out.push(EpEntry { sort, title, airdate });
+        out.push(EpEntry {
+            sort,
+            title,
+            airdate,
+        });
     }
     out
 }
@@ -654,10 +656,7 @@ mod tests {
             eps.get(2).map(|e| e.title.as_str()),
             Some("第一百三十五集 魂元果")
         );
-        assert_eq!(
-            eps.first().map(|e| e.title.as_str()),
-            Some("第一集 开始")
-        );
+        assert_eq!(eps.first().map(|e| e.title.as_str()), Some("第一集 开始"));
     }
 
     #[test]

@@ -822,14 +822,14 @@ fn resolve_episode_matching(
             let by_range: Vec<_> = details
                 .iter()
                 .filter(|d| {
-                    d.ep_range
-                        .is_some_and(|(min, max)| min <= episode && episode <= max)
+                    d.ep_range.is_some_and(|(min, max)| {
+                        min <= episode && episode <= max
+                    })
                 })
                 .collect();
             debug!(
                 count = by_range.len(),
-                episode,
-                "bangumi: episode_range_filter (airdate fallback)"
+                episode, "bangumi: episode_range_filter (airdate fallback)"
             );
             by_range
         }
@@ -843,8 +843,7 @@ fn resolve_episode_matching(
             .collect();
         debug!(
             count = by_range.len(),
-            episode,
-            "bangumi: episode_range_filter"
+            episode, "bangumi: episode_range_filter"
         );
         by_range
     };
@@ -900,10 +899,9 @@ fn resolve_episode_matching(
         .map(|d| {
             let ep_title_score = episode_title
                 .and_then(|et| {
-                    d.episodes
-                        .iter()
-                        .find(|e| e.sort == episode)
-                        .map(|e| crate::bangumi_web::title_similarity(et, &e.title))
+                    d.episodes.iter().find(|e| e.sort == episode).map(|e| {
+                        crate::bangumi_web::title_similarity(et, &e.title)
+                    })
                 })
                 .unwrap_or(0.0);
             let subj_title_score = best_subject_score(scoring_keywords, d);
