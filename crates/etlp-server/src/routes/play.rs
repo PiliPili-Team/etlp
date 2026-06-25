@@ -1790,9 +1790,7 @@ mod tests {
     use axum::http::{Method, Request, StatusCode};
     use tower::ServiceExt as _;
 
-    use crate::router::{
-        ROUTE_EMBY, ROUTE_ETLP, ROUTE_PLEX, build_router,
-    };
+    use crate::router::{ROUTE_EMBY, ROUTE_ETLP, ROUTE_PLEX, build_router};
     use crate::state::test_helpers::test_state;
 
     #[test]
