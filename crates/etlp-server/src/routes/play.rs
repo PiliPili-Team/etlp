@@ -1785,13 +1785,15 @@ async fn resolve_bangumi_subject(
         .filter(|v| !v.is_empty())
         .and_then(|v| v.parse::<u64>().ok());
 
-    // Premiere date: use what the caller provides (from Emby or resolved
-    // outside the function). Fall back to TMDB when nothing is available.
+    let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
+
+    // Episode-level premiere date: used for date_window_ok and
+    // airdate_matches_premiere inside the matching pipeline.
+    // Source: Emby (ep_premiere_date) → TMDB specific episode → None.
     let premiere_date: Option<String> = if ep_premiere_date.is_some() {
         ep_premiere_date
     } else {
         let ep_u32 = u32::try_from(ep_index).ok();
-        let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
         if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
         {
             let date = tmdb.episode_air_date(tid, s, ep).await;
@@ -1818,6 +1820,18 @@ async fn resolve_bangumi_subject(
             None
         }
     };
+
+    // Season premiere date: air date of S×E1, used as the lower-bound filter
+    // on the BGM search API (YYYY-MM-01).  Anchors the search to when the arc
+    // *started* rather than an arbitrary mid-season episode.
+    // Source: TMDB S×E1 → episode premiere date → None.
+    let season_premiere_date: Option<String> =
+        if let (Some(tid), Some(s)) = (tmdb_series_id, s_u32) {
+            let date = tmdb.episode_air_date(tid, s, 1).await;
+            date.or_else(|| premiere_date.clone())
+        } else {
+            premiere_date.clone()
+        };
 
     // Fetch TMDB alternate titles for Round 1 exact matching.
     let alt_titles: Vec<String> = if let Some(tid) = tmdb_series_id {
@@ -1856,6 +1870,7 @@ async fn resolve_bangumi_subject(
         keywords: &keywords,
         alt_titles: &alt_titles,
         target,
+        season_premiere_date: season_premiere_date.as_deref(),
     };
 
     let id =

@@ -795,7 +795,8 @@ pub enum WebResolveTarget<'a> {
     Movie { premiere_date: Option<&'a str> },
 }
 
-/// Bundles all parameters for [`resolve_by_web_scrape`] to keep arg count low.
+/// Bundles all parameters for [`resolve_by_web_scrape_with_chain`] to keep
+/// arg count low.
 pub struct WebScrapeReq<'a> {
     pub series: &'a str,
     pub season: u32,
@@ -804,6 +805,13 @@ pub struct WebScrapeReq<'a> {
     /// TMDB alternative titles — used in Round 1 exact matching only.
     pub alt_titles: &'a [String],
     pub target: WebResolveTarget<'a>,
+    /// Air date of the first episode of this season (`"YYYY-MM-DD"`), used as
+    /// the lower-bound filter on the BGM subject search API.  When `None` the
+    /// search is issued without a date filter, which is broader but still
+    /// correct.  Prefer this over the individual episode's premiere date so
+    /// that the filter anchors to when the arc *started*, not an arbitrary
+    /// midpoint episode.
+    pub season_premiere_date: Option<&'a str>,
 }
 
 /// Episode-specific parameters for [`resolve_episode_matching`].
@@ -871,21 +879,23 @@ fn best_subject_score(
 ///
 /// Example: `"2026-05-27T…"` → `"2025-01-01"`
 fn air_date_from_premiere(premiere_date: &str) -> Option<String> {
-    let year: i64 = premiere_date.get(..4)?.parse().ok()?;
-    Some(format!("{:04}-01-01", year - 1))
+    let year = premiere_date.get(..4)?;
+    let month = premiere_date.get(5..7)?;
+    Some(format!("{year}-{month}-01"))
 }
 
 /// Collect [`SubjectDetail`]s for all candidates found by `keywords` using the
 /// BGM JSON API.
 ///
 /// Uses `scrape_cache` to avoid duplicate searches and detail fetches within
-/// the same sync pass. When `premiere_date` is available, a year-level
-/// `air_date` lower bound is added to the search filter to narrow results.
+/// the same sync pass. When `season_premiere_date` is available, a month-level
+/// `air_date` lower bound (`YYYY-MM-01`) is added to the search filter to
+/// narrow results to subjects that started in or after that month.
 async fn collect_details(
     keywords: &[&str],
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: &BangumiApi,
-    premiere_date: Option<&str>,
+    season_premiere_date: Option<&str>,
 ) -> Vec<crate::bangumi_web::SubjectDetail> {
     use std::collections::hash_map::Entry;
 
@@ -897,7 +907,8 @@ async fn collect_details(
         let key = (*keyword).to_owned();
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
-            let air_date_from = premiere_date.and_then(air_date_from_premiere);
+            let air_date_from =
+                season_premiere_date.and_then(air_date_from_premiere);
             let results = api
                 .search_subjects_api(keyword, 50, air_date_from.as_deref())
                 .await;
@@ -1039,9 +1050,13 @@ pub async fn resolve_by_web_scrape_with_chain(
         "bangumi: resolve_subject"
     );
 
-    let mut details =
-        collect_details(req.keywords, scrape_cache, api, premiere_date_for_log)
-            .await;
+    let mut details = collect_details(
+        req.keywords,
+        scrape_cache,
+        api,
+        req.season_premiere_date,
+    )
+    .await;
 
     enrich_with_chain(api, &mut details, scrape_cache).await;
 
@@ -2249,6 +2264,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
@@ -2279,6 +2295,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
@@ -2319,6 +2336,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: Some("EpSeven"),
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
@@ -2347,6 +2365,7 @@ mod tests {
                 premiere_date: Some("2024-03-01"), // 31 days before 2024-04-01
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
@@ -2382,6 +2401,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
@@ -2410,6 +2430,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
@@ -2435,6 +2456,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
@@ -2467,6 +2489,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
@@ -2492,6 +2515,7 @@ mod tests {
             target: WebResolveTarget::Movie {
                 premiere_date: Some("2024-07-01"),
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(300));
@@ -2516,6 +2540,7 @@ mod tests {
             target: WebResolveTarget::Movie {
                 premiere_date: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(300));
@@ -2538,6 +2563,7 @@ mod tests {
             target: WebResolveTarget::Movie {
                 premiere_date: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
@@ -2586,6 +2612,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(502));
@@ -2620,6 +2647,7 @@ mod tests {
                 premiere_date: None,
                 episode_title: None,
             },
+            season_premiere_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(601));
