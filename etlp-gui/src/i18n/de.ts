@@ -213,7 +213,7 @@ export const de: typeof zhCN = {
     sys_trakt_user_placeholder: "z. B. your_trakt_user",
     sys_trakt_host: "Host aktivieren",
     sys_trakt_host_desc:
-        "Kommagetrennte Host-Schlüsselwörter; leer lassen zum Deaktivieren, ein einzelner Punkt aktiviert alle",
+        "Kommagetrennte Host-Schlüsselwörter, leer lassen zum Deaktivieren；z. B. emby.local, 192.168.1；\".\" eingeben um alle zu aktivieren",
     sys_trakt_host_placeholder: "z. B. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Doppeltes Markieren zulassen",
     sys_trakt_dup_desc:
@@ -228,7 +228,7 @@ export const de: typeof zhCN = {
         "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Bangumi synchronisiert: Ab ≥ 80 % wird die aktuelle Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere bereits abgeschlossene Episoden derselben Staffel im Medienserver werden ebenfalls nachgetragen, ohne Duplikate. Wenn nichts zu markieren ist (< 80 % und keine Verlaufseinträge), wird das Werk nur als „schaue gerade” eingetragen, sofern die effektive Wiedergabezeit ≥ 20 Sekunden beträgt – andernfalls wird der Eintrag übersprungen, um Fehlauslöser zu vermeiden.",
     sys_bangumi_host: "Host aktivieren",
     sys_bangumi_host_desc:
-        "Kommagetrennte Host-Schlüsselwörter; leer lassen zum Deaktivieren, ein einzelner Punkt aktiviert alle",
+        "Kommagetrennte Host-Schlüsselwörter, leer lassen zum Deaktivieren；z. B. emby.local, 192.168.1；\".\" eingeben um alle zu aktivieren",
     sys_bangumi_host_placeholder: "z. B. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Benutzername / UID",
     sys_bangumi_user_desc: "bgm.tv-Benutzername oder die Ziffern in bgm.tv/user/123456",

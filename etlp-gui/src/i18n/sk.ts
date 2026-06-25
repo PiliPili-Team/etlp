@@ -211,7 +211,7 @@ export const sk: typeof zhCN = {
     sys_trakt_user_placeholder: "napr. your_trakt_user",
     sys_trakt_host: "Povoliť hostiteľa",
     sys_trakt_host_desc:
-        "Kľúčové slová hostiteľov oddelené čiarkami; nechajte prázdne na zakázanie, jedna bodka povolí všetkých",
+        "Kľúčové slová hostiteľov oddelené čiarkami, nechajte prázdne na zakázanie；napr. emby.local, 192.168.1；zadajte \".\" pre povolenie všetkých",
     sys_trakt_host_placeholder: "napr. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Povoliť duplicitné označovanie",
     sys_trakt_dup_desc:
@@ -226,7 +226,7 @@ export const sk: typeof zhCN = {
         "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie ≥ 80 % označí aktuálnu epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste ukončili na médiaserveri, bez duplikovania. Keď nie je čo označiť (< 80 % a žiadna história), dielo sa nastaví na „pozerám” len ak efektívna doba prehrávania je ≥ 20 sekúnd, inak sa preskočí, aby sa predišlo náhodným zápisom.",
     sys_bangumi_host: "Povoliť hostiteľa",
     sys_bangumi_host_desc:
-        "Kľúčové slová hostiteľov oddelené čiarkami; nechajte prázdne na zakázanie, jedna bodka povolí všetkých",
+        "Kľúčové slová hostiteľov oddelené čiarkami, nechajte prázdne na zakázanie；napr. emby.local, 192.168.1；zadajte \".\" pre povolenie všetkých",
     sys_bangumi_host_placeholder: "napr. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Používateľské meno / UID",
     sys_bangumi_user_desc: "Používateľské meno bgm.tv alebo číslice v bgm.tv/user/123456",

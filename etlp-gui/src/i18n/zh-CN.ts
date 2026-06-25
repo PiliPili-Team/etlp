@@ -195,7 +195,7 @@ export const zhCN = {
     sys_trakt_user_desc: "你的 Trakt 用户名（不是显示昵称）",
     sys_trakt_user_placeholder: "例：your_trakt_user",
     sys_trakt_host: "启用域名",
-    sys_trakt_host_desc: "逗号分隔的域名关键词；留空禁用，单独一个点表示全部启用",
+    sys_trakt_host_desc: "逗号分隔的域名关键词，留空禁用；如 emby.local, 192.168.1；填 \".\" 启用全部",
     sys_trakt_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_trakt_dup: "允许重复标记",
     sys_trakt_dup_desc:
@@ -208,7 +208,7 @@ export const zhCN = {
     sys_bangumi_sync_note:
         "播放结束后自动同步到 Bangumi：进度 ≥ 80% 才将当前集标记为「看过」，不足 80% 则不标记当前集；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。",
     sys_bangumi_host: "启用域名",
-    sys_bangumi_host_desc: "逗号分隔的域名关键词；留空禁用，单独一个点表示全部启用",
+    sys_bangumi_host_desc: "逗号分隔的域名关键词，留空禁用；如 emby.local, 192.168.1；填 \".\" 启用全部",
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_bangumi_user: "用户名 / UID",
     sys_bangumi_user_desc: "bgm.tv 用户名，或 bgm.tv/user/123456 中的数字",

@@ -202,7 +202,7 @@ export const he: typeof zhCN = {
     sys_trakt_user_placeholder: "לדוג׳ your_trakt_user",
     sys_trakt_host: "הפעל מארח",
     sys_trakt_host_desc:
-        "מילות מפתח מארח מופרדות בפסיקות; השאר ריק להשבתה, נקודה מפעילה הכול",
+        "מילות מפתח מארח מופרדות בפסיקות, השאר ריק להשבתה；לדוג׳ emby.local, 192.168.1；הזן \".\" להפעלת הכול",
     sys_trakt_host_placeholder: "לדוג׳ localhost, 192.168., emby.example.com",
     sys_trakt_dup: "אפשר סימון מחדש",
     sys_trakt_dup_desc:
@@ -216,7 +216,7 @@ export const he: typeof zhCN = {
         "כשההפעלה מסתיימת, הצפייה שלך מסונכרנת אוטומטית עם Bangumi: הגעה ל-≥ 80% מסמנת את הפרק הנוכחי כנצפה, פחות נשאר לא מסומן; פרקים אחרים של אותה עונה שסיימת בשרת המדיה מתווספים גם הם, ללא כפילות. אם אין מה לסמן (< 80% ואין היסטוריה), היצירה מוגדרת ל'צופה' רק אם זמן ההפעלה האפקטיבי הוא ≥ 20 שניות, אחרת מדלגים כדי למנוע הוספות מקריות.",
     sys_bangumi_host: "הפעל מארח",
     sys_bangumi_host_desc:
-        "מילות מפתח מארח מופרדות בפסיקות; השאר ריק להשבתה, נקודה מפעילה הכול",
+        "מילות מפתח מארח מופרדות בפסיקות, השאר ריק להשבתה；לדוג׳ emby.local, 192.168.1；הזן \".\" להפעלת הכול",
     sys_bangumi_host_placeholder: "לדוג׳ localhost, 192.168., emby.example.com",
     sys_bangumi_user: "שם משתמש / UID",
     sys_bangumi_user_desc: "שם משתמש bgm.tv או המספרים ב-bgm.tv/user/123456",

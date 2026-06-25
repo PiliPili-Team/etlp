@@ -209,7 +209,7 @@ export const tr: typeof zhCN = {
     sys_trakt_user_placeholder: "örn. your_trakt_user",
     sys_trakt_host: "Ana Bilgisayarı Etkinleştir",
     sys_trakt_host_desc:
-        "Virgülle ayrılmış ana bilgisayar anahtar kelimeleri; devre dışı bırakmak için boş bırakın, nokta hepsini etkinleştirir",
+        "Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için \".\" girin",
     sys_trakt_host_placeholder: "örn. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Yeniden İşaretlemeye İzin Ver",
     sys_trakt_dup_desc:
@@ -223,7 +223,7 @@ export const tr: typeof zhCN = {
         "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: ≥ %80'e ulaşmak mevcut bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de eklenir, mevcut olanlar çoğaltılmaz. İşaretlenecek bir şey yoksa (< %80 ve geçmiş yoksa), eserin durumu yalnızca gerçek oynatma süresi ≥ 20 saniyeyse 'izliyorum' olarak ayarlanır, aksi takdirde yanlışlıkla eklemeyi önlemek için atlanır.",
     sys_bangumi_host: "Ana Bilgisayarı Etkinleştir",
     sys_bangumi_host_desc:
-        "Virgülle ayrılmış ana bilgisayar anahtar kelimeleri; devre dışı bırakmak için boş bırakın, nokta hepsini etkinleştirir",
+        "Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için \".\" girin",
     sys_bangumi_host_placeholder: "örn. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Kullanıcı Adı / UID",
     sys_bangumi_user_desc: "bgm.tv kullanıcı adı veya bgm.tv/user/123456'daki sayılar",

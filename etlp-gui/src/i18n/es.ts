@@ -214,7 +214,7 @@ export const es: typeof zhCN = {
     sys_trakt_user_placeholder: "p. ej. your_trakt_user",
     sys_trakt_host: "Activar host",
     sys_trakt_host_desc:
-        "Palabras clave de host separadas por comas; déjalo vacío para desactivar, un solo punto activa todos",
+        "Palabras clave de host separadas por comas, vacío para desactivar；ej. emby.local, 192.168.1；ingresa \".\" para activar todos",
     sys_trakt_host_placeholder: "p. ej. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Permitir marcado duplicado",
     sys_trakt_dup_desc:
@@ -229,7 +229,7 @@ export const es: typeof zhCN = {
         "Cuando termina la reproducción, tu visionado se sincroniza automáticamente con Bangumi: alcanzar ≥ 80% marca el episodio actual como visto, por debajo no se marca; también se añaden los episodios de la misma temporada ya completados en tu servidor multimedia, sin duplicar los existentes. Si no hay nada que marcar (< 80% y sin historial), la obra se establece como «viendo» solo si la duración de reproducción efectiva es ≥ 20 segundos, de lo contrario se omite para evitar adiciones accidentales.",
     sys_bangumi_host: "Activar host",
     sys_bangumi_host_desc:
-        "Palabras clave de host separadas por comas; déjalo vacío para desactivar, un solo punto activa todos",
+        "Palabras clave de host separadas por comas, vacío para desactivar；ej. emby.local, 192.168.1；ingresa \".\" para activar todos",
     sys_bangumi_host_placeholder: "p. ej. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nombre de usuario / UID",
     sys_bangumi_user_desc:

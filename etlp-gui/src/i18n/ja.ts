@@ -205,7 +205,7 @@ export const ja: typeof zhCN = {
     sys_trakt_user_placeholder: "例：your_trakt_user",
     sys_trakt_host: "有効にするホスト",
     sys_trakt_host_desc:
-        "カンマ区切りのホストキーワード。空で無効、ドット 1 つですべて有効",
+        "カンマ区切りのホストキーワード、空で無効；例 emby.local, 192.168.1；\".\" のみで全ホスト有効",
     sys_trakt_host_placeholder: "例：localhost, 192.168., emby.example.com",
     sys_trakt_dup: "重複マークを許可",
     sys_trakt_dup_desc:
@@ -220,7 +220,7 @@ export const ja: typeof zhCN = {
         "再生が終わると、視聴状況が自動で Bangumi に同期されます。≥ 80% に達すると現在のエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンのメディアサーバー上ですでに視聴済みの他のエピソードも追加されますが、既存のものは重複しません。マークすべきものがない場合（< 80% かつ履歴なし）、実際の視聴時間が ≥ 20 秒のときのみ作品を「観てる」に設定し、それ以外はスキップして誤った追加を防ぎます。",
     sys_bangumi_host: "有効にするホスト",
     sys_bangumi_host_desc:
-        "カンマ区切りのホストキーワード。空で無効、ドット 1 つですべて有効",
+        "カンマ区切りのホストキーワード、空で無効；例 emby.local, 192.168.1；\".\" のみで全ホスト有効",
     sys_bangumi_host_placeholder: "例：localhost, 192.168., emby.example.com",
     sys_bangumi_user: "ユーザー名 / UID",
     sys_bangumi_user_desc: "bgm.tv のユーザー名、または bgm.tv/user/123456 の数字",

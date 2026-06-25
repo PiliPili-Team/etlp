@@ -204,7 +204,7 @@ export const ko: typeof zhCN = {
     sys_trakt_user_placeholder: "예: your_trakt_user",
     sys_trakt_host: "호스트 활성화",
     sys_trakt_host_desc:
-        "쉼표로 구분된 호스트 키워드. 비우면 비활성화, 점 하나면 모두 활성화",
+        "쉼표로 구분된 호스트 키워드, 비우면 비활성화；예: emby.local, 192.168.1；\".\" 만 입력하면 전체 활성화",
     sys_trakt_host_placeholder: "예: localhost, 192.168., emby.example.com",
     sys_trakt_dup: "중복 표시 허용",
     sys_trakt_dup_desc:
@@ -219,7 +219,7 @@ export const ko: typeof zhCN = {
         '재생이 끝나면 시청 기록이 자동으로 Bangumi에 동기화됩니다. ≥ 80%에 도달하면 현재 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 미디어 서버에 이미 시청 완료된 같은 시즌의 다른 에피소드도 추가되며, 기존 항목은 중복되지 않습니다. 표시할 항목이 없는 경우(< 80% 및 기록 없음) 실제 재생 시간이 ≥ 20초일 때만 작품을 "보는 중"으로 설정하고, 그렇지 않으면 건너뜁니다.',
     sys_bangumi_host: "호스트 활성화",
     sys_bangumi_host_desc:
-        "쉼표로 구분된 호스트 키워드. 비우면 비활성화, 점 하나면 모두 활성화",
+        "쉼표로 구분된 호스트 키워드, 비우면 비활성화；예: emby.local, 192.168.1；\".\" 만 입력하면 전체 활성화",
     sys_bangumi_host_placeholder: "예: localhost, 192.168., emby.example.com",
     sys_bangumi_user: "사용자 이름 / UID",
     sys_bangumi_user_desc: "bgm.tv 사용자 이름 또는 bgm.tv/user/123456의 숫자",

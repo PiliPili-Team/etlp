@@ -198,7 +198,7 @@ export const zhTW: typeof zhCN = {
     sys_trakt_user_desc: "你的 Trakt 使用者名稱（不是顯示暱稱）",
     sys_trakt_user_placeholder: "例：your_trakt_user",
     sys_trakt_host: "啟用網域",
-    sys_trakt_host_desc: "逗號分隔的網域關鍵字；留空停用，單獨一個點表示全部啟用",
+    sys_trakt_host_desc: "逗號分隔的網域關鍵字，留空停用；如 emby.local, 192.168.1；填 \".\" 啟用全部",
     sys_trakt_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_trakt_dup: "允許重複標記",
     sys_trakt_dup_desc:
@@ -211,7 +211,7 @@ export const zhTW: typeof zhCN = {
     sys_bangumi_sync_note:
         "播放結束後自動同步到 Bangumi：進度 ≥ 80% 才將當前集標記為「看過」，不足 80% 則不標記當前集；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。進度不足 80% 且無可補標歷史時，若有效播放時長 ≥ 20 秒則將條目置為「在看」，否則跳過，避免誤觸發。",
     sys_bangumi_host: "啟用網域",
-    sys_bangumi_host_desc: "逗號分隔的網域關鍵字；留空停用，單獨一個點表示全部啟用",
+    sys_bangumi_host_desc: "逗號分隔的網域關鍵字，留空停用；如 emby.local, 192.168.1；填 \".\" 啟用全部",
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_bangumi_user: "使用者名稱 / UID",
     sys_bangumi_user_desc: "bgm.tv 使用者名稱，或 bgm.tv/user/123456 中的數字",

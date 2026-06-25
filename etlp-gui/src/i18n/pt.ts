@@ -213,7 +213,7 @@ export const pt: typeof zhCN = {
     sys_trakt_user_placeholder: "ex. your_trakt_user",
     sys_trakt_host: "Ativar anfitrião",
     sys_trakt_host_desc:
-        "Palavras-chave de anfitrião separadas por vírgulas; deixe vazio para desativar, um único ponto ativa todos",
+        "Palavras-chave de anfitrião separadas por vírgulas, vazio para desativar；ex. emby.local, 192.168.1；insira \".\" para ativar todos",
     sys_trakt_host_placeholder: "ex. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Permitir marcação duplicada",
     sys_trakt_dup_desc:
@@ -228,7 +228,7 @@ export const pt: typeof zhCN = {
         "Quando a reprodução termina, a sua visualização é sincronizada automaticamente com o Bangumi: atingir ≥ 80 % marca o episódio atual como visto, abaixo disso permanece sem marca; outros episódios da mesma temporada já concluídos no servidor multimédia também são adicionados, sem duplicar os existentes. Se não houver nada a marcar (< 80 % e sem histórico), a obra é definida como «a ver» apenas se a duração de reprodução efetiva for ≥ 20 segundos, caso contrário é ignorada para evitar adições acidentais.",
     sys_bangumi_host: "Ativar anfitrião",
     sys_bangumi_host_desc:
-        "Palavras-chave de anfitrião separadas por vírgulas; deixe vazio para desativar, um único ponto ativa todos",
+        "Palavras-chave de anfitrião separadas por vírgulas, vazio para desativar；ex. emby.local, 192.168.1；insira \".\" para ativar todos",
     sys_bangumi_host_placeholder: "ex. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nome de utilizador / UID",
     sys_bangumi_user_desc:

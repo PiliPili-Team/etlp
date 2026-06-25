@@ -215,7 +215,7 @@ export const fr: typeof zhCN = {
     sys_trakt_user_placeholder: "ex. your_trakt_user",
     sys_trakt_host: "Activer l'hôte",
     sys_trakt_host_desc:
-        "Mots-clés d'hôtes séparés par des virgules ; laissez vide pour désactiver, un seul point active tout",
+        "Mots-clés d'hôtes séparés par des virgules, vide pour désactiver；ex. emby.local, 192.168.1；entrez \".\" pour tout activer",
     sys_trakt_host_placeholder: "ex. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Autoriser le marquage en double",
     sys_trakt_dup_desc:
@@ -230,7 +230,7 @@ export const fr: typeof zhCN = {
         "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Bangumi : atteindre ≥ 80 % marque l'épisode en cours comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également ajoutés, sans doublon. S'il n'y a rien à marquer (< 80 % et aucun historique), l'œuvre est mise en « en cours de visionnage » uniquement si la durée de lecture effective est ≥ 20 secondes, sinon elle est ignorée pour éviter les ajouts accidentels.",
     sys_bangumi_host: "Activer l'hôte",
     sys_bangumi_host_desc:
-        "Mots-clés d'hôtes séparés par des virgules ; laissez vide pour désactiver, un seul point active tout",
+        "Mots-clés d'hôtes séparés par des virgules, vide pour désactiver；ex. emby.local, 192.168.1；entrez \".\" pour tout activer",
     sys_bangumi_host_placeholder: "ex. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nom d'utilisateur / UID",
     sys_bangumi_user_desc:

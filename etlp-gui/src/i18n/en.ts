@@ -208,7 +208,7 @@ export const en: typeof zhCN = {
     sys_trakt_user_placeholder: "e.g. your_trakt_user",
     sys_trakt_host: "Enable Host",
     sys_trakt_host_desc:
-        "Comma-separated host keywords; leave empty to disable, a single dot enables all",
+        "Comma-separated host keywords; leave empty to disable. e.g. emby.local, 192.168.1 — enter \".\" to enable all",
     sys_trakt_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Allow Duplicate Marking",
     sys_trakt_dup_desc:
@@ -223,7 +223,7 @@ export const en: typeof zhCN = {
         "When playback ends, your viewing is synced to Bangumi automatically: ≥ 80% progress marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
-        "Comma-separated host keywords; leave empty to disable, a single dot enables all",
+        "Comma-separated host keywords; leave empty to disable. e.g. emby.local, 192.168.1 — enter \".\" to enable all",
     sys_bangumi_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Username / UID",
     sys_bangumi_user_desc: "bgm.tv username or the digits in bgm.tv/user/123456",
