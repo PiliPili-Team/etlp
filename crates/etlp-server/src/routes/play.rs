@@ -1859,8 +1859,6 @@ async fn resolve_bangumi_subject(
     };
 
     let id = etlp_sync::resolve_by_web_scrape_with_chain(
-        api.http(),
-        etlp_sync::bangumi_web::BGM_WEB_BASE_URL,
         &req,
         scrape_cache,
         api,

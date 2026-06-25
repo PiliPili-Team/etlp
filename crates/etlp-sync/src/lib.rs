@@ -22,7 +22,7 @@ pub mod trakt;
 
 pub use bangumi::{
     BangumiApi, CollectionState, SubjectCache, WebResolveTarget, WebScrapeReq,
-    normalize_title, resolve_by_web_scrape, resolve_by_web_scrape_with_chain,
+    normalize_title, resolve_by_web_scrape_with_chain,
     sync_episode_by_bangumi_id, sync_episodes,
 };
 pub use bangumi_map::{
