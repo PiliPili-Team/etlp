@@ -58,6 +58,9 @@ interface ConfigDto {
     bangumi_genres: string;
     bangumi_subject_map: string[];
     bangumi_mark_watching: boolean;
+    bangumi_allow_duplicate: boolean;
+    bangumi_duplicate_throttle_secs: number;
+    tmdb_api_key: string;
     config_path: string;
 }
 
@@ -401,6 +404,8 @@ function parseProxyUrl(full: string, def: ProxyScheme): [ProxyScheme, string] {
     return [def, full];
 }
 
+const PROXY_SCHEMES: ProxyScheme[] = ["http", "https", "socks5"];
+
 function ProxyRow({
     label,
     desc,
@@ -453,19 +458,21 @@ function ProxyRow({
             </div>
             <div className="row-control">
                 <div className="proxy-input">
-                    <select
-                        className="select proxy-scheme"
-                        value={scheme}
-                        onChange={(e) => {
-                            const next = e.target.value as ProxyScheme;
-                            setScheme(next);
-                            if (hostPort.trim()) commit(hostPort, next);
-                        }}
-                    >
-                        <option value="http">http://</option>
-                        <option value="https">https://</option>
-                        <option value="socks5">socks5://</option>
-                    </select>
+                    <div className="proxy-scheme-tabs">
+                        {PROXY_SCHEMES.map((s) => (
+                            <button
+                                key={s}
+                                type="button"
+                                className={`proxy-scheme-tab${scheme === s ? " active" : ""}`}
+                                onClick={() => {
+                                    setScheme(s);
+                                    if (hostPort.trim()) commit(hostPort, s);
+                                }}
+                            >
+                                {s}://
+                            </button>
+                        ))}
+                    </div>
                     <input
                         className="input code"
                         value={hostPort}
@@ -3174,11 +3181,40 @@ function BangumiSection({
                     onUpdate={(newItems) => update("bangumi", "subject_map", newItems)}
                     addToast={addToast}
                 />
+                <ToggleRow
+                    label={t("sys_bangumi_dup")}
+                    desc={t("sys_bangumi_dup_desc")}
+                    checked={cfg.bangumi_allow_duplicate}
+                    onChange={(v) => update("bangumi", "allow_duplicate", v)}
+                />
+                <NumberRow
+                    label={t("sys_bangumi_dup_throttle")}
+                    desc={t("sys_bangumi_dup_throttle_desc")}
+                    value={cfg.bangumi_duplicate_throttle_secs}
+                    min={DUP_THROTTLE_MIN}
+                    onCommit={(v) => update("bangumi", "duplicate_throttle_secs", v)}
+                    onClamp={(bound) => {
+                        if (bound === "min")
+                            addToast(t("sys_bangumi_dup_throttle_floored"));
+                    }}
+                />
                 <ButtonRow
                     label={t("sync_test")}
                     desc={t("sync_test_desc")}
                     button={auth.testing ? t("sync_testing") : t("sync_test")}
                     onClick={() => void auth.doTest()}
+                />
+            </div>
+
+            <div className="settings-group" style={{ paddingTop: 14 }}>
+                <div className="settings-group-title">{t("sys_tmdb")}</div>
+                <InputRow
+                    label={t("sys_tmdb_key")}
+                    desc={t("sys_tmdb_key_desc")}
+                    value={cfg.tmdb_api_key}
+                    placeholder=""
+                    mono
+                    onCommit={(v) => update("tmdb", "api_key", v)}
                 />
             </div>
 

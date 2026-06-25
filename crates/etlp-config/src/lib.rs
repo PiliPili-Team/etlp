@@ -340,6 +340,43 @@ fn default_true() -> bool {
     true
 }
 
+/// Emby's built-in public TMDB API key, used as a fallback when the user has
+/// not configured a personal key. This is the key shipped with Emby server
+/// itself and is safe to use as a read-only fallback.
+pub const TMDB_BUILTIN_API_KEY: &str = "f6bd687ffa63cd282b6ff2c6877f2669";
+
+/// `[tmdb]` section — TMDB API key for air-date lookups.
+#[derive(Debug, Clone, Deserialize, Default)]
+#[serde(default)]
+pub struct TmdbSection {
+    /// Personal TMDB API key. When absent or empty, [`TMDB_BUILTIN_API_KEY`]
+    /// is used as a fallback so air-date lookups work out of the box.
+    pub api_key: Option<String>,
+}
+
+impl TmdbSection {
+    /// Returns the effective API key: the user-configured value when present
+    /// and non-empty, otherwise [`TMDB_BUILTIN_API_KEY`].
+    #[must_use]
+    pub fn effective_api_key(&self) -> &str {
+        self.api_key
+            .as_deref()
+            .filter(|k| !k.is_empty())
+            .unwrap_or(TMDB_BUILTIN_API_KEY)
+    }
+}
+
+/// Lower bound (seconds) for the Bangumi repeated-mark throttle window.
+/// Mirrors [`MIN_DUPLICATE_THROTTLE_SECS`] used for Trakt.
+pub const MIN_BANGUMI_THROTTLE_SECS: u64 = 120;
+
+/// Default Bangumi throttle window when the key is absent from the config.
+pub const DEFAULT_BANGUMI_THROTTLE_SECS: u64 = 300;
+
+fn default_bangumi_throttle_secs() -> u64 {
+    DEFAULT_BANGUMI_THROTTLE_SECS
+}
+
 /// `[bangumi]` section — bgm.tv integration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -372,6 +409,24 @@ pub struct BangumiSection {
     /// is only collected once an episode crosses the 80 % watched threshold.
     #[serde(default = "default_true")]
     pub mark_watching: bool,
+    /// Allow re-marking the same episode/movie on every completion instead of
+    /// throttling repeats. When `true`, the just-watched item bypasses the
+    /// throttle window so finishing it again immediately adds another mark.
+    #[serde(default)]
+    pub allow_duplicate: bool,
+    /// Throttle window, in seconds, for de-duplicating repeated marks of the
+    /// same item while `allow_duplicate` is `false`. Clamped up to
+    /// [`MIN_BANGUMI_THROTTLE_SECS`] on load.
+    #[serde(default = "default_bangumi_throttle_secs")]
+    pub duplicate_throttle_secs: u64,
+}
+
+impl BangumiSection {
+    /// Effective repeated-mark throttle window.
+    #[must_use]
+    pub fn duplicate_throttle(&self) -> Duration {
+        Duration::from_secs(self.duplicate_throttle_secs)
+    }
 }
 
 impl Default for BangumiSection {
@@ -385,6 +440,8 @@ impl Default for BangumiSection {
             title_search_fallback: true,
             subject_map: Vec::new(),
             mark_watching: true,
+            allow_duplicate: false,
+            duplicate_throttle_secs: DEFAULT_BANGUMI_THROTTLE_SECS,
         }
     }
 }
@@ -410,6 +467,7 @@ struct RawConfig {
     gui: GuiSection,
     trakt: TraktSection,
     bangumi: BangumiSection,
+    tmdb: TmdbSection,
     path_map: Vec<PathMapEntry>,
 }
 
@@ -428,6 +486,7 @@ pub struct Config {
     pub gui: GuiSection,
     pub trakt: TraktSection,
     pub bangumi: BangumiSection,
+    pub tmdb: TmdbSection,
     /// Ordered src→dst path-translation pairs (`[[path_map]]` array).
     pub path_map: Vec<PathMapEntry>,
     path: PathBuf,
@@ -565,6 +624,11 @@ impl Config {
             .duplicate_throttle_secs
             .max(MIN_DUPLICATE_THROTTLE_SECS);
 
+        let mut bangumi = raw.bangumi;
+        bangumi.duplicate_throttle_secs = bangumi
+            .duplicate_throttle_secs
+            .max(MIN_BANGUMI_THROTTLE_SECS);
+
         Self {
             emby: raw.emby,
             dev,
@@ -572,7 +636,8 @@ impl Config {
             dandan: raw.dandan,
             gui: raw.gui,
             trakt,
-            bangumi: raw.bangumi,
+            bangumi,
+            tmdb: raw.tmdb,
             path_map: raw.path_map,
             path,
         }
@@ -810,6 +875,94 @@ speed_dummy = 1.5
         let dir = tempdir().expect("tempdir");
         let err = Config::load_from_dir(dir.path()).unwrap_err();
         assert!(matches!(err, ConfigError::NotFound(_)));
+    }
+
+    #[test]
+    fn tmdb_section_effective_key_prefers_user_key() {
+        let sec = TmdbSection {
+            api_key: Some("user-key".to_owned()),
+        };
+        assert_eq!(sec.effective_api_key(), "user-key");
+    }
+
+    #[test]
+    fn tmdb_section_falls_back_to_builtin_key() {
+        assert_eq!(
+            TmdbSection::default().effective_api_key(),
+            TMDB_BUILTIN_API_KEY
+        );
+        let empty = TmdbSection {
+            api_key: Some(String::new()),
+        };
+        assert_eq!(empty.effective_api_key(), TMDB_BUILTIN_API_KEY);
+    }
+
+    #[test]
+    fn bangumi_new_fields_default() {
+        let dir = tempdir().expect("tempdir");
+        write_config(dir.path(), "config.toml", "[bangumi]\n");
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert!(!cfg.bangumi.allow_duplicate);
+        assert_eq!(
+            cfg.bangumi.duplicate_throttle_secs,
+            DEFAULT_BANGUMI_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg.bangumi.duplicate_throttle().as_secs(),
+            DEFAULT_BANGUMI_THROTTLE_SECS
+        );
+    }
+
+    #[test]
+    fn bangumi_throttle_clamped_on_load() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[bangumi]\nduplicate_throttle_secs = 10\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(
+            cfg.bangumi.duplicate_throttle_secs,
+            MIN_BANGUMI_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg.bangumi.duplicate_throttle().as_secs(),
+            MIN_BANGUMI_THROTTLE_SECS
+        );
+
+        let dir2 = tempdir().expect("tempdir");
+        write_config(
+            dir2.path(),
+            "config.toml",
+            "[bangumi]\nduplicate_throttle_secs = 600\n",
+        );
+        let cfg2 = Config::load_from_dir(dir2.path()).expect("load");
+        assert_eq!(cfg2.bangumi.duplicate_throttle_secs, 600);
+    }
+
+    #[test]
+    fn bangumi_allow_duplicate_parses() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[bangumi]\nallow_duplicate = true\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert!(cfg.bangumi.allow_duplicate);
+    }
+
+    #[test]
+    fn tmdb_section_parses_from_config() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[tmdb]\napi_key = \"my-key\"\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.tmdb.effective_api_key(), "my-key");
     }
 
     #[test]
