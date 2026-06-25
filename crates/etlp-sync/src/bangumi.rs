@@ -522,6 +522,11 @@ impl BangumiApi {
         })
     }
 
+    /// Shared HTTP client — usable by web-scrape callers in the same crate.
+    pub fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     /// Verify the access token by calling `GET /me`.
     ///
     /// Returns `Ok(())` when the token is accepted. A `401`/`403` response maps
