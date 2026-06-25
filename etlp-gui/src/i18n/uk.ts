@@ -260,6 +260,7 @@ export const uk: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Перевірити й додати",
     map_remove: "Видалити",
+    map_copy: "Копіювати",
     map_group_add: "Нова група",
     map_group_name_placeholder: "Назва групи",
     map_group_add_confirm: "Створити",

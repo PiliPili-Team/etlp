@@ -255,6 +255,7 @@ export const tr: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Kontrol Et ve Ekle",
     map_remove: "Kaldır",
+    map_copy: "Kopyala",
     map_group_add: "Yeni Grup",
     map_group_name_placeholder: "Grup adı",
     map_group_add_confirm: "Oluştur",

@@ -261,6 +261,7 @@ export const pt: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Verificar e adicionar",
     map_remove: "Remover",
+    map_copy: "Copiar",
     map_group_add: "Novo grupo",
     map_group_name_placeholder: "Nome do grupo",
     map_group_add_confirm: "Criar",

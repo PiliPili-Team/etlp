@@ -241,6 +241,7 @@ export const zhTW: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "檢查並新增",
     map_remove: "刪除",
+    map_copy: "複製",
     map_group_add: "新建分組",
     map_group_name_placeholder: "分組名稱",
     map_group_add_confirm: "建立",

@@ -250,6 +250,7 @@ export const ja: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "確認して追加",
     map_remove: "削除",
+    map_copy: "コピー",
     map_group_add: "新規グループ",
     map_group_name_placeholder: "グループ名",
     map_group_add_confirm: "作成",

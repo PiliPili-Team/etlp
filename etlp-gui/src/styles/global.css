@@ -505,6 +505,7 @@ html[data-center-nav="true"] .sidebar {
     white-space: nowrap;
 }
 
+.map-item-copy,
 .map-item-remove {
     flex-shrink: 0;
     width: 22px;
@@ -516,9 +517,17 @@ html[data-center-nav="true"] .sidebar {
     font-size: 17px;
     line-height: 1;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition:
         background 0.15s,
         color 0.15s;
+}
+
+.map-item-copy:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .map-item-remove:hover {

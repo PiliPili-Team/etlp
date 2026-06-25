@@ -258,6 +258,7 @@ export const sk: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Skontrolovať a pridať",
     map_remove: "Odstrániť",
+    map_copy: "Kopírovať",
     map_group_add: "Nová skupina",
     map_group_name_placeholder: "Názov skupiny",
     map_group_add_confirm: "Vytvoriť",

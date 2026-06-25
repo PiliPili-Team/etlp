@@ -257,6 +257,7 @@ export const ru: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "Проверить и добавить",
     map_remove: "Удалить",
+    map_copy: "Копировать",
     map_group_add: "Новая группа",
     map_group_name_placeholder: "Название группы",
     map_group_add_confirm: "Создать",

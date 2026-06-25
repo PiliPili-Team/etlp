@@ -2557,6 +2557,9 @@ function GroupedSubjectMap({
         idx: number;
     } | null>(null);
 
+    // Briefly tracks which item was just copied (key = "group-idx").
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
     // Drag-to-reorder state (within-group and cross-group).
     const [dragItem, setDragItem] = useState<MapDragItem | null>(null);
     const [overTarget, setOverTarget] = useState<{ group: string; idx: number } | null>(
@@ -2595,6 +2598,13 @@ function GroupedSubjectMap({
         setDeleteItemTarget({ groupName, idx });
     };
 
+    const handleCopy = (text: string, key: string) => {
+        void navigator.clipboard.writeText(text).then(() => {
+            setCopiedKey(key);
+            setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+        });
+    };
+
     const doRemoveItem = () => {
         if (!deleteItemTarget) return;
         const { groupName, idx } = deleteItemTarget;
@@ -2614,7 +2624,11 @@ function GroupedSubjectMap({
 
     // Drag start: record source group + index.
     const startMapDrag = (e: React.PointerEvent, group: string, idx: number) => {
-        if ((e.target as HTMLElement).closest(".map-item-remove")) return;
+        if (
+            (e.target as HTMLElement).closest(".map-item-remove") ||
+            (e.target as HTMLElement).closest(".map-item-copy")
+        )
+            return;
         e.preventDefault();
         const item: MapDragItem = {
             group,
@@ -2981,6 +2995,47 @@ function GroupedSubjectMap({
                                                     <span className="map-item-text">
                                                         {m}
                                                     </span>
+                                                    <button
+                                                        className="map-item-copy"
+                                                        title={t("map_copy")}
+                                                        onClick={() =>
+                                                            handleCopy(
+                                                                m,
+                                                                `${groupName}-${idx}`,
+                                                            )
+                                                        }
+                                                    >
+                                                        {copiedKey ===
+                                                        `${groupName}-${idx}` ? (
+                                                            "✓"
+                                                        ) : (
+                                                            <svg
+                                                                viewBox="0 0 13 13"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="1.3"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                width="12"
+                                                                height="12"
+                                                            >
+                                                                <rect
+                                                                    x="4.5"
+                                                                    y="1"
+                                                                    width="7"
+                                                                    height="9"
+                                                                    rx="1.2"
+                                                                />
+                                                                <rect
+                                                                    x="1.5"
+                                                                    y="3"
+                                                                    width="7"
+                                                                    height="9"
+                                                                    rx="1.2"
+                                                                />
+                                                            </svg>
+                                                        )}
+                                                    </button>
                                                     <button
                                                         className="map-item-remove"
                                                         title={t("map_remove")}

@@ -245,6 +245,7 @@ export const he: typeof zhCN = {
     map_placeholder: "tmdb:10000|type:tv|S4 -> bgm:20000|E+59",
     map_check: "בדוק והוסף",
     map_remove: "הסר",
+    map_copy: "העתק",
     map_group_add: "קבוצה חדשה",
     map_group_name_placeholder: "שם קבוצה",
     map_group_add_confirm: "צור",
