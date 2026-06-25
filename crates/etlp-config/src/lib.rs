@@ -106,6 +106,9 @@ pub struct DevSection {
     /// SOCKS5 is forwarded to etlp's own HTTP requests only; the player
     /// receives it only when it supports non-HTTP proxies natively.
     pub proxy: Option<String>,
+    /// When `false`, the proxy URL is stored but ignored — all connections are
+    /// made directly. Defaults to `true` so a configured proxy is active.
+    pub proxy_enabled: bool,
     /// Disable TLS certificate verification (insecure; for local dev only).
     pub skip_certificate_verify: bool,
     /// Hosts whose `.strm` files are played in-place without redirect.
@@ -165,6 +168,7 @@ impl Default for DevSection {
             log_max_files: 7,
             kill_process_at_start: true,
             proxy: None,
+            proxy_enabled: true,
             skip_certificate_verify: false,
             strm_direct_host: Vec::new(),
             stream_redirect: Vec::new(),

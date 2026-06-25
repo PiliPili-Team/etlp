@@ -116,6 +116,7 @@ pub struct ConfigDto {
     pub version_prefer_for_playlist: bool,
     // [dev] – network
     pub proxy: String,
+    pub proxy_enabled: bool,
     pub redirect_check_host: Vec<String>,
     pub skip_certificate_verify: bool,
     // [dev] – misc
@@ -167,6 +168,7 @@ impl From<&Config> for ConfigDto {
             last_ep_disable_playlist: c.dev.last_ep_disable_playlist,
             version_prefer_for_playlist: c.dev.version_prefer_for_playlist,
             proxy: c.dev.proxy.clone().unwrap_or_default(),
+            proxy_enabled: c.dev.proxy_enabled,
             redirect_check_host: c.dev.redirect_check_host.clone(),
             skip_certificate_verify: c.dev.skip_certificate_verify,
             log_level: c.dev.log_level.clone(),
@@ -242,6 +244,7 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     let cert_verify = !config.dev.skip_certificate_verify;
     let http_client = HttpClientBuilder::new()
         .proxy(proxy)
+        .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())
         .build()

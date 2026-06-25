@@ -118,6 +118,8 @@ export const pt: typeof zhCN = {
     page_network: "Rede",
     net_proxy: "Proxy",
     net_proxy_desc: "Suporta http://, https://, socks5://；ex. http://127.0.0.1:6152 ou socks5://127.0.0.1:6153；vazio para desativar",
+    net_proxy_enabled: "Ativar proxy",
+    net_proxy_enabled_desc: "Quando desativado, a URL é mantida mas todas as conexões são diretas; IPs privados (192.168.x, 10.x etc.) são sempre ignorados automaticamente",
     net_skip_tls: "Ignorar verificação TLS",
     net_skip_tls_desc: "Para servidores Emby autoassinados — inseguro",
     net_redirect: "Deteção de redirecionamentos",

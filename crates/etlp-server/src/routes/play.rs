@@ -112,7 +112,7 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         .unwrap_or_else(|| player.clone());
     let fullscreen = cfg.emby.fullscreen;
     let disable_audio = cfg.emby.disable_audio;
-    let http_proxy = cfg.dev.proxy.clone();
+    let http_proxy = if cfg.dev.proxy_enabled { cfg.dev.proxy.clone() } else { None };
     let static_ipc = cfg.dev.mpv_input_ipc_server.clone();
     let dandan = DanDanConfig {
         port: cfg.dandan.port,

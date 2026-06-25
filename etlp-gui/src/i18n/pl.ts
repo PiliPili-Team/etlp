@@ -117,6 +117,8 @@ export const pl: typeof zhCN = {
     page_network: "Sieć",
     net_proxy: "Proxy",
     net_proxy_desc: "Obsługuje http://, https://, socks5://；np. http://127.0.0.1:6152 lub socks5://127.0.0.1:6153；puste aby wyłączyć",
+    net_proxy_enabled: "Włącz proxy",
+    net_proxy_enabled_desc: "Po wyłączeniu URL jest zachowany, ale wszystkie połączenia są bezpośrednie; prywatne adresy IP (192.168.x, 10.x) są zawsze automatycznie pomijane",
     net_skip_tls: "Pomiń weryfikację TLS",
     net_skip_tls_desc:
         "Dla serwerów Emby z certyfikatami samopodpisanymi — niebezpieczne",

@@ -116,6 +116,8 @@ export const ar: typeof zhCN = {
     page_network: "الشبكة",
     net_proxy: "الوكيل",
     net_proxy_desc: "يدعم http://، https://، socks5://؛ مثال: http://127.0.0.1:6152 أو socks5://127.0.0.1:6153؛ اتركه فارغًا للتعطيل",
+    net_proxy_enabled: "تفعيل البروكسي",
+    net_proxy_enabled_desc: "عند الإيقاف، تُحتفظ بعنوان البروكسي لكن تُجرى الاتصالات مباشرةً؛ عناوين IP الخاصة (192.168.x وَ10.x) تتجاوز البروكسي تلقائياً",
     net_skip_tls: "تخطّي التحقق من TLS",
     net_skip_tls_desc: "لخوادم Emby الموقّعة ذاتيًا — غير آمن",
     net_redirect: "كشف إعادة التوجيه",
