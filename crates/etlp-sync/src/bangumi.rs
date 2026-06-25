@@ -587,32 +587,20 @@ impl BangumiApi {
 
     // ── Subject search ────────────────────────────────────────────────────────
 
-    /// Search for anime subjects by keyword, optionally bounded by air date.
+    /// Search for anime subjects by keyword.
     ///
-    /// When both `start_date` and `end_date` (`YYYY-MM-DD`) are supplied the
-    /// search is narrowed to that window; pass `None` for both to search by
-    /// keyword alone. The latter is needed for season resolution, where the
-    /// only date in hand is an episode's air date — too far from the franchise
-    /// root's premiere to use as a filter.
+    /// The BGM search API frequently returns empty results when an `air_date`
+    /// filter is included, so date narrowing is done client-side after fetching
+    /// candidates (see [`BangumiApi::resolve_subject_id`]).
     pub async fn search_subjects(
         &self,
         keyword: &str,
-        start_date: Option<&str>,
-        end_date: Option<&str>,
         limit: u32,
     ) -> Result<Vec<BangumiSearchSubject>> {
-        let mut filter = serde_json::json!({
+        let filter = serde_json::json!({
             "type": [2],
             "nsfw": true,
         });
-        if let (Some(start), Some(end), Some(map)) =
-            (start_date, end_date, filter.as_object_mut())
-        {
-            let _ = map.insert(
-                "air_date".to_owned(),
-                serde_json::json!([format!(">={start}"), format!("<{end}")]),
-            );
-        }
         let body = serde_json::json!({
             "keyword": keyword,
             "filter": filter,
@@ -749,19 +737,13 @@ impl BangumiApi {
         min_score: f64,
         premiere_date: Option<&str>,
     ) -> Result<Option<u64>> {
-        // When we have a premiere date, compute the search lower bound.
-        let search_from: Option<String> = premiere_date.and_then(|d| {
-            date_to_days(d).map(|days| days_to_date_str(days - 30))
-        });
-
         // Gather candidates from every keyword, de-duplicated by subject id.
+        // Date narrowing is applied client-side below; the BGM search API
+        // returns empty results too often when an air_date filter is sent.
         let mut candidates: Vec<BangumiSearchSubject> = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
-            for candidate in self
-                .search_subjects(keyword, search_from.as_deref(), None, 10)
-                .await?
-            {
+            for candidate in self.search_subjects(keyword, 10).await? {
                 if seen.insert(candidate.id) {
                     candidates.push(candidate);
                 }
@@ -1383,15 +1365,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api
-            .search_subjects(
-                "テスト",
-                Some("2024-03-01"),
-                Some("2024-05-01"),
-                5,
-            )
-            .await
-            .unwrap();
+        let results = api.search_subjects("テスト", 5).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results.first().map(|s| s.id), Some(301));
     }
@@ -1410,8 +1384,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results =
-            api.search_subjects("missing", None, None, 5).await.unwrap();
+        let results = api.search_subjects("missing", 5).await.unwrap();
         assert!(results.is_empty());
     }
 
