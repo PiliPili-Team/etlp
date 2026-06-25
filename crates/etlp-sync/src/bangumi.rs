@@ -90,6 +90,11 @@ pub struct EpCollectionState {
 ///
 /// Longer ISO strings (e.g. `2024-10-09T00:00:00Z`) are accepted by reading
 /// only the first ten characters. Returns `None` for a malformed prefix.
+/// Public within the crate so `bangumi_web` can reuse the same date arithmetic.
+pub(crate) fn date_to_days_pub(s: &str) -> Option<i64> {
+    date_to_days(s)
+}
+
 fn date_to_days(s: &str) -> Option<i64> {
     let d = s.get(..10)?;
     let mut parts = d.split('-');
@@ -788,18 +793,61 @@ fn resolve_episode_matching(
     let premiere_date = input.premiere_date;
     let episode_title = input.episode_title;
 
-    let in_range: Vec<&crate::bangumi_web::SubjectDetail> = details
-        .iter()
-        .filter(|d| {
-            d.ep_range
-                .is_some_and(|(min, max)| min <= episode && episode <= max)
-        })
-        .collect();
-
-    debug!(
-        count = in_range.len(),
-        episode, "bangumi: episode_range_filter"
-    );
+    // When premiere_date is available, prefer subjects that have an episode
+    // with a matching airdate — robust to Emby local vs. global numbering.
+    // Fall back to the BGM sort-range filter when no date information is given.
+    let in_range: Vec<&crate::bangumi_web::SubjectDetail> = if let Some(pd) =
+        premiere_date
+    {
+        let by_date: Vec<_> = details
+            .iter()
+            .filter(|d| {
+                crate::bangumi_web::airdate_matches_premiere(
+                    pd,
+                    &d.episodes,
+                    crate::bangumi_web::BANGUMI_DATE_WINDOW_DAYS,
+                )
+            })
+            .collect();
+        if !by_date.is_empty() {
+            debug!(
+                count = by_date.len(),
+                episode,
+                premiere_date = pd,
+                "bangumi: episode_airdate_filter"
+            );
+            by_date
+        } else {
+            // No airdate match — fall back to sort-range filter.
+            let by_range: Vec<_> = details
+                .iter()
+                .filter(|d| {
+                    d.ep_range
+                        .is_some_and(|(min, max)| min <= episode && episode <= max)
+                })
+                .collect();
+            debug!(
+                count = by_range.len(),
+                episode,
+                "bangumi: episode_range_filter (airdate fallback)"
+            );
+            by_range
+        }
+    } else {
+        let by_range: Vec<_> = details
+            .iter()
+            .filter(|d| {
+                d.ep_range
+                    .is_some_and(|(min, max)| min <= episode && episode <= max)
+            })
+            .collect();
+        debug!(
+            count = by_range.len(),
+            episode,
+            "bangumi: episode_range_filter"
+        );
+        by_range
+    };
 
     // Round 1: exact title match + date window + in range
     let r1: Vec<_> = in_range
@@ -852,9 +900,10 @@ fn resolve_episode_matching(
         .map(|d| {
             let ep_title_score = episode_title
                 .and_then(|et| {
-                    d.episodes.iter().find(|(n, _)| *n == episode).map(
-                        |(_, t)| crate::bangumi_web::title_similarity(et, t),
-                    )
+                    d.episodes
+                        .iter()
+                        .find(|e| e.sort == episode)
+                        .map(|e| crate::bangumi_web::title_similarity(et, &e.title))
                 })
                 .unwrap_or(0.0);
             let subj_title_score = best_subject_score(scoring_keywords, d);

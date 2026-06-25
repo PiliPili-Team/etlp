@@ -26,6 +26,17 @@ pub const BGM_WEB_BASE_URL: &str = "https://bangumi.tv";
 
 // ── Domain types ───────────────────────────────────────────────────────────
 
+/// One episode entry within a [`SubjectDetail`].
+#[derive(Debug, Clone)]
+pub struct EpEntry {
+    /// BGM sort number (global across arcs, e.g. 92-143 for arc 4).
+    pub sort: u32,
+    /// Human-readable episode title, with the "ep.N " prefix stripped.
+    pub title: String,
+    /// Broadcast date in "YYYY-MM-DD" format, when present on the subject page.
+    pub airdate: Option<String>,
+}
+
 /// One subject hit from a bgm.tv search results page.
 #[derive(Debug, Clone)]
 pub struct SubjectCandidate {
@@ -286,8 +297,8 @@ pub struct SubjectDetail {
     pub name_jp: Option<String>,
     /// Broadcast-start date ("YYYY-MM-DD"), parsed from the detail page.
     pub start_date: Option<String>,
-    /// Full episode list: `(bgm_sort_number, episode_title)`.
-    pub episodes: Vec<(u32, String)>,
+    /// Full episode list ordered by sort number.
+    pub episodes: Vec<EpEntry>,
     /// `(min_ep_num, max_ep_num)` across all episodes; `None` when empty.
     pub ep_range: Option<(u32, u32)>,
 }
@@ -333,36 +344,108 @@ fn strip_ep_prefix(title: &str) -> String {
         .to_owned()
 }
 
-/// Parse all `<a class="load-epinfo">` entries from an HTML page into
-/// `(ep_num, ep_title)` pairs.
+/// Extract a `YYYY-MM-DD` date from the text content of a `prginfo_*` popup.
 ///
-/// Used for both the subject main page and the `/ep` sub-page.
-fn parse_ep_entries(html: &str) -> Vec<(u32, String)> {
+/// The popup's `<span class="tip">` looks like `"首播: 2026-05-28时长: ..."`.
+/// Finds the `首播:` marker and reads the 10-character date that follows.
+fn extract_popup_airdate(text: &str) -> Option<String> {
+    let marker = "首播:";
+    let pos = text.find(marker)?;
+    let after = text[pos + marker.len()..].trim_start();
+    let candidate = after.get(..10)?;
+    let b = candidate.as_bytes();
+    if b.len() == 10 && b[4] == b'-' && b[7] == b'-' {
+        Some(candidate.to_owned())
+    } else {
+        None
+    }
+}
+
+/// Build a map from `prginfo_*` div ID → broadcast date for all popup divs in
+/// the parsed document.
+fn popup_date_map(
+    doc: &Html,
+) -> std::collections::HashMap<String, String> {
+    let Ok(sel) = Selector::parse("div.prg_popup") else {
+        return std::collections::HashMap::new();
+    };
+    let mut map = std::collections::HashMap::new();
+    for div in doc.select(&sel) {
+        let id = div.value().attr("id").unwrap_or("");
+        if id.is_empty() {
+            continue;
+        }
+        let text = div.text().collect::<String>();
+        if let Some(date) = extract_popup_airdate(&text) {
+            map.insert(id.to_owned(), date);
+        }
+    }
+    map
+}
+
+/// Parse all `<a class="load-epinfo">` entries from an HTML page into
+/// [`EpEntry`] values.
+///
+/// Airdate is read from the companion `<div class="prg_popup">` referenced by
+/// the `rel="#prginfo_*"` attribute — present on the subject main page but
+/// absent on `/ep` sub-pages.
+fn parse_ep_entries(html: &str) -> Vec<EpEntry> {
     let doc = Html::parse_document(html);
     let Ok(sel_ep) = Selector::parse("a.load-epinfo") else {
         return Vec::new();
     };
+    let dates = popup_date_map(&doc);
     let mut out = Vec::new();
     for a in doc.select(&sel_ep) {
         let num_text = a.text().collect::<String>();
-        let Ok(ep_num) = num_text.trim().parse::<u32>() else {
+        let Ok(sort) = num_text.trim().parse::<u32>() else {
             continue;
         };
-        let ep_title = a
+        let title = a
             .value()
             .attr("title")
             .map(strip_ep_prefix)
             .unwrap_or_default();
-        out.push((ep_num, ep_title));
+        let airdate = a
+            .value()
+            .attr("rel")
+            .and_then(|rel| rel.strip_prefix('#'))
+            .and_then(|id| dates.get(id))
+            .cloned();
+        out.push(EpEntry { sort, title, airdate });
     }
     out
 }
 
-/// Compute `(min, max)` episode number across a non-empty episode list.
-fn ep_range(episodes: &[(u32, String)]) -> Option<(u32, u32)> {
-    let min = episodes.iter().map(|(n, _)| *n).min()?;
-    let max = episodes.iter().map(|(n, _)| *n).max()?;
+/// Compute `(min, max)` sort number across a non-empty episode list.
+fn ep_range(episodes: &[EpEntry]) -> Option<(u32, u32)> {
+    let min = episodes.iter().map(|e| e.sort).min()?;
+    let max = episodes.iter().map(|e| e.sort).max()?;
     Some((min, max))
+}
+
+/// `true` when any episode in `episodes` has an `airdate` within
+/// `window_days` of `premiere_date`.
+///
+/// Used by [`resolve_episode_matching`] as a subject-level candidate filter
+/// that is robust to Emby local vs. global episode numbering: instead of
+/// checking whether `ep_index` falls in the BGM sort range, we check whether
+/// the episode actually aired during this subject's broadcast window.
+pub(crate) fn airdate_matches_premiere(
+    premiere_date: &str,
+    episodes: &[EpEntry],
+    window_days: i64,
+) -> bool {
+    let target_days = crate::bangumi::date_to_days_pub(premiere_date);
+    let Some(t) = target_days else {
+        return false;
+    };
+    episodes.iter().any(|e| {
+        e.airdate
+            .as_deref()
+            .and_then(|d| crate::bangumi::date_to_days_pub(d))
+            .is_some_and(|ep_d| (ep_d - t).abs() <= window_days)
+    })
 }
 
 /// Fetch and assemble complete detail for one bgm.tv subject.
@@ -405,14 +488,14 @@ pub async fn fetch_subject_detail(
             break;
         }
         for entry in new_eps {
-            if !episodes.iter().any(|(n, _)| *n == entry.0) {
+            if !episodes.iter().any(|e| e.sort == entry.sort) {
                 episodes.push(entry);
             }
         }
         ep_page += 1;
     }
 
-    episodes.sort_by_key(|(n, _)| *n);
+    episodes.sort_by_key(|e| e.sort);
     let ep_range = ep_range(&episodes);
 
     debug!(
@@ -536,6 +619,17 @@ mod tests {
        rel="#prginfo_1135">135</a></li>
 </ul>
 </div>
+<div id="subject_prg_content">
+<div id="prginfo_1001" class="prg_popup">
+  <span class="tip">首播: 2024-08-04时长: 00:21:00</span>
+</div>
+<div id="prginfo_1002" class="prg_popup">
+  <span class="tip">首播: 2024-08-11时长: 00:21:00</span>
+</div>
+<div id="prginfo_1135" class="prg_popup">
+  <span class="tip">首播: 2027-03-19时长: 00:21:00</span>
+</div>
+</div>
 </body></html>"##
     }
 
@@ -549,18 +643,44 @@ mod tests {
     fn parse_subject_detail_extracts_prg_list_ep_num_and_title() {
         let eps = parse_ep_entries(detail_fixture());
         assert_eq!(eps.len(), 3);
-        assert_eq!(eps.first().map(|(n, _)| *n), Some(1));
-        assert_eq!(eps.get(2).map(|(n, _)| *n), Some(135));
+        assert_eq!(eps.first().map(|e| e.sort), Some(1));
+        assert_eq!(eps.get(2).map(|e| e.sort), Some(135));
     }
 
     #[test]
     fn parse_subject_detail_strips_ep_prefix_from_title() {
         let eps = parse_ep_entries(detail_fixture());
         assert_eq!(
-            eps.get(2).map(|(_, t)| t.as_str()),
+            eps.get(2).map(|e| e.title.as_str()),
             Some("第一百三十五集 魂元果")
         );
-        assert_eq!(eps.first().map(|(_, t)| t.as_str()), Some("第一集 开始"));
+        assert_eq!(
+            eps.first().map(|e| e.title.as_str()),
+            Some("第一集 开始")
+        );
+    }
+
+    #[test]
+    fn parse_subject_detail_extracts_airdate_from_popup() {
+        let eps = parse_ep_entries(detail_fixture());
+        assert_eq!(
+            eps.first().and_then(|e| e.airdate.as_deref()),
+            Some("2024-08-04")
+        );
+        assert_eq!(
+            eps.get(2).and_then(|e| e.airdate.as_deref()),
+            Some("2027-03-19")
+        );
+    }
+
+    #[test]
+    fn airdate_matches_premiere_returns_true_within_window() {
+        let eps = parse_ep_entries(detail_fixture());
+        // ep sort=1 airdate=2024-08-04, sort=2 airdate=2024-08-11
+        assert!(airdate_matches_premiere("2024-08-04", &eps, 5));
+        assert!(airdate_matches_premiere("2024-08-08", &eps, 5));
+        // 2025-01-01 is far from all three episode airdates
+        assert!(!airdate_matches_premiere("2025-01-01", &eps, 5));
     }
 
     #[test]
