@@ -1,0 +1,342 @@
+//! bgm.tv HTML scraper — subject search and detail pages.
+//!
+//! All network functions accept a `bgm_base_url` parameter so tests can point
+//! them at a local mock server instead of the real bgm.tv.
+
+use scraper::{Html, Selector};
+use tracing::debug;
+
+// ── Tunable constants ──────────────────────────────────────────────────────
+
+/// Minimum Levenshtein title similarity to accept a subject in Round 2.
+/// Scores below this threshold yield no match (warn + suggest manual mapping).
+pub const BANGUMI_TITLE_MIN_SCORE: f64 = 0.6;
+
+/// Episode / movie premiere date must be no earlier than the subject's
+/// broadcast-start minus this many days. Upper bound is unconstrained
+/// (covered by ep-range check).
+pub const BANGUMI_DATE_WINDOW_DAYS: i64 = 5;
+
+/// Minimum base-match score for a search candidate to pass pre-screening.
+/// Keeps obviously unrelated results out of the expensive detail-page fetch.
+pub(crate) const BANGUMI_CANDIDATE_PRESCREEN_SCORE: f64 = 0.3;
+
+/// Default bgm.tv web base URL (parameterised in calls for testability).
+pub const BGM_WEB_BASE_URL: &str = "https://bangumi.tv";
+
+// ── Domain types ───────────────────────────────────────────────────────────
+
+/// One subject hit from a bgm.tv search results page.
+#[derive(Debug, Clone)]
+pub struct SubjectCandidate {
+    pub subject_id: u64,
+    /// Localised (usually Chinese) name from `<a class="l">`.
+    pub name: String,
+    /// Japanese original name from `<small class="grey">`, if present.
+    pub name_jp: Option<String>,
+    /// First date in `<p class="info tip">`, "YYYY-MM-DD" (coarse pre-filter).
+    pub search_date: Option<String>,
+}
+
+// ── Private helpers ────────────────────────────────────────────────────────
+
+fn levenshtein(a: &[char], b: &[char]) -> usize {
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut curr = Vec::with_capacity(b.len() + 1);
+        curr.push(i + 1);
+        for (j, cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != cb);
+            let del = prev.get(j + 1).copied().unwrap_or(usize::MAX);
+            let ins = curr.last().copied().unwrap_or(usize::MAX);
+            let sub = prev.get(j).copied().unwrap_or(usize::MAX);
+            curr.push((del + 1).min(ins + 1).min(sub + cost));
+        }
+        prev = curr;
+    }
+    prev.last().copied().unwrap_or(0)
+}
+
+fn title_similarity(a: &str, b: &str) -> f64 {
+    let a: Vec<char> = a.trim().to_lowercase().chars().collect();
+    let b: Vec<char> = b.trim().to_lowercase().chars().collect();
+    let max = a.len().max(b.len());
+    if max == 0 {
+        return 1.0;
+    }
+    1.0 - levenshtein(&a, &b) as f64 / max as f64
+}
+
+fn title_contains(haystack: &str, needle: &str) -> bool {
+    let norm = |s: &str| -> String {
+        s.to_lowercase()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect()
+    };
+    let n = norm(needle);
+    !n.is_empty() && norm(haystack).contains(&n)
+}
+
+pub(crate) fn base_match_score(
+    keyword: &str,
+    name: &str,
+    name_jp: &str,
+) -> f64 {
+    let mut best =
+        title_similarity(keyword, name).max(title_similarity(keyword, name_jp));
+    for cand in [name, name_jp] {
+        if title_contains(cand, keyword) || title_contains(keyword, cand) {
+            best = best.max(0.9);
+        }
+    }
+    best
+}
+
+fn percent_encode_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for byte in s.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.' | b'~')
+        {
+            out.push(byte as char);
+        } else {
+            let hi = byte >> 4;
+            let lo = byte & 0xF;
+            out.push('%');
+            out.push(if hi < 10 {
+                (b'0' + hi) as char
+            } else {
+                (b'A' + hi - 10) as char
+            });
+            out.push(if lo < 10 {
+                (b'0' + lo) as char
+            } else {
+                (b'A' + lo - 10) as char
+            });
+        }
+    }
+    out
+}
+
+/// Parse the first "YYYY年M月D日" occurrence in `text` into "YYYY-MM-DD".
+///
+/// Returns `None` when no recognisable date pattern is found or when month /
+/// day are outside their valid ranges.
+pub(crate) fn parse_japanese_date(text: &str) -> Option<String> {
+    let year_end = text.find('年')?;
+    let year_start = text[..year_end]
+        .char_indices()
+        .rev()
+        .find(|(_, c)| !c.is_ascii_digit())
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let year: u32 = text.get(year_start..year_end)?.parse().ok()?;
+    let rest = text.get(year_end + '年'.len_utf8()..)?;
+    let month_end = rest.find('月')?;
+    let month: u32 = rest.get(..month_end)?.trim().parse().ok()?;
+    let rest = rest.get(month_end + '月'.len_utf8()..)?;
+    let day_end = rest.find('日')?;
+    let day: u32 = rest.get(..day_end)?.trim().parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+// ── HTML parsing ───────────────────────────────────────────────────────────
+
+/// Parse a bgm.tv search results page into a list of subject candidates.
+///
+/// Each `<li class="item anime">` element yields one [`SubjectCandidate`]:
+/// - `subject_id` — numeric ID from the `<a class="l">` href
+/// - `name` — Chinese localised name (link text of `<a class="l">`)
+/// - `name_jp` — Japanese original from `<small class="grey">` (optional)
+/// - `search_date` — first date in `<p class="info tip">` (optional)
+pub fn parse_search_page(html: &str) -> Vec<SubjectCandidate> {
+    let doc = Html::parse_document(html);
+    let Ok(sel_item) = Selector::parse("li.item.anime") else {
+        return Vec::new();
+    };
+    let Ok(sel_name) = Selector::parse("a.l") else {
+        return Vec::new();
+    };
+    let Ok(sel_jp) = Selector::parse("small.grey") else {
+        return Vec::new();
+    };
+    let Ok(sel_date) = Selector::parse("p.info.tip") else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    for item in doc.select(&sel_item) {
+        let Some(name_el) = item.select(&sel_name).next() else {
+            continue;
+        };
+        let name = name_el.text().collect::<String>().trim().to_owned();
+        if name.is_empty() {
+            continue;
+        }
+        let href = name_el.value().attr("href").unwrap_or("");
+        let Some(subject_id) = href
+            .strip_prefix("/subject/")
+            .and_then(|s| s.split('/').next())
+            .and_then(|s| s.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        let name_jp = item
+            .select(&sel_jp)
+            .next()
+            .map(|el| el.text().collect::<String>().trim().to_owned())
+            .filter(|s| !s.is_empty());
+        let search_date = item
+            .select(&sel_date)
+            .next()
+            .and_then(|el| parse_japanese_date(&el.text().collect::<String>()));
+        out.push(SubjectCandidate {
+            subject_id,
+            name,
+            name_jp,
+            search_date,
+        });
+    }
+    out
+}
+
+// ── Network search ─────────────────────────────────────────────────────────
+
+/// Fetch all pages of bgm.tv anime search results for `keyword`.
+///
+/// Starting from page 1, pages are fetched until a page returns zero hits.
+/// Each candidate is pre-screened: those whose [`base_match_score`] against
+/// `keyword` is below [`BANGUMI_CANDIDATE_PRESCREEN_SCORE`] are discarded to
+/// reduce subsequent detail-page requests.
+///
+/// `bgm_base_url` is normally [`BGM_WEB_BASE_URL`]; tests may pass the
+/// address of a local mock server.
+pub async fn web_search_all_pages(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    keyword: &str,
+) -> Vec<SubjectCandidate> {
+    let encoded = percent_encode_path(keyword);
+    let base = bgm_base_url.trim_end_matches('/');
+    let mut all = Vec::new();
+    let mut page = 1u32;
+
+    loop {
+        let url = format!("{base}/subject_search/{encoded}?cat=2&page={page}");
+        let html = match http.get(&url).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(t) => t,
+                Err(e) => {
+                    debug!(
+                        keyword,
+                        page, "bangumi: web search body error: {e}"
+                    );
+                    break;
+                }
+            },
+            Err(e) => {
+                debug!(
+                    keyword,
+                    page, "bangumi: web search request failed: {e}"
+                );
+                break;
+            }
+        };
+        let hits = parse_search_page(&html);
+        debug!(keyword, page, hits = hits.len(), "bangumi: web_search");
+        if hits.is_empty() {
+            break;
+        }
+        for candidate in hits {
+            let score = base_match_score(
+                keyword,
+                &candidate.name,
+                candidate.name_jp.as_deref().unwrap_or(""),
+            );
+            let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
+            debug!(
+                subject_id = candidate.subject_id,
+                name = %candidate.name,
+                score,
+                result = if pass { "pass" } else { "skip" },
+                "bangumi: candidate_prescreen"
+            );
+            if pass {
+                all.push(candidate);
+            }
+        }
+        page += 1;
+    }
+    all
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn search_fixture() -> &'static str {
+        r#"<ul class="browserList">
+<li class="item anime" id="subject_501796">
+<div class="inner">
+<h3>
+<a href="/subject/501796" class="l">魔法姐妹露露特莉莉</a>
+<small class="grey">魔法の姉妹ルルットリリィ</small>
+</h3>
+<p class="info tip">2026年4月5日 / 道解慎太郎 / スタジオぴえろ</p>
+</div>
+</li>
+<li class="item anime" id="subject_99999">
+<div class="inner">
+<h3>
+<a href="/subject/99999" class="l">某动画无日文名</a>
+</h3>
+<p class="info tip">2025年10月15日</p>
+</div>
+</li>
+</ul>"#
+    }
+
+    #[test]
+    fn parse_search_page_extracts_subject_id_name_name_jp() {
+        let candidates = parse_search_page(search_fixture());
+        assert_eq!(candidates.len(), 2);
+
+        let first = candidates.first().unwrap();
+        assert_eq!(first.subject_id, 501796);
+        assert_eq!(first.name, "魔法姐妹露露特莉莉");
+        assert_eq!(first.name_jp.as_deref(), Some("魔法の姉妹ルルットリリィ"));
+    }
+
+    #[test]
+    fn parse_search_page_extracts_start_date_from_info_tip() {
+        let candidates = parse_search_page(search_fixture());
+
+        let first = candidates.first().unwrap();
+        assert_eq!(first.search_date.as_deref(), Some("2026-04-05"));
+
+        let second = candidates.get(1).unwrap();
+        assert_eq!(second.search_date.as_deref(), Some("2025-10-15"));
+    }
+
+    #[test]
+    fn parse_search_page_returns_empty_on_no_results() {
+        let candidates =
+            parse_search_page("<html><body>暂无结果</body></html>");
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn parse_search_page_handles_missing_name_jp() {
+        let candidates = parse_search_page(search_fixture());
+        let second = candidates.get(1).unwrap();
+        assert_eq!(second.subject_id, 99999);
+        assert_eq!(second.name, "某动画无日文名");
+        assert!(second.name_jp.is_none());
+    }
+}
