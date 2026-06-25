@@ -122,6 +122,10 @@ export const de: typeof zhCN = {
     net_proxy_socks5: "SOCKS5-Proxy",
     net_proxy_desc:
         "Nur host:port eingeben; vollständige URL einfügen zur automatischen Erkennung; leer lassen zum Deaktivieren",
+    net_proxy_https_desc:
+        "Für verschlüsselte (HTTPS)-Verbindungen; fällt auf HTTP-Proxy zurück, wenn leer; gleiches Format wie HTTP",
+    net_proxy_socks5_desc:
+        "Leitet den gesamten Protokoll-Traffic weiter; ideal für Netzwerke ohne HTTP-Tunnel; leer lassen zum Deaktivieren",
     net_proxy_enabled: "Proxy aktivieren",
     net_proxy_enabled_desc:
         "Wenn deaktiviert, bleibt die URL gespeichert, aber alle Verbindungen sind direkt; private IPs (192.168.x, 10.x) werden automatisch umgangen",
@@ -424,4 +428,22 @@ export const de: typeof zhCN = {
     dl_browse: "Durchsuchen…",
     dl_placeholder: "",
     dl_path_error: "Pfad existiert nicht, bitte Eingabe prüfen",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Doppelte Markierungen erlauben",
+    sys_bangumi_dup_desc:
+        "Wenn aktiviert, wird dieselbe Episode/Film jedes Mal neu markiert; wenn deaktiviert, wird Drosselungs-Deduplizierung aktiv: derselbe Eintrag wird nur einmal innerhalb des Drosselungsfensters markiert",
+    sys_bangumi_dup_throttle: "Drosselungszeit für Doppelmarkierungen (Sekunden)",
+    sys_bangumi_dup_throttle_desc:
+        "Aktiv wenn Doppelte Markierungen deaktiviert ist: derselbe Eintrag wird höchstens einmal innerhalb dieser Sekunden aufgezeichnet; mindestens 120 Sekunden",
+    sys_bangumi_dup_throttle_floored:
+        "Drosselung darf nicht unter 120 s liegen — auf 120 korrigiert",
+
+    // TMDB
+    sys_tmdb: "TMDB-Integration",
+    sys_tmdb_key: "API-Schlüssel",
+    sys_tmdb_key_desc:
+        "TMDB-API-Schlüssel zum Abrufen von Erstausstrahlungsdaten, wenn der Medienserver kein Erstausstrahlungsdatum hat.",
+    sys_tmdb_api_link: "API-Schlüssel erstellen",
+    sys_tmdb_key_placeholder: "",
 };

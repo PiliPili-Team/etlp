@@ -121,6 +121,10 @@ export const pt: typeof zhCN = {
     net_proxy_socks5: "Proxy SOCKS5",
     net_proxy_desc:
         "Apenas host:port; cole uma URL completa para deteção automática de esquema; vazio para desativar",
+    net_proxy_https_desc:
+        "Usado para conexões criptografadas (HTTPS); se vazio, recai no proxy HTTP; mesmo formato que HTTP",
+    net_proxy_socks5_desc:
+        "Roteia todo o tráfego de protocolos; ideal para redes sem túnel HTTP; deixe vazio para desativar",
     net_proxy_enabled: "Ativar proxy",
     net_proxy_enabled_desc:
         "Quando desativado, a URL é mantida mas todas as conexões são diretas; IPs privados (192.168.x, 10.x etc.) são sempre ignorados automaticamente",
@@ -422,4 +426,22 @@ export const pt: typeof zhCN = {
     dl_browse: "Procurar…",
     dl_placeholder: "",
     dl_path_error: "O caminho não existe, verifique a entrada",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Permitir marcações duplicadas",
+    sys_bangumi_dup_desc:
+        "Quando ativado, remarca o mesmo episódio/filme cada vez que você terminar de assistir; quando desativado, a deduplicação com limitação é ativada: o mesmo item é marcado apenas uma vez dentro da janela de limitação definida abaixo",
+    sys_bangumi_dup_throttle: "Tempo de limitação de marcações duplicadas (segundos)",
+    sys_bangumi_dup_throttle_desc:
+        "Ativo quando Permitir marcações duplicadas está desativado: o mesmo item é registrado no máximo uma vez neste número de segundos; mínimo 120 segundos",
+    sys_bangumi_dup_throttle_floored:
+        "A limitação não pode ser menor que 120 s — corrigida para 120",
+
+    // TMDB
+    sys_tmdb: "Integração TMDB",
+    sys_tmdb_key: "Chave API",
+    sys_tmdb_key_desc:
+        "Chave API do TMDB para buscar datas de exibição de episódios quando o servidor de mídia não tem data de estreia.",
+    sys_tmdb_api_link: "Criar uma chave API",
+    sys_tmdb_key_placeholder: "",
 };

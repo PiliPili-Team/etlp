@@ -118,6 +118,10 @@ export const he: typeof zhCN = {
     net_proxy_socks5: "פרוקסי SOCKS5",
     net_proxy_desc:
         "הכנס host:port בלבד; הדבק URL מלא לזיהוי אוטומטי של הפרוטוקול; השאר ריק להשבתה",
+    net_proxy_https_desc:
+        "משמש לחיבורים מוצפנים (HTTPS); חוזר לפרוקסי HTTP אם ריק; אותה תבנית כמו HTTP",
+    net_proxy_socks5_desc:
+        "מנתב את כל תעבורת הפרוטוקולים; אידיאלי לרשתות ללא מנהרת HTTP; השאר ריק להשבתה",
     net_proxy_enabled: "הפעל פרוקסי",
     net_proxy_enabled_desc:
         "כשמושבת, ה-URL נשמר אך כל החיבורים ישירים; כתובות IP פרטיות (192.168.x, 10.x) עוקפות את הפרוקסי אוטומטית",
@@ -399,4 +403,22 @@ export const he: typeof zhCN = {
     dl_browse: "עיון…",
     dl_placeholder: "",
     dl_path_error: "הנתיב אינו קיים, אנא בדוק את הקלט",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "אפשר סימונים כפולים",
+    sys_bangumi_dup_desc:
+        "כאשר מופעל, מסמן מחדש את אותה הפרק/סרט בכל פעם שתסיים לצפות בו; כאשר כבוי מפעיל ביטול כפילויות עם מיגבול: אותו פריט מסומן רק פעם אחת בתוך חלון המיגבול שמוגדר למטה",
+    sys_bangumi_dup_throttle: "זמן מיגבול סימונים כפולים (שניות)",
+    sys_bangumi_dup_throttle_desc:
+        "פעיל כאשר אפשר סימונים כפולים כבוי: אותו פריט מוקלט לכל היותר פעם אחת בתוך מספר שניות זה; מינימום 120 שניות",
+    sys_bangumi_dup_throttle_floored:
+        "המיגבול לא יכול להיות פחות מ-120 שניות — תוקן ל-120",
+
+    // TMDB
+    sys_tmdb: "שילוב TMDB",
+    sys_tmdb_key: "מפתח API",
+    sys_tmdb_key_desc:
+        "מפתח TMDB API לאחזור תאריכי שידור של פרקים כשלשרת המדיה אין תאריך פרמייר.",
+    sys_tmdb_api_link: "צור מפתח API",
+    sys_tmdb_key_placeholder: "",
 };

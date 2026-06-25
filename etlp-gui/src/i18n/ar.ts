@@ -119,6 +119,10 @@ export const ar: typeof zhCN = {
     net_proxy_socks5: "بروكسي SOCKS5",
     net_proxy_desc:
         "أدخل host:port فقط؛ لصق URL كامل لاكتشاف البروتوكول تلقائياً؛ اتركه فارغاً لتعطيله",
+    net_proxy_https_desc:
+        "يُستخدم للاتصالات المشفرة (HTTPS)؛ إذا كان فارغاً يرجع إلى HTTP Proxy؛ نفس التنسيق كـ HTTP",
+    net_proxy_socks5_desc:
+        "يوجّه جميع حركة المرور بغض النظر عن البروتوكول؛ مثالي للشبكات التي لا تدعم HTTP tunnel؛ اتركه فارغاً لتعطيله",
     net_proxy_enabled: "تفعيل البروكسي",
     net_proxy_enabled_desc:
         "عند الإيقاف، تُحتفظ بعنوان البروكسي لكن تُجرى الاتصالات مباشرةً؛ عناوين IP الخاصة (192.168.x وَ10.x) تتجاوز البروكسي تلقائياً",
@@ -408,4 +412,22 @@ export const ar: typeof zhCN = {
     dl_browse: "استعراض…",
     dl_placeholder: "",
     dl_path_error: "المسار غير موجود، يرجى التحقق من الإدخال",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "السماح بالعلامات المكررة",
+    sys_bangumi_dup_desc:
+        "عند التشغيل، يُعيد التعليم على نفس الحلقة/الفيلم في كل مرة تنتهي من مشاهدته؛ عند الإيقاف يُفعّل إزالة التكرار: لا يُسجَّل التعليم على نفس العنصر إلا مرة واحدة خلال فترة التحكم المحددة أدناه",
+    sys_bangumi_dup_throttle: "وقت التحكم في التكرار (ثانية)",
+    sys_bangumi_dup_throttle_desc:
+        "يسري عند إيقاف «السماح بالعلامات المكررة»: يُسجَّل نفس العنصر مرة واحدة فقط خلال هذه الثواني؛ الحد الأدنى 120 ثانية",
+    sys_bangumi_dup_throttle_floored:
+        "لا يمكن أن يقل وقت التحكم عن 120 ثانية — تم تصحيحه إلى 120",
+
+    // TMDB
+    sys_tmdb: "تكامل TMDB",
+    sys_tmdb_key: "مفتاح API",
+    sys_tmdb_key_desc:
+        "مفتاح TMDB API لاسترداد تواريخ البث عندما لا يوفر خادم الوسائط تاريخ الإصدار.",
+    sys_tmdb_api_link: "إنشاء مفتاح API",
+    sys_tmdb_key_placeholder: "",
 };

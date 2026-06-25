@@ -118,6 +118,10 @@ export const ko: typeof zhCN = {
     net_proxy_socks5: "SOCKS5 프록시",
     net_proxy_desc:
         "host:port만 입력；전체 URL을 붙여넣으면 자동 감지；비워두면 비활성화",
+    net_proxy_https_desc:
+        "암호화된 (HTTPS) 연결에 사용됩니다; 비어 있으면 HTTP 프록시로 폴백; HTTP와 동일한 형식",
+    net_proxy_socks5_desc:
+        "모든 프로토콜 트래픽을 프록시합니다; HTTP 터널이 없는 네트워크에 적합; 비어 있으면 비활성화",
     net_proxy_enabled: "프록시 활성화",
     net_proxy_enabled_desc:
         "비활성화해도 URL은 유지되지만 모든 연결이 직접 이루어집니다；사설 IP(192.168.x, 10.x 등)는 항상 자동으로 프록시를 우회합니다",
@@ -405,4 +409,22 @@ export const ko: typeof zhCN = {
     dl_browse: "찾아보기…",
     dl_placeholder: "",
     dl_path_error: "경로가 존재하지 않습니다. 입력을 확인하세요",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "중복 표시 허용",
+    sys_bangumi_dup_desc:
+        "켜면 시청 완료 시마다 동일한 에피소드/영화를 다시 표시합니다; 끄면 제한 중복 제거가 활성화되어 아래에 설정된 제한 시간 내에는 동일한 항목이 한 번만 표시됩니다",
+    sys_bangumi_dup_throttle: "중복 표시 제한 시간 (초)",
+    sys_bangumi_dup_throttle_desc:
+        "중복 표시 허용이 꺼져 있을 때 적용: 동일한 항목이 이 초 수 내에 최대 한 번만 기록됩니다; 최소 120초",
+    sys_bangumi_dup_throttle_floored:
+        "제한 시간은 120초 미만일 수 없습니다 — 120으로 수정되었습니다",
+
+    // TMDB
+    sys_tmdb: "TMDB 연동",
+    sys_tmdb_key: "API 키",
+    sys_tmdb_key_desc:
+        "미디어 서버에 방영일이 없을 때 에피소드 방영일을 조회하기 위한 TMDB API 키.",
+    sys_tmdb_api_link: "여기서 API 키 생성",
+    sys_tmdb_key_placeholder: "",
 };

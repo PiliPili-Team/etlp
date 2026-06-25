@@ -120,6 +120,10 @@ export const id: typeof zhCN = {
     net_proxy_socks5: "Proxy SOCKS5",
     net_proxy_desc:
         "Isi host:port saja; tempel URL lengkap untuk deteksi skema otomatis; kosongkan untuk menonaktifkan",
+    net_proxy_https_desc:
+        "Digunakan untuk koneksi terenkripsi (HTTPS); jika kosong, beralih ke proxy HTTP; format sama seperti HTTP",
+    net_proxy_socks5_desc:
+        "Merutekan semua lalu lintas protokol; ideal untuk jaringan tanpa terowongan HTTP; biarkan kosong untuk menonaktifkan",
     net_proxy_enabled: "Aktifkan Proxy",
     net_proxy_enabled_desc:
         "Saat dinonaktifkan, URL disimpan tetapi semua koneksi langsung; IP privat (192.168.x, 10.x dll.) selalu melewati proxy secara otomatis",
@@ -415,4 +419,22 @@ export const id: typeof zhCN = {
     dl_browse: "Jelajahi…",
     dl_placeholder: "",
     dl_path_error: "Jalur tidak ada, periksa input Anda",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Izinkan Penandaan Duplikat",
+    sys_bangumi_dup_desc:
+        "Saat diaktifkan, menandai ulang episode/film yang sama setiap kali Anda selesai menontonnya; saat dinonaktifkan, deduplikasi dengan pembatasan aktif: entri yang sama hanya ditandai sekali dalam jendela pembatasan yang diatur di bawah",
+    sys_bangumi_dup_throttle: "Waktu pembatasan penandaan duplikat (detik)",
+    sys_bangumi_dup_throttle_desc:
+        "Aktif saat Izinkan Penandaan Duplikat dinonaktifkan: entri yang sama dicatat maksimal sekali dalam detik ini; minimal 120 detik",
+    sys_bangumi_dup_throttle_floored:
+        "Pembatasan tidak boleh kurang dari 120 detik — dikoreksi menjadi 120",
+
+    // TMDB
+    sys_tmdb: "Integrasi TMDB",
+    sys_tmdb_key: "Kunci API",
+    sys_tmdb_key_desc:
+        "Kunci API TMDB untuk mencari tanggal tayang episode saat server media tidak memiliki PremiereDate.",
+    sys_tmdb_api_link: "Buat kunci API",
+    sys_tmdb_key_placeholder: "",
 };

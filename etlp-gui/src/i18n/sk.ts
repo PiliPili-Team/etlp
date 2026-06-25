@@ -121,6 +121,10 @@ export const sk: typeof zhCN = {
     net_proxy_socks5: "SOCKS5 proxy",
     net_proxy_desc:
         "Iba host:port; vložte celú URL pre automatické rozpoznanie schémy; nechajte prázdne pre zakázanie",
+    net_proxy_https_desc:
+        "Používa sa pre šifrované (HTTPS) spojenia; ak je prázdne, použije sa HTTP proxy; rovnaký formát ako HTTP",
+    net_proxy_socks5_desc:
+        "Smeruje všetku prevádzku protokolov; ideálne pre siete bez HTTP tunela; nechajte prázdne pre zakázanie",
     net_proxy_enabled: "Povoliť proxy",
     net_proxy_enabled_desc:
         "Pri deaktivácii sa URL zachová, ale všetky spojenia sú priame; privátne IP adresy (192.168.x, 10.x) vždy automaticky obchádzajú proxy",
@@ -416,4 +420,22 @@ export const sk: typeof zhCN = {
     dl_browse: "Prehľadávať…",
     dl_placeholder: "",
     dl_path_error: "Cesta neexistuje, skontrolujte vstup",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Povoliť duplicitné označenia",
+    sys_bangumi_dup_desc:
+        "Keď je zapnuté, znovu označí rovnaký diel/film pri každom dokončení sledovania; keď je vypnuté, aktivuje sa deduplication s obmedzením: rovnaká položka sa označí iba raz v okne obmedzenia nastaveného nižšie",
+    sys_bangumi_dup_throttle: "Čas obmedzenia duplicitných označení (sekundy)",
+    sys_bangumi_dup_throttle_desc:
+        "Aktívne keď Povoliť duplicitné označenia je vypnuté: rovnaká položka sa zaznamená najviac raz v tomto počte sekúnd; minimálne 120 sekúnd",
+    sys_bangumi_dup_throttle_floored:
+        "Obmedzenie nemôže byť menej ako 120 s — opravené na 120",
+
+    // TMDB
+    sys_tmdb: "Integrácia TMDB",
+    sys_tmdb_key: "Kľúč API",
+    sys_tmdb_key_desc:
+        "Kľúč API TMDB na vyhľadávanie dátumov vysielania epizód, keď mediálny server nemá dátum premiéry.",
+    sys_tmdb_api_link: "Vytvoriť kľúč API",
+    sys_tmdb_key_placeholder: "",
 };

@@ -122,6 +122,10 @@ export const fr: typeof zhCN = {
     net_proxy_socks5: "Proxy SOCKS5",
     net_proxy_desc:
         "Saisir uniquement host:port ; coller une URL complète pour détection auto du schéma ; vide = désactivé",
+    net_proxy_https_desc:
+        "Utilisé pour les connexions chiffrées (HTTPS) ; si vide, se replie sur le proxy HTTP ; même format que HTTP",
+    net_proxy_socks5_desc:
+        "Achemine tout le trafic de protocoles ; idéal pour les réseaux sans tunnel HTTP ; laisser vide pour désactiver",
     net_proxy_enabled: "Activer le proxy",
     net_proxy_enabled_desc:
         "Désactivé, l'URL est conservée mais toutes les connexions sont directes ; les IP privées (192.168.x, 10.x…) sont toujours contournées automatiquement",
@@ -431,4 +435,22 @@ export const fr: typeof zhCN = {
     dl_browse: "Parcourir…",
     dl_placeholder: "",
     dl_path_error: "Le chemin n'existe pas, vérifiez la saisie",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Autoriser les marquages en double",
+    sys_bangumi_dup_desc:
+        "Quand activé, re-marque le même épisode/film chaque fois que vous finissez de le regarder ; quand désactivé, la déduplication avec limitation est active : le même élément n'est marqué qu'une fois dans la fenêtre de limitation définie ci-dessous",
+    sys_bangumi_dup_throttle: "Délai de limitation des marquages en double (secondes)",
+    sys_bangumi_dup_throttle_desc:
+        "Actif quand Autoriser les marquages en double est désactivé : le même élément est enregistré au maximum une fois pendant ce nombre de secondes ; minimum 120 secondes",
+    sys_bangumi_dup_throttle_floored:
+        "La limitation ne peut pas être inférieure à 120 s — corrigée à 120",
+
+    // TMDB
+    sys_tmdb: "Intégration TMDB",
+    sys_tmdb_key: "Clé API",
+    sys_tmdb_key_desc:
+        "Clé API TMDB pour récupérer les dates de diffusion des épisodes quand le serveur multimédia n'a pas de date de première.",
+    sys_tmdb_api_link: "Créer une clé API",
+    sys_tmdb_key_placeholder: "",
 };

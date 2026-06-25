@@ -120,6 +120,10 @@ export const tr: typeof zhCN = {
     net_proxy_socks5: "SOCKS5 Proxy",
     net_proxy_desc:
         "Sadece host:port girin; tam URL yapıştırarak şemayı otomatik algılayın; devre dışı için boş bırakın",
+    net_proxy_https_desc:
+        "Şifreli (HTTPS) bağlantılar için kullanılır; boşsa HTTP proxy'ye döner; HTTP ile aynı format",
+    net_proxy_socks5_desc:
+        "Tüm protokol trafiğini proxy'ler; HTTP tüneli olmayan ağlar için idealdir; devre dışı bırakmak için boş bırakın",
     net_proxy_enabled: "Proxy'yi Etkinleştir",
     net_proxy_enabled_desc:
         "Devre dışıyken URL korunur ancak tüm bağlantılar doğrudan yapılır; özel IP'ler (192.168.x, 10.x) her zaman otomatik olarak atlanır",
@@ -412,4 +416,21 @@ export const tr: typeof zhCN = {
     dl_browse: "Gözat…",
     dl_placeholder: "",
     dl_path_error: "Yol mevcut değil, lütfen girişi kontrol edin",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Tekrar işaretlemeye izin ver",
+    sys_bangumi_dup_desc:
+        "Açıkken, her izleme tamamlandığında aynı bölüm/filmi yeniden işaretler; kapalıyken kısıtlamalı yineleme kaldırma etkinleşir: aynı öğe aşağıda belirlenen kısıtlama penceresi içinde yalnızca bir kez işaretlenir",
+    sys_bangumi_dup_throttle: "Tekrar işaretleme kısıtlama süresi (saniye)",
+    sys_bangumi_dup_throttle_desc:
+        "Tekrar işaretlemeye izin ver kapalıyken etkin: aynı öğe bu saniye sayısı içinde en fazla bir kez kaydedilir; en az 120 saniye",
+    sys_bangumi_dup_throttle_floored: "Kısıtlama 120 s'den az olamaz — 120'ye düzeltildi",
+
+    // TMDB
+    sys_tmdb: "TMDB Entegrasyonu",
+    sys_tmdb_key: "API Anahtarı",
+    sys_tmdb_key_desc:
+        "Medya sunucusunun PremiereDate'i olmadığında bölüm yayın tarihlerini bulmak için kullanılan TMDB API Anahtarı.",
+    sys_tmdb_api_link: "API anahtarı oluştur",
+    sys_tmdb_key_placeholder: "",
 };
