@@ -443,7 +443,7 @@ export const de: typeof zhCN = {
     sys_tmdb: "TMDB-Integration",
     sys_tmdb_key: "API-Schlüssel",
     sys_tmdb_key_desc:
-        "TMDB-API-Schlüssel zum Abrufen von Erstausstrahlungsdaten, wenn der Medienserver kein Erstausstrahlungsdatum hat.",
+        "TMDB-API-Schlüssel zum Abrufen von Metadaten, die dem Medienserver bei der Synchronisierung fehlen.",
     sys_tmdb_api_link: "API-Schlüssel erstellen",
     sys_tmdb_key_placeholder: "",
 };

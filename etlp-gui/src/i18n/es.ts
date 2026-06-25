@@ -445,7 +445,7 @@ export const es: typeof zhCN = {
     sys_tmdb: "Integración TMDB",
     sys_tmdb_key: "Clave API",
     sys_tmdb_key_desc:
-        "Clave API de TMDB para buscar fechas de emisión de episodios cuando el servidor multimedia no tiene fecha de estreno.",
+        "Clave API de TMDB para obtener metadatos que faltan en el servidor multimedia durante la sincronización.",
     sys_tmdb_api_link: "Crear una clave API",
     sys_tmdb_key_placeholder: "",
 };

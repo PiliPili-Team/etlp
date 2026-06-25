@@ -434,7 +434,7 @@ export const id: typeof zhCN = {
     sys_tmdb: "Integrasi TMDB",
     sys_tmdb_key: "Kunci API",
     sys_tmdb_key_desc:
-        "Kunci API TMDB untuk mencari tanggal tayang episode saat server media tidak memiliki PremiereDate.",
+        "Kunci API TMDB untuk mengambil metadata yang hilang dari server media saat sinkronisasi.",
     sys_tmdb_api_link: "Buat kunci API",
     sys_tmdb_key_placeholder: "",
 };

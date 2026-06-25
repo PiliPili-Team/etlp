@@ -435,7 +435,7 @@ export const sk: typeof zhCN = {
     sys_tmdb: "Integrácia TMDB",
     sys_tmdb_key: "Kľúč API",
     sys_tmdb_key_desc:
-        "Kľúč API TMDB na vyhľadávanie dátumov vysielania epizód, keď mediálny server nemá dátum premiéry.",
+        "Kľúč API TMDB na načítanie chýbajúcich metadát z mediálneho servera počas synchronizácie.",
     sys_tmdb_api_link: "Vytvoriť kľúč API",
     sys_tmdb_key_placeholder: "",
 };

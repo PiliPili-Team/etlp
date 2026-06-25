@@ -430,7 +430,7 @@ export const tr: typeof zhCN = {
     sys_tmdb: "TMDB Entegrasyonu",
     sys_tmdb_key: "API Anahtarı",
     sys_tmdb_key_desc:
-        "Medya sunucusunun PremiereDate'i olmadığında bölüm yayın tarihlerini bulmak için kullanılan TMDB API Anahtarı.",
+        "Senkronizasyon sırasında medya sunucusunda eksik olan meta verileri almak için kullanılan TMDB API Anahtarı.",
     sys_tmdb_api_link: "API anahtarı oluştur",
     sys_tmdb_key_placeholder: "",
 };

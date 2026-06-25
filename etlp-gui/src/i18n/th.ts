@@ -424,7 +424,7 @@ export const th: typeof zhCN = {
     sys_tmdb: "การผสานรวม TMDB",
     sys_tmdb_key: "คีย์ API",
     sys_tmdb_key_desc:
-        "คีย์ TMDB API สำหรับค้นหาวันที่ออกอากาศของตอนเมื่อเซิร์ฟเวอร์สื่อไม่มีวันที่ออกอากาศ.",
+        "คีย์ TMDB API สำหรับดึงข้อมูลเมตาที่ขาดหายไปจากเซิร์ฟเวอร์สื่อระหว่างการซิงค์",
     sys_tmdb_api_link: "สร้างคีย์ API ที่นี่",
     sys_tmdb_key_placeholder: "",
 };

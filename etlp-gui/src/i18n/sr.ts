@@ -429,7 +429,7 @@ export const sr: typeof zhCN = {
     sys_tmdb: "TMDB интеграција",
     sys_tmdb_key: "API кључ",
     sys_tmdb_key_desc:
-        "TMDB API кључ за проналажење датума емитовања епизода када медијски сервер нема датум премијере.",
+        "TMDB API кључ за преузимање метаподатака који недостају на медијском серверу током синхронизације.",
     sys_tmdb_api_link: "Направите API кључ",
     sys_tmdb_key_placeholder: "",
 };

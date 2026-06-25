@@ -435,7 +435,7 @@ export const ru: typeof zhCN = {
     sys_tmdb: "Интеграция TMDB",
     sys_tmdb_key: "Ключ API",
     sys_tmdb_key_desc:
-        "Ключ API TMDB для поиска дат выхода эпизодов, когда медиасервер не имеет даты выхода.",
+        "Ключ API TMDB для получения метаданных, отсутствующих на медиасервере, при синхронизации.",
     sys_tmdb_api_link: "Создать ключ API",
     sys_tmdb_key_placeholder: "",
 };

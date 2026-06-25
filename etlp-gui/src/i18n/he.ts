@@ -417,8 +417,7 @@ export const he: typeof zhCN = {
     // TMDB
     sys_tmdb: "שילוב TMDB",
     sys_tmdb_key: "מפתח API",
-    sys_tmdb_key_desc:
-        "מפתח TMDB API לאחזור תאריכי שידור של פרקים כשלשרת המדיה אין תאריך פרמייר.",
+    sys_tmdb_key_desc: "מפתח TMDB API לאחזור מטא-נתונים חסרים משרת המדיה במהלך הסנכרון.",
     sys_tmdb_api_link: "צור מפתח API",
     sys_tmdb_key_placeholder: "",
 };

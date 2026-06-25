@@ -424,7 +424,7 @@ export const ko: typeof zhCN = {
     sys_tmdb: "TMDB 연동",
     sys_tmdb_key: "API 키",
     sys_tmdb_key_desc:
-        "미디어 서버에 방영일이 없을 때 에피소드 방영일을 조회하기 위한 TMDB API 키.",
+        "동기화 시 미디어 서버에 누락된 메타데이터를 가져오기 위한 TMDB API 키.",
     sys_tmdb_api_link: "여기서 API 키 생성",
     sys_tmdb_key_placeholder: "",
 };

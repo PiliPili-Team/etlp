@@ -450,7 +450,7 @@ export const fr: typeof zhCN = {
     sys_tmdb: "Intégration TMDB",
     sys_tmdb_key: "Clé API",
     sys_tmdb_key_desc:
-        "Clé API TMDB pour récupérer les dates de diffusion des épisodes quand le serveur multimédia n'a pas de date de première.",
+        "Clé API TMDB pour récupérer les métadonnées manquantes du serveur multimédia lors de la synchronisation.",
     sys_tmdb_api_link: "Créer une clé API",
     sys_tmdb_key_placeholder: "",
 };

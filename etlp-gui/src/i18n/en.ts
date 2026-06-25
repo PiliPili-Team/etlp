@@ -429,7 +429,7 @@ export const en: typeof zhCN = {
     sys_tmdb: "TMDB Integration",
     sys_tmdb_key: "API Key",
     sys_tmdb_key_desc:
-        "TMDB API Key used to look up episode air dates when the media server has no PremiereDate.",
+        "TMDB API Key used to fetch metadata missing from the media server during sync.",
     sys_tmdb_api_link: "Create an API key",
     sys_tmdb_key_placeholder: "",
 };

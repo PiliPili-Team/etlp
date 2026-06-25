@@ -440,7 +440,7 @@ export const pl: typeof zhCN = {
     sys_tmdb: "Integracja TMDB",
     sys_tmdb_key: "Klucz API",
     sys_tmdb_key_desc:
-        "Klucz API TMDB do wyszukiwania dat emisji odcinków, gdy serwer mediów nie ma daty premiery.",
+        "Klucz API TMDB do pobierania brakujących metadanych z serwera mediów podczas synchronizacji.",
     sys_tmdb_api_link: "Utwórz klucz API",
     sys_tmdb_key_placeholder: "",
 };

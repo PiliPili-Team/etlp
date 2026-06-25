@@ -427,7 +427,7 @@ export const ar: typeof zhCN = {
     sys_tmdb: "تكامل TMDB",
     sys_tmdb_key: "مفتاح API",
     sys_tmdb_key_desc:
-        "مفتاح TMDB API لاسترداد تواريخ البث عندما لا يوفر خادم الوسائط تاريخ الإصدار.",
+        "مفتاح TMDB API لجلب البيانات الوصفية المفقودة من خادم الوسائط أثناء المزامنة.",
     sys_tmdb_api_link: "إنشاء مفتاح API",
     sys_tmdb_key_placeholder: "",
 };

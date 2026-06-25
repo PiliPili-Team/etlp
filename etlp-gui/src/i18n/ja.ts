@@ -425,7 +425,7 @@ export const ja: typeof zhCN = {
     sys_tmdb: "TMDB 連携",
     sys_tmdb_key: "API キー",
     sys_tmdb_key_desc:
-        "メディアサーバーに初回放送日がない場合にエピソードの放送日を取得するための TMDB API キー。",
+        "同期時にメディアサーバーに不足しているメタデータを取得するための TMDB API キー。",
     sys_tmdb_api_link: "ここで API キーを作成",
     sys_tmdb_key_placeholder: "",
 };
