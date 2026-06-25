@@ -1,6 +1,7 @@
 //! Assemble the axum `Router` with all registered routes.
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use tower_http::trace::{
@@ -38,6 +39,10 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/openFolder", post(open_folder_route))
         .route("/playMediaFile", post(play_media_file))
         .with_state(state)
+        // The play endpoints receive full season episode lists which can exceed
+        // axum's 2 MB default on large series. 32 MB covers any realistic
+        // payload while still bounding the server against runaway requests.
+        .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         // Log every request/response at INFO so 422 rejections and routing
         // mismatches are visible even when the handler itself is never called.
         // Note: NormalizePathLayer is applied in main.rs, wrapping this Router
