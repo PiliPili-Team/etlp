@@ -1785,7 +1785,9 @@ mod tests {
     use axum::http::{Method, Request, StatusCode};
     use tower::ServiceExt as _;
 
-    use crate::router::build_router;
+    use crate::router::{
+        ROUTE_EMBY, ROUTE_ETLP, ROUTE_PLEX, build_router,
+    };
     use crate::state::test_helpers::test_state;
 
     #[test]
@@ -1845,7 +1847,37 @@ mod tests {
         });
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/embyToLocalPlayer")
+            .uri(ROUTE_EMBY)
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn etlp_route_returns_200() {
+        let (state, _dir) = test_state();
+        let app = build_router(state);
+        let body = serde_json::json!({
+            "playbackUrl":
+                "http://emby:8096/emby/Items/1/PlaybackInfo?X-Emby-Token=tok",
+            "ApiClient": {
+                "_serverAddress": "http://emby:8096",
+                "_serverVersion": "4.9"
+            },
+            "request": {"headers": {}},
+            "playbackData": {"PlaySessionId": "s1", "MediaSources": []},
+            "extraData": {
+                "mainEpInfo": {"Id": "1"},
+                "episodesInfo": [],
+                "playlistInfo": []
+            },
+            "mountDiskEnable": "false"
+        });
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(ROUTE_ETLP)
             .header("content-type", "application/json")
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
@@ -1865,7 +1897,7 @@ mod tests {
         });
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/plexToLocalPlayer")
+            .uri(ROUTE_PLEX)
             .header("content-type", "application/json")
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();
@@ -1886,7 +1918,7 @@ mod tests {
         });
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/embyToLocalPlayer")
+            .uri(ROUTE_EMBY)
             .header("content-type", "application/json")
             .body(Body::from(serde_json::to_vec(&body).unwrap()))
             .unwrap();

@@ -17,27 +17,52 @@ use crate::routes::util::{
 };
 use crate::state::SharedState;
 
+// ── Route path constants ──────────────────────────────────────────────────────
+
+pub const ROUTE_HEALTH: &str = "/";
+pub const ROUTE_FAVICON: &str = "/favicon.ico";
+
+/// Primary entry point (short alias, same logic as `ROUTE_EMBY`).
+pub const ROUTE_ETLP: &str = "/etlp";
+pub const ROUTE_EMBY: &str = "/embyToLocalPlayer";
+pub const ROUTE_PLEX: &str = "/plexToLocalPlayer";
+
+pub const ROUTE_GUI: &str = "/gui";
+pub const ROUTE_DL: &str = "/dl";
+pub const ROUTE_PL: &str = "/pl";
+pub const ROUTE_ACTION: &str = "/action";
+
+pub const ROUTE_SEND_MEDIA_FILE: &str = "/send_media_file";
+pub const ROUTE_MISS_RUNTIME_START_SEC: &str = "/miss_runtime_start_sec";
+pub const ROUTE_TRAKT_AUTH: &str = "/trakt_auth";
+pub const ROUTE_OPEN_FOLDER: &str = "/openFolder";
+pub const ROUTE_PLAY_MEDIA_FILE: &str = "/playMediaFile";
+
+// ── Router ────────────────────────────────────────────────────────────────────
+
 /// Build the complete axum `Router`, wiring up all routes and injecting
 /// `state` as axum [`State`] into every handler.
 pub fn build_router(state: SharedState) -> Router {
     Router::new()
         // Health / favicon
-        .route("/", get(health))
-        .route("/favicon.ico", get(health))
-        // Primary ToLocalPlayer endpoints
-        .route("/embyToLocalPlayer", post(emby_to_local_player))
-        .route("/plexToLocalPlayer", post(plex_to_local_player))
+        .route(ROUTE_HEALTH, get(health))
+        .route(ROUTE_FAVICON, get(health))
+        // Primary ToLocalPlayer endpoints.
+        // /etlp is a short alias for /embyToLocalPlayer — identical handler.
+        .route(ROUTE_ETLP, post(emby_to_local_player))
+        .route(ROUTE_EMBY, post(emby_to_local_player))
+        .route(ROUTE_PLEX, post(plex_to_local_player))
         // Download manager endpoints
-        .route("/gui", post(gui_route))
-        .route("/dl", post(dl_route))
-        .route("/pl", post(pl_route))
-        .route("/action", post(action_route))
+        .route(ROUTE_GUI, post(gui_route))
+        .route(ROUTE_DL, post(dl_route))
+        .route(ROUTE_PL, post(pl_route))
+        .route(ROUTE_ACTION, post(action_route))
         // Utility endpoints
-        .route("/send_media_file", get(send_media_file))
-        .route("/miss_runtime_start_sec", get(miss_runtime_start_sec))
-        .route("/trakt_auth", get(trakt_auth))
-        .route("/openFolder", post(open_folder_route))
-        .route("/playMediaFile", post(play_media_file))
+        .route(ROUTE_SEND_MEDIA_FILE, get(send_media_file))
+        .route(ROUTE_MISS_RUNTIME_START_SEC, get(miss_runtime_start_sec))
+        .route(ROUTE_TRAKT_AUTH, get(trakt_auth))
+        .route(ROUTE_OPEN_FOLDER, post(open_folder_route))
+        .route(ROUTE_PLAY_MEDIA_FILE, post(play_media_file))
         .with_state(state)
         // The play endpoints receive full season episode lists which can exceed
         // axum's 2 MB default on large series. 32 MB covers any realistic

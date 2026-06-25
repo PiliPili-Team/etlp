@@ -34,6 +34,7 @@ use std::io::Write as _;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+use etlp_server::router::{ROUTE_EMBY, ROUTE_ETLP, ROUTE_PLEX};
 use etlp_server::{AppState, SharedState, build_router};
 
 fn make_test_state() -> (SharedState, TempDir) {
@@ -114,7 +115,61 @@ async fn smoke_route_emby_ok() {
 
     let req = Request::builder()
         .method(Method::POST)
-        .uri("/embyToLocalPlayer")
+        .uri(ROUTE_EMBY)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&body).expect("serialize")))
+        .expect("request");
+
+    let res = app.oneshot(req).await.expect("oneshot");
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn smoke_route_etlp_ok() {
+    let (state, _dir) = make_test_state();
+    let app = build_router(state);
+
+    let body = serde_json::json!({
+        "playbackUrl":
+            "http://emby.smoke:8096/emby/Items/ep001/PlaybackInfo\
+             ?X-Emby-Token=smkkey&UserId=usr1",
+        "ApiClient": {
+            "_serverAddress": "http://emby.smoke:8096",
+            "_serverVersion": "4.9"
+        },
+        "request": {"headers": {}},
+        "mountDiskEnable": "false",
+        "playbackData": {
+            "PlaySessionId": "smk-session",
+            "MediaSources": [{
+                "Id": "src001", "Name": "1080p",
+                "Path": "/media/show/s01e01.mkv",
+                "RunTimeTicks": 27000000000_i64,
+                "MediaStreams": [
+                    {"Type": "Video", "Index": 0},
+                    {"Type": "Audio", "Index": 1}
+                ]
+            }]
+        },
+        "extraData": {
+            "mainEpInfo": {
+                "Id": "ep001", "Name": "Pilot",
+                "Path": "/media/show/s01e01.mkv",
+                "Type": "Episode", "SeriesName": "Smoke Show",
+                "SeasonId": "season001", "SeriesId": "series001",
+                "IndexNumber": 1, "ParentIndexNumber": 1
+            },
+            "episodesInfo": [
+                {"Id": "ep001", "IndexNumber": 1},
+                {"Id": "ep002", "IndexNumber": 2}
+            ],
+            "playlistInfo": []
+        }
+    });
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(ROUTE_ETLP)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(&body).expect("serialize")))
         .expect("request");
@@ -154,7 +209,7 @@ async fn smoke_route_plex_ok() {
 
     let req = Request::builder()
         .method(Method::POST)
-        .uri("/plexToLocalPlayer")
+        .uri(ROUTE_PLEX)
         .header("content-type", "application/json")
         .body(Body::from(serde_json::to_vec(&body).expect("serialize")))
         .expect("request");
