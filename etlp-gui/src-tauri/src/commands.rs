@@ -203,7 +203,11 @@ impl From<&Config> for ConfigDto {
             trakt_allow_duplicate: c.trakt.allow_duplicate,
             trakt_duplicate_throttle_secs: c.trakt.duplicate_throttle_secs,
             bangumi_access_token: c.bangumi.access_token.clone(),
-            bangumi_enable_host: c.bangumi.enable_host.clone(),
+            bangumi_enable_host: if c.bangumi.enable_host.trim().is_empty() {
+                ".".to_owned()
+            } else {
+                c.bangumi.enable_host.clone()
+            },
             bangumi_username: c.bangumi.username.clone(),
             bangumi_private: c.bangumi.private,
             bangumi_genres: c.bangumi.genres.clone(),

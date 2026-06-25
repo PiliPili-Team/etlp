@@ -1456,7 +1456,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // Fetch series-level provider IDs so user mappings keyed on the
         // TMDB/TVDB *series* id (e.g. `tmdb:79481`) match correctly. Episode
         // items in Emby carry episode-specific provider ids, not the series id.
-        let series_provider_ids = if !mappings.is_empty()
+        // Also needed when title_fallback is on: the TMDB series id drives
+        // air-date lookups and alternate-title fetches used by the web fallback.
+        let series_provider_ids = if (!mappings.is_empty() || title_fallback)
             && !data.series_id.is_empty()
             && data.server.is_emby_like()
         {
@@ -1736,6 +1738,13 @@ async fn resolve_bangumi_subject(
     }
     let target_season = u32::try_from(season).unwrap_or(1);
 
+    // Hoist the TMDB series id so it is available for both the air-date lookup
+    // below and the web-fallback alternate-title fetch further down.
+    let tmdb_series_id: Option<u64> = series_provider_ids
+        .get("Tmdb")
+        .filter(|v| !v.is_empty())
+        .and_then(|v| v.parse::<u64>().ok());
+
     // Determine the episode's air date for date-guided subject resolution.
     // Priority: Emby item's PremiereDate → TMDB API (when a series TMDB id
     // and episode number are available). When both are absent we fall back
@@ -1743,10 +1752,6 @@ async fn resolve_bangumi_subject(
     let premiere_date: Option<String> = if data.premiere_date.is_some() {
         data.premiere_date.clone()
     } else {
-        let tmdb_series_id = series_provider_ids
-            .get("Tmdb")
-            .filter(|v| !v.is_empty())
-            .and_then(|v| v.parse::<u64>().ok());
         let episode_u32 = data.index.and_then(|i| u32::try_from(i).ok());
         let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
         if let (Some(tid), Some(ep), Some(s)) =
@@ -1777,6 +1782,7 @@ async fn resolve_bangumi_subject(
         }
     };
 
+    // ── Primary: BGM API title search ─────────────────────────────────────────
     match api
         .resolve_subject_id(
             &keywords,
@@ -1804,22 +1810,111 @@ async fn resolve_bangumi_subject(
             {
                 warn!("bangumi: subject cache write failed: {e}");
             }
-            Some(BangumiTarget::auto(id))
-        }
-        Ok(None) => {
-            warn!(
-                series = %data.series_name,
-                season,
-                "bangumi: title search found no subject — \
-                 add an ID mapping in Settings → Bangumi to resolve this item"
-            );
-            None
+            return Some(BangumiTarget::auto(id));
         }
         Err(e) => {
             warn!("bangumi: title search failed: {e}");
-            None
+            return None;
         }
+        Ok(None) => {} // BGM API found nothing — try web fallback below
     }
+
+    // ── Fallback: BGM web search + TMDB alternate titles ─────────────────────
+    //
+    // Step 1: scrape bgm.tv search page with the Emby series name.
+    // Step 2: build a match set from all known titles (Emby + TMDB alternates),
+    //         deduped and sorted short→long (shorter names match more reliably).
+    // Step 3: try normalised exact match against each scraped hit's name / name_jp.
+    // On success the result is cached and the existing sync path continues.
+    // On failure a detailed warning lists what was tried so the user can add an
+    // explicit mapping.
+    let web_hits = api.web_search_subjects(data.series_name.as_str()).await;
+
+    // Fetch TMDB alternate titles when a series TMDB id is available.
+    let alt_titles: Vec<String> = if let Some(tid) = tmdb_series_id {
+        tmdb.series_alternative_titles(tid).await
+    } else {
+        Vec::new()
+    };
+
+    // Build match set: Emby keywords + TMDB alternates, deduped, short → long.
+    let mut match_set: Vec<String> = keywords
+        .iter()
+        .map(|&s| s.to_owned())
+        .chain(alt_titles.iter().cloned())
+        .collect();
+    {
+        use etlp_sync::normalize_title;
+        match_set.dedup_by(|a, b| normalize_title(a) == normalize_title(b));
+    }
+    match_set.sort_by_key(|s| s.chars().count());
+
+    if !web_hits.is_empty() {
+        use etlp_sync::normalize_title;
+        for candidate in &match_set {
+            let norm = normalize_title(candidate);
+            for hit in &web_hits {
+                let hit_match = normalize_title(&hit.name) == norm
+                    || hit
+                        .name_jp
+                        .as_ref()
+                        .is_some_and(|jp| normalize_title(jp) == norm);
+                if hit_match {
+                    debug!(
+                        subject_id = hit.subject_id,
+                        scrape_keyword = data.series_name.as_str(),
+                        hit_name = hit.name.as_str(),
+                        hit_name_jp = ?hit.name_jp,
+                        matched_by = candidate.as_str(),
+                        alt_titles_count = alt_titles.len(),
+                        "bangumi: web-scrape match details"
+                    );
+                    info!(
+                        subject_id = hit.subject_id,
+                        matched_title = candidate.as_str(),
+                        series = %data.series_name,
+                        season,
+                        "bangumi: resolved subject via web fallback"
+                    );
+                    if !data.series_id.is_empty()
+                        && let Err(e) = cache.insert(
+                            &data.series_id,
+                            season,
+                            episode,
+                            hit.subject_id,
+                            cache_path,
+                        )
+                    {
+                        warn!("bangumi: subject cache write failed: {e}");
+                    }
+                    return Some(BangumiTarget::auto(hit.subject_id));
+                }
+            }
+        }
+
+        // Web hits exist but none matched any candidate title.
+        let scraped_names: Vec<&str> =
+            web_hits.iter().map(|h| h.name.as_str()).collect();
+        warn!(
+            series = %data.series_name,
+            season,
+            tried_titles = ?match_set,
+            scraped_names = ?scraped_names,
+            "bangumi: web fallback found no exact title match among {} \
+             scraped candidates; tried {} title(s) — add an ID mapping \
+             in Settings → Bangumi",
+            web_hits.len(),
+            match_set.len(),
+        );
+    } else {
+        warn!(
+            series = %data.series_name,
+            season,
+            "bangumi: title search and web fallback both returned no results \
+             — add an ID mapping in Settings → Bangumi"
+        );
+    }
+    None
 }
 
 /// Minimum title-similarity score for accepting a Bangumi search candidate.

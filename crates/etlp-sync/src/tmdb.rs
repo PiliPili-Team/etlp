@@ -42,6 +42,18 @@ struct TmdbEpisodeDetail {
     air_date: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct TmdbAltTitle {
+    #[serde(rename = "iso_3166_1")]
+    country: String,
+    title: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TmdbAltTitlesResponse {
+    results: Vec<TmdbAltTitle>,
+}
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 /// TMDB REST API client for air-date lookups, backed by an LRU cache.
@@ -128,6 +140,54 @@ impl TmdbClient {
         let result = self.fetch_episode_date(tmdb_id, season, episode).await;
         self.cache.lock().await.put(key, result.clone());
         result
+    }
+
+    /// Fetch all alternate titles for a TV series.
+    ///
+    /// Japanese (`iso_3166_1 == "JP"`) entries come first — BGM's search
+    /// index is optimised for the original Japanese title. Returns an empty
+    /// vec on any network or parse error so callers degrade gracefully.
+    pub async fn series_alternative_titles(&self, tmdb_id: u64) -> Vec<String> {
+        let url = self.url(&format!("tv/{tmdb_id}/alternative_titles"));
+        let builder = self
+            .http
+            .get(&url)
+            .query(&[("api_key", self.api_key.as_str())]);
+        let logged = match curl::send_logged(DOMAIN, builder).await {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("tmdb: alt titles {tmdb_id} request failed: {e}");
+                return Vec::new();
+            }
+        };
+        match curl::json_logged::<TmdbAltTitlesResponse>(DOMAIN, logged).await {
+            Ok(resp) => {
+                let mut jp: Vec<String> = resp
+                    .results
+                    .iter()
+                    .filter(|t| t.country == "JP" && !t.title.is_empty())
+                    .map(|t| t.title.clone())
+                    .collect();
+                let others: Vec<String> = resp
+                    .results
+                    .iter()
+                    .filter(|t| t.country != "JP" && !t.title.is_empty())
+                    .map(|t| t.title.clone())
+                    .collect();
+                jp.extend(others);
+                jp.dedup();
+                debug!(
+                    tmdb_id,
+                    count = jp.len(),
+                    "tmdb: fetched series alternate titles"
+                );
+                jp
+            }
+            Err(e) => {
+                warn!("tmdb: alt titles {tmdb_id} parse failed: {e}");
+                Vec::new()
+            }
+        }
     }
 
     // ── Private fetch helpers ─────────────────────────────────────────────────
@@ -365,6 +425,52 @@ mod tests {
         let second = client.movie_release_date(42).await;
         assert!(first.is_none());
         assert!(second.is_none());
+    }
+
+    #[tokio::test]
+    async fn series_alternative_titles_returns_jp_first() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/286361/alternative_titles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "id": 286361,
+                    "results": [
+                        { "iso_3166_1": "CN", "title": "魔法的姐妹露露和莉莉",
+                          "type": "" },
+                        { "iso_3166_1": "JP", "title": "魔法の姉妹ルルットリリィ",
+                          "type": "" },
+                        { "iso_3166_1": "CN", "title": "魔法姐妹露露特莉莉",
+                          "type": "" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let titles = client.series_alternative_titles(286361).await;
+        // JP title must come first.
+        assert_eq!(
+            titles.first().map(String::as_str),
+            Some("魔法の姉妹ルルットリリィ")
+        );
+        assert!(titles.contains(&"魔法姐妹露露特莉莉".to_owned()));
+        assert_eq!(titles.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn series_alternative_titles_returns_empty_on_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/999/alternative_titles"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let titles = client.series_alternative_titles(999).await;
+        assert!(titles.is_empty());
     }
 
     #[tokio::test]

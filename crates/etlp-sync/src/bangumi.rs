@@ -16,6 +16,10 @@ use crate::error::{Result, SyncError};
 /// Log label for this provider's HTTP send/retry/response lines.
 const DOMAIN: &str = "bangumi";
 
+/// BGM subject search page URL template; `%s` is replaced with the
+/// percent-encoded keyword. `cat=2` filters to anime subjects.
+const BGM_WEB_SEARCH_URL: &str = "https://bgm.tv/subject_search/%s?cat=2";
+
 // ── Domain types ──────────────────────────────────────────────────────────────
 
 /// User's relationship to a subject (collection state).
@@ -94,6 +98,19 @@ pub struct EpCollectionState {
     /// `true` if the episode is marked as watched (type == 2).
     pub watched: bool,
     pub airdate: Option<String>,
+}
+
+/// One subject hit extracted from the bgm.tv HTML search page.
+///
+/// Used by the web-scrape fallback in [`BangumiApi::web_search_subjects`]
+/// when the BGM API returns no candidates for a keyword search.
+#[derive(Debug, Clone)]
+pub struct BangumiWebHit {
+    pub subject_id: u64,
+    /// Localised (usually Chinese) name from `<a class="l">`.
+    pub name: String,
+    /// Japanese original name from `<small class="grey">`, if present.
+    pub name_jp: Option<String>,
 }
 
 // ── Title & date matching helpers ───────────────────────────────────────────────
@@ -357,6 +374,103 @@ fn pick_episode_id(
         .map(|ep| ep.id)
 }
 
+// ── Web-search helpers ────────────────────────────────────────────────────────
+
+/// Normalise a title for exact comparison: trim, remove all whitespace,
+/// and fold to lowercase. Handles both ASCII and CJK text.
+pub fn normalize_title(s: &str) -> String {
+    s.trim()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Percent-encode every byte that is not an RFC 3986 unreserved character.
+///
+/// Used to embed a keyword in the BGM web-search path segment without
+/// introducing any external dependencies.
+fn percent_encode_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for byte in s.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.' | b'~')
+        {
+            out.push(byte as char);
+        } else {
+            let hi = byte >> 4;
+            let lo = byte & 0xF;
+            out.push('%');
+            out.push(if hi < 10 {
+                (b'0' + hi) as char
+            } else {
+                (b'A' + hi - 10) as char
+            });
+            out.push(if lo < 10 {
+                (b'0' + lo) as char
+            } else {
+                (b'A' + lo - 10) as char
+            });
+        }
+    }
+    out
+}
+
+/// Extract the bgm.tv subject ID from a block of HTML containing
+/// `href="/subject/{id}"`.
+fn extract_subject_id(block: &str) -> Option<u64> {
+    const MARKER: &str = "href=\"/subject/";
+    let start = block.find(MARKER)? + MARKER.len();
+    let rest = &block[start..];
+    let end = rest.find('"')?;
+    rest[..end].parse().ok()
+}
+
+/// Extract the text between `start_marker` and `end_marker` within `s`.
+fn extract_between<'a>(
+    s: &'a str,
+    start_marker: &str,
+    end_marker: &str,
+) -> Option<&'a str> {
+    let start = s.find(start_marker)? + start_marker.len();
+    let rest = &s[start..];
+    let end = rest.find(end_marker)?;
+    Some(&rest[..end])
+}
+
+/// Parse the bgm.tv subject search HTML page into a list of hits.
+///
+/// Each `<li class="item …">` block is scanned for:
+/// - subject ID (`href="/subject/NNN"`)
+/// - localised name (`<a class="l">…</a>`)
+/// - Japanese original name (`<small class="grey">…</small>`)
+pub fn parse_bgm_search_html(html: &str) -> Vec<BangumiWebHit> {
+    let mut hits = Vec::new();
+    for block in html.split("<li class=\"item") {
+        let Some(subject_id) = extract_subject_id(block) else {
+            continue;
+        };
+        let Some(name) = extract_between(block, "class=\"l\">", "</a>")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        let name_jp =
+            extract_between(block, "<small class=\"grey\">", "</small>")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned);
+        hits.push(BangumiWebHit {
+            subject_id,
+            name,
+            name_jp,
+        });
+    }
+    hits
+}
+
 // ── API client ────────────────────────────────────────────────────────────────
 
 /// Bangumi (bgm.tv) REST API v0 client.
@@ -560,6 +674,42 @@ impl BangumiApi {
         )
         .await?;
         crate::curl::json_logged(DOMAIN, resp).await
+    }
+
+    // ── Web-search fallback ───────────────────────────────────────────────────
+
+    /// Scrape the bgm.tv anime search page for `keyword` and return the hits.
+    ///
+    /// Uses [`BGM_WEB_SEARCH_URL`] with the keyword percent-encoded into the
+    /// path. Returns an empty vec on any network or parse error; errors are
+    /// logged at `debug` level so they do not surface as noisy warnings when
+    /// the network is temporarily unavailable.
+    ///
+    /// The results are intended for exact-title matching against a set of
+    /// known alternate names; see [`parse_bgm_search_html`].
+    pub async fn web_search_subjects(
+        &self,
+        keyword: &str,
+    ) -> Vec<BangumiWebHit> {
+        let url =
+            BGM_WEB_SEARCH_URL.replace("%s", &percent_encode_path(keyword));
+        let resp = match self.http.get(&url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(keyword, "bangumi: web search request failed: {e}");
+                return Vec::new();
+            }
+        };
+        let html = match resp.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                debug!("bangumi: web search response unreadable: {e}");
+                return Vec::new();
+            }
+        };
+        let hits = parse_bgm_search_html(&html);
+        debug!(count = hits.len(), keyword, "bangumi: web search hits");
+        hits
     }
 
     // ── Subject resolution by title ───────────────────────────────────────────
@@ -1593,6 +1743,110 @@ mod tests {
         let api = make_api(&server).await;
         let marked = sync_episode_by_bangumi_id(&api, 42, &[]).await.unwrap();
         assert!(marked.is_empty());
+    }
+
+    // ── normalize_title ───────────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_title_strips_whitespace_and_lowercases() {
+        assert_eq!(
+            normalize_title("  魔法姐妹露露特莉莉  "),
+            "魔法姐妹露露特莉莉"
+        );
+        assert_eq!(normalize_title("Re:Zero"), "re:zero");
+        assert_eq!(normalize_title("A B C"), "abc");
+        // Full-width space is whitespace and must be stripped.
+        assert_eq!(normalize_title("魔法　姐妹"), "魔法姐妹");
+    }
+
+    // ── parse_bgm_search_html ─────────────────────────────────────────────────
+
+    /// Minimal HTML fragment that mirrors the structure bgm.tv actually serves.
+    fn bgm_html_fixture() -> &'static str {
+        r#"<ul class="browserList">
+<li class="item anime" id="subject_501796">
+<div class="inner">
+<h3>
+<span class="ico_subject_type subject_type_2 ll"></span>
+<a href="/subject/501796" class="l">魔法姐妹露露特莉莉</a>
+<small class="grey">魔法の姉妹ルルットリリィ</small>
+</h3>
+<p class="info tip">
+2026年4月5日 / 道解慎太郎 / スタジオぴえろ
+</p>
+</div>
+</li>
+<li class="item anime" id="subject_99999">
+<div class="inner">
+<h3>
+<span class="ico_subject_type subject_type_2 ll"></span>
+<a href="/subject/99999" class="l">另一部动画</a>
+<small class="grey">もう一つのアニメ</small>
+</h3>
+<p class="info tip">2025年1月7日</p>
+</div>
+</li>
+</ul>"#
+    }
+
+    #[test]
+    fn parse_bgm_search_html_extracts_subject_id_and_names() {
+        let hits = parse_bgm_search_html(bgm_html_fixture());
+        assert_eq!(hits.len(), 2);
+
+        let first = hits.first().unwrap();
+        assert_eq!(first.subject_id, 501796);
+        assert_eq!(first.name, "魔法姐妹露露特莉莉");
+        assert_eq!(first.name_jp.as_deref(), Some("魔法の姉妹ルルットリリィ"));
+
+        let second = hits.get(1).unwrap();
+        assert_eq!(second.subject_id, 99999);
+        assert_eq!(second.name, "另一部动画");
+    }
+
+    #[test]
+    fn parse_bgm_search_html_returns_empty_for_no_items() {
+        let hits =
+            parse_bgm_search_html("<html><body>no results</body></html>");
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn normalize_title_matches_bgm_hit_by_cn_name() {
+        let hits = parse_bgm_search_html(bgm_html_fixture());
+        // Simulate the match set built in the fallback: Emby alt title matches
+        // the BGM Chinese name after normalisation.
+        let candidates = [
+            "魔法的姐妹露露和莉莉".to_owned(),
+            "魔法姐妹露露特莉莉".to_owned(),
+        ];
+        let found = candidates.iter().find_map(|c| {
+            let norm = normalize_title(c);
+            hits.iter()
+                .find(|h| {
+                    normalize_title(&h.name) == norm
+                        || h.name_jp
+                            .as_ref()
+                            .is_some_and(|jp| normalize_title(jp) == norm)
+                })
+                .map(|h| h.subject_id)
+        });
+        assert_eq!(found, Some(501796));
+    }
+
+    #[test]
+    fn normalize_title_matches_bgm_hit_by_jp_name() {
+        let hits = parse_bgm_search_html(bgm_html_fixture());
+        // Japanese original title from TMDB alternates matches the BGM jp name.
+        let candidate = "魔法の姉妹ルルットリリィ";
+        let norm = normalize_title(candidate);
+        let found = hits.iter().find(|h| {
+            normalize_title(&h.name) == norm
+                || h.name_jp
+                    .as_ref()
+                    .is_some_and(|jp| normalize_title(jp) == norm)
+        });
+        assert_eq!(found.map(|h| h.subject_id), Some(501796));
     }
 
     // ── title_similarity ──────────────────────────────────────────────────────
