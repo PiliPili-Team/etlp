@@ -274,6 +274,176 @@ pub async fn web_search_all_pages(
     all
 }
 
+// ── Subject detail ─────────────────────────────────────────────────────────
+
+/// Full detail for one bgm.tv subject, assembled from the subject page.
+#[derive(Debug, Clone)]
+pub struct SubjectDetail {
+    pub subject_id: u64,
+    /// Localised (usually Chinese) name, carried over from search.
+    pub name: String,
+    /// Japanese original name, carried over from search.
+    pub name_jp: Option<String>,
+    /// Broadcast-start date ("YYYY-MM-DD"), parsed from the detail page.
+    pub start_date: Option<String>,
+    /// Full episode list: `(bgm_sort_number, episode_title)`.
+    pub episodes: Vec<(u32, String)>,
+    /// `(min_ep_num, max_ep_num)` across all episodes; `None` when empty.
+    pub ep_range: Option<(u32, u32)>,
+}
+
+/// Extract the broadcast-start date from a subject HTML page.
+///
+/// Looks for `<span class="tip">放送开始: </span>` and reads the date text
+/// from its parent `<li>`.
+fn parse_start_date(html: &str) -> Option<String> {
+    let doc = Html::parse_document(html);
+    let Ok(sel_tip) = Selector::parse("span.tip") else {
+        return None;
+    };
+    for span in doc.select(&sel_tip) {
+        let text = span.text().collect::<String>();
+        if !text.contains("放送开始") {
+            continue;
+        }
+        let Some(parent_node) = span.parent() else {
+            continue;
+        };
+        let Some(parent_el) = scraper::ElementRef::wrap(parent_node) else {
+            continue;
+        };
+        let full = parent_el.text().collect::<String>();
+        if let Some(date) = parse_japanese_date(&full) {
+            return Some(date);
+        }
+    }
+    None
+}
+
+/// Strip the `"ep.N "` prefix from a bgm.tv episode title attribute.
+///
+/// The `title` attribute of `<a class="load-epinfo">` looks like
+/// `"ep.135 第一百三十五集 魂元果"`. This removes everything up to and
+/// including the first space, leaving `"第一百三十五集 魂元果"`.
+fn strip_ep_prefix(title: &str) -> String {
+    title
+        .split_once(' ')
+        .map(|(_, rest)| rest.trim())
+        .unwrap_or(title)
+        .to_owned()
+}
+
+/// Parse all `<a class="load-epinfo">` entries from an HTML page into
+/// `(ep_num, ep_title)` pairs.
+///
+/// Used for both the subject main page and the `/ep` sub-page.
+fn parse_ep_entries(html: &str) -> Vec<(u32, String)> {
+    let doc = Html::parse_document(html);
+    let Ok(sel_ep) = Selector::parse("a.load-epinfo") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for a in doc.select(&sel_ep) {
+        let num_text = a.text().collect::<String>();
+        let Ok(ep_num) = num_text.trim().parse::<u32>() else {
+            continue;
+        };
+        let ep_title = a
+            .value()
+            .attr("title")
+            .map(strip_ep_prefix)
+            .unwrap_or_default();
+        out.push((ep_num, ep_title));
+    }
+    out
+}
+
+/// Compute `(min, max)` episode number across a non-empty episode list.
+fn ep_range(episodes: &[(u32, String)]) -> Option<(u32, u32)> {
+    let min = episodes.iter().map(|(n, _)| *n).min()?;
+    let max = episodes.iter().map(|(n, _)| *n).max()?;
+    Some((min, max))
+}
+
+/// Fetch and assemble complete detail for one bgm.tv subject.
+///
+/// 1. Fetches the main subject page for the broadcast-start date and initial
+///    episode list.
+/// 2. Always fetches the `/ep` sub-page (page 1, 2, …) to get the full
+///    episode list for long series where the main page is truncated.
+/// 3. Merges and deduplicates episodes by sort number.
+///
+/// Returns `None` when the main page cannot be fetched.
+pub async fn fetch_subject_detail(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    candidate: &SubjectCandidate,
+) -> Option<SubjectDetail> {
+    let base = bgm_base_url.trim_end_matches('/');
+    let id = candidate.subject_id;
+
+    // ── Main subject page ──────────────────────────────────────────────────
+    let main_url = format!("{base}/subject/{id}");
+    let main_html = http.get(&main_url).send().await.ok()?.text().await.ok()?;
+
+    let start_date = parse_start_date(&main_html);
+    let mut episodes = parse_ep_entries(&main_html);
+
+    // ── /ep sub-page pagination ────────────────────────────────────────────
+    let mut ep_page = 1u32;
+    loop {
+        let ep_url = format!("{base}/subject/{id}/ep?page={ep_page}");
+        let ep_html = match http.get(&ep_url).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(t) => t,
+                Err(_) => break,
+            },
+            Err(_) => break,
+        };
+        let new_eps = parse_ep_entries(&ep_html);
+        if new_eps.is_empty() {
+            break;
+        }
+        for entry in new_eps {
+            if !episodes.iter().any(|(n, _)| *n == entry.0) {
+                episodes.push(entry);
+            }
+        }
+        ep_page += 1;
+    }
+
+    episodes.sort_by_key(|(n, _)| *n);
+    let ep_range = ep_range(&episodes);
+
+    debug!(
+        subject_id = id,
+        start_date = start_date.as_deref().unwrap_or(""),
+        ep_count = episodes.len(),
+        ep_range = ?ep_range,
+        "bangumi: detail_fetch"
+    );
+
+    Some(SubjectDetail {
+        subject_id: id,
+        name: candidate.name.clone(),
+        name_jp: candidate.name_jp.clone(),
+        start_date,
+        episodes,
+        ep_range,
+    })
+}
+
+/// In-pass scrape cache: reuse HTML fetch results within a single sync call.
+///
+/// Keyed by keyword for search results, by subject_id for detail pages.
+/// Not persisted — lives only for the duration of one `sync_bangumi` call.
+#[derive(Debug, Default)]
+pub struct ScrapeCache {
+    pub search_results:
+        std::collections::HashMap<String, Vec<SubjectCandidate>>,
+    pub subject_details: std::collections::HashMap<u64, SubjectDetail>,
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -338,5 +508,72 @@ mod tests {
         assert_eq!(second.subject_id, 99999);
         assert_eq!(second.name, "某动画无日文名");
         assert!(second.name_jp.is_none());
+    }
+
+    // ── subject detail page tests ──────────────────────────────────────────
+
+    fn detail_fixture() -> &'static str {
+        r##"<html><body>
+<div id="subjectInfoBox">
+<ul>
+<li class=""><span class="tip">放送开始: </span>2024年8月4日</li>
+<li class=""><span class="tip">话数: </span>39</li>
+</ul>
+</div>
+<div id="prg_list">
+<ul id="prg_list">
+<li><a href="/ep/1001" id="prg_1001"
+       class="load-epinfo epBtnAir"
+       title="ep.1 第一集 开始"
+       rel="#prginfo_1001">1</a></li>
+<li><a href="/ep/1002" id="prg_1002"
+       class="load-epinfo epBtnAir"
+       title="ep.2 第二集 出发"
+       rel="#prginfo_1002">2</a></li>
+<li><a href="/ep/1135" id="prg_1135"
+       class="load-epinfo epBtnAir"
+       title="ep.135 第一百三十五集 魂元果"
+       rel="#prginfo_1135">135</a></li>
+</ul>
+</div>
+</body></html>"##
+    }
+
+    #[test]
+    fn parse_subject_detail_extracts_broadcast_start_date() {
+        let date = parse_start_date(detail_fixture());
+        assert_eq!(date.as_deref(), Some("2024-08-04"));
+    }
+
+    #[test]
+    fn parse_subject_detail_extracts_prg_list_ep_num_and_title() {
+        let eps = parse_ep_entries(detail_fixture());
+        assert_eq!(eps.len(), 3);
+        assert_eq!(eps.first().map(|(n, _)| *n), Some(1));
+        assert_eq!(eps.get(2).map(|(n, _)| *n), Some(135));
+    }
+
+    #[test]
+    fn parse_subject_detail_strips_ep_prefix_from_title() {
+        let eps = parse_ep_entries(detail_fixture());
+        assert_eq!(
+            eps.get(2).map(|(_, t)| t.as_str()),
+            Some("第一百三十五集 魂元果")
+        );
+        assert_eq!(eps.first().map(|(_, t)| t.as_str()), Some("第一集 开始"));
+    }
+
+    #[test]
+    fn parse_subject_detail_computes_ep_range_min_max() {
+        let eps = parse_ep_entries(detail_fixture());
+        let range = ep_range(&eps);
+        assert_eq!(range, Some((1, 135)));
+    }
+
+    #[test]
+    fn parse_subject_detail_handles_empty_prg_list() {
+        let eps = parse_ep_entries("<html><body>no episodes</body></html>");
+        assert!(eps.is_empty());
+        assert_eq!(ep_range(&eps), None);
     }
 }
