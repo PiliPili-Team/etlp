@@ -180,7 +180,8 @@ mod tests {
 
     #[test]
     fn ep_range_returns_min_and_max() {
-        let eps = vec![make_ep(92, None), make_ep(100, None), make_ep(143, None)];
+        let eps =
+            vec![make_ep(92, None), make_ep(100, None), make_ep(143, None)];
         assert_eq!(ep_range(&eps), Some((92, 143)));
     }
 

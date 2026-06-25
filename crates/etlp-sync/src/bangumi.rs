@@ -897,8 +897,7 @@ async fn collect_details(
         let key = (*keyword).to_owned();
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
-            let air_date_from =
-                premiere_date.and_then(air_date_from_premiere);
+            let air_date_from = premiere_date.and_then(air_date_from_premiere);
             let results = api
                 .search_subjects_api(keyword, 50, air_date_from.as_deref())
                 .await;
@@ -1040,13 +1039,9 @@ pub async fn resolve_by_web_scrape_with_chain(
         "bangumi: resolve_subject"
     );
 
-    let mut details = collect_details(
-        req.keywords,
-        scrape_cache,
-        api,
-        premiere_date_for_log,
-    )
-    .await;
+    let mut details =
+        collect_details(req.keywords, scrape_cache, api, premiere_date_for_log)
+            .await;
 
     enrich_with_chain(api, &mut details, scrape_cache).await;
 
@@ -2144,12 +2139,12 @@ mod tests {
             .collect();
         Mock::given(method("POST"))
             .and(path("/search/subjects"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
                     "total": data.len(),
                     "data": data,
-                })),
-            )
+                }),
+            ))
             .mount(server)
             .await;
     }
@@ -2163,14 +2158,14 @@ mod tests {
     ) {
         Mock::given(method("GET"))
             .and(path(format!("/subjects/{id}")))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
                     "id": id,
                     "name": name,
                     "name_cn": "",
                     "date": start_date,
-                })),
-            )
+                }),
+            ))
             .mount(server)
             .await;
     }
@@ -2193,12 +2188,12 @@ mod tests {
             .collect();
         Mock::given(method("GET"))
             .and(path(format!("/subjects/{id}/episodes")))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
                     "total": data.len(),
                     "data": data,
-                })),
-            )
+                }),
+            ))
             .mount(server)
             .await;
     }
@@ -2255,8 +2250,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
     }
 
@@ -2286,8 +2280,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
     }
 
@@ -2297,11 +2290,7 @@ mod tests {
         // Round 1 yields 2 matches → falls to Round 2.
         // Subject 100 has ep 7 titled "EpSeven"; episode_title="EpSeven" → higher score.
         let server = MockServer::start().await;
-        mount_api_search(
-            &server,
-            vec![(100, "AnimeA"), (200, "AnimeA")],
-        )
-        .await;
+        mount_api_search(&server, vec![(100, "AnimeA"), (200, "AnimeA")]).await;
         mount_api_subject(&server, 100, "AnimeA", None).await;
         mount_api_episodes(
             &server,
@@ -2331,8 +2320,7 @@ mod tests {
                 episode_title: Some("EpSeven"),
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
     }
 
@@ -2344,12 +2332,7 @@ mod tests {
         mount_api_search(&server, vec![(100, "AnimeA")]).await;
         // start_date "2024-04-01" as ISO from the JSON API.
         mount_api_subject(&server, 100, "AnimeA", Some("2024-04-01")).await;
-        mount_api_episodes(
-            &server,
-            100,
-            vec![(1, ""), (2, ""), (3, "")],
-        )
-        .await;
+        mount_api_episodes(&server, 100, vec![(1, ""), (2, ""), (3, "")]).await;
 
         let api = make_api(&server).await;
         let mut cache = crate::bangumi_web::ScrapeCache::default();
@@ -2365,8 +2348,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
     }
 
@@ -2378,25 +2360,14 @@ mod tests {
         // AnimeDEF covers ep 1-10 (lower combined score).
         // keyword = "AnimeABC" → subject 100 wins.
         let server = MockServer::start().await;
-        mount_api_search(
-            &server,
-            vec![(100, "AnimeABC"), (200, "AnimeDEF")],
-        )
-        .await;
+        mount_api_search(&server, vec![(100, "AnimeABC"), (200, "AnimeDEF")])
+            .await;
         mount_api_subject(&server, 100, "AnimeABC", None).await;
-        mount_api_episodes(
-            &server,
-            100,
-            (1..=10).map(|n| (n, "")).collect(),
-        )
-        .await;
+        mount_api_episodes(&server, 100, (1..=10).map(|n| (n, "")).collect())
+            .await;
         mount_api_subject(&server, 200, "AnimeDEF", None).await;
-        mount_api_episodes(
-            &server,
-            200,
-            (1..=10).map(|n| (n, "")).collect(),
-        )
-        .await;
+        mount_api_episodes(&server, 200, (1..=10).map(|n| (n, "")).collect())
+            .await;
 
         let api = make_api(&server).await;
         let mut cache = crate::bangumi_web::ScrapeCache::default();
@@ -2412,8 +2383,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
     }
 
@@ -2421,11 +2391,7 @@ mod tests {
     async fn resolve_episode_round2_returns_none_on_tied_scores() {
         // Both subjects have the same name → same score → tied → None.
         let server = MockServer::start().await;
-        mount_api_search(
-            &server,
-            vec![(100, "AnimeA"), (200, "AnimeA")],
-        )
-        .await;
+        mount_api_search(&server, vec![(100, "AnimeA"), (200, "AnimeA")]).await;
         mount_api_subject(&server, 100, "AnimeA", None).await;
         mount_api_episodes(&server, 100, vec![(1, ""), (2, "")]).await;
         mount_api_subject(&server, 200, "AnimeA", None).await;
@@ -2445,8 +2411,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
     }
 
@@ -2455,11 +2420,7 @@ mod tests {
         // Subject "ZZZZZ" has near-zero similarity to keyword "AnimeA".
         // Prescreen filter in search_subjects_api removes it → details empty → None.
         let server = MockServer::start().await;
-        mock_api_search_raw(
-            &server,
-            vec![(100u64, "ZZZZZ")],
-        )
-        .await;
+        mock_api_search_raw(&server, vec![(100u64, "ZZZZZ")]).await;
 
         let api = make_api(&server).await;
         let mut cache = crate::bangumi_web::ScrapeCache::default();
@@ -2475,8 +2436,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
     }
 
@@ -2485,25 +2445,14 @@ mod tests {
     {
         // No episode_title → score = subj_title_score only → still picks best.
         let server = MockServer::start().await;
-        mount_api_search(
-            &server,
-            vec![(100, "AnimeABC"), (200, "AnimeXYZ")],
-        )
-        .await;
+        mount_api_search(&server, vec![(100, "AnimeABC"), (200, "AnimeXYZ")])
+            .await;
         mount_api_subject(&server, 100, "AnimeABC", None).await;
-        mount_api_episodes(
-            &server,
-            100,
-            (1..=5).map(|n| (n, "")).collect(),
-        )
-        .await;
+        mount_api_episodes(&server, 100, (1..=5).map(|n| (n, "")).collect())
+            .await;
         mount_api_subject(&server, 200, "AnimeXYZ", None).await;
-        mount_api_episodes(
-            &server,
-            200,
-            (1..=5).map(|n| (n, "")).collect(),
-        )
-        .await;
+        mount_api_episodes(&server, 200, (1..=5).map(|n| (n, "")).collect())
+            .await;
 
         let api = make_api(&server).await;
         let mut cache = crate::bangumi_web::ScrapeCache::default();
@@ -2519,8 +2468,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(100));
     }
 
@@ -2545,19 +2493,15 @@ mod tests {
                 premiere_date: Some("2024-07-01"),
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(300));
     }
 
     #[tokio::test]
     async fn resolve_movie_round2_picks_highest_levenshtein() {
         let server = MockServer::start().await;
-        mount_api_search(
-            &server,
-            vec![(300, "MovieABC"), (400, "MovieXYZ")],
-        )
-        .await;
+        mount_api_search(&server, vec![(300, "MovieABC"), (400, "MovieXYZ")])
+            .await;
         mount_api_subject(&server, 300, "MovieABC", None).await;
         mount_api_subject(&server, 400, "MovieXYZ", None).await;
 
@@ -2573,8 +2517,7 @@ mod tests {
                 premiere_date: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(300));
     }
 
@@ -2596,8 +2539,7 @@ mod tests {
                 premiere_date: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
     }
 
@@ -2645,8 +2587,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(502));
     }
 
@@ -2680,8 +2621,7 @@ mod tests {
                 episode_title: None,
             },
         };
-        let id =
-            resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(601));
     }
 
@@ -2701,12 +2641,12 @@ mod tests {
             .collect();
         Mock::given(method("POST"))
             .and(path("/search/subjects"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
                     "total": data.len(),
                     "data": data,
-                })),
-            )
+                }),
+            ))
             .mount(server)
             .await;
     }

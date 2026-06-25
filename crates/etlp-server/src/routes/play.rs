@@ -1858,12 +1858,9 @@ async fn resolve_bangumi_subject(
         target,
     };
 
-    let id = etlp_sync::resolve_by_web_scrape_with_chain(
-        &req,
-        scrape_cache,
-        api,
-    )
-    .await?;
+    let id =
+        etlp_sync::resolve_by_web_scrape_with_chain(&req, scrape_cache, api)
+            .await?;
 
     info!(
         subject_id = id,
