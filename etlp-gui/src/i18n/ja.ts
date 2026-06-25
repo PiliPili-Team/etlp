@@ -117,6 +117,10 @@ export const ja: typeof zhCN = {
     net_proxy_https: "HTTPS プロキシ",
     net_proxy_socks5: "SOCKS5 プロキシ",
     net_proxy_desc: "host:portのみ入力；完全なURLを貼り付けると自動検出；空欄で無効",
+    net_proxy_https_desc:
+        "暗号化（HTTPS）接続にこのプロキシを使用します；空にすると HTTP プロキシにフォールバック；形式は HTTP と同じ",
+    net_proxy_socks5_desc:
+        "すべてのプロトコルのトラフィックをプロキシします；HTTP トンネルのないネットワーク環境に最適；空にすると無効",
     net_proxy_enabled: "プロキシを有効化",
     net_proxy_enabled_desc:
         "無効にしてもURLは保存されすべての接続が直接行われます；プライベートIP（192.168.x、10.xなど）は常に自動的にプロキシを回避します",
@@ -406,4 +410,22 @@ export const ja: typeof zhCN = {
     dl_browse: "参照…",
     dl_placeholder: "",
     dl_path_error: "パスが存在しません。入力を確認してください",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "重複マークを許可",
+    sys_bangumi_dup_desc:
+        "オンにすると、同じエピソード／映画を視聴完了するたびに再度マークします；オフにすると節流重複除去が有効になり、下記の節流時間内では同じ項目を一度だけマークします",
+    sys_bangumi_dup_throttle: "重複マークの節流時間（秒）",
+    sys_bangumi_dup_throttle_desc:
+        "「重複マークを許可」がオフのときに適用：同じ項目を指定秒数内に複数回見ても一度だけ記録；最小 120 秒",
+    sys_bangumi_dup_throttle_floored:
+        "節流時間は 120 秒未満にはできません。120 に修正されました",
+
+    // TMDB
+    sys_tmdb: "TMDB 連携",
+    sys_tmdb_key: "API キー",
+    sys_tmdb_key_desc:
+        "メディアサーバーに初回放送日がない場合にエピソードの放送日を取得するための TMDB API キー。",
+    sys_tmdb_api_link: "ここで API キーを作成",
+    sys_tmdb_key_placeholder: "",
 };
