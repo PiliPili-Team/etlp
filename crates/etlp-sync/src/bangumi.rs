@@ -377,11 +377,24 @@ fn pick_episode_id(
 // ── Web-search helpers ────────────────────────────────────────────────────────
 
 /// Normalise a title for exact comparison: trim, remove all whitespace,
+/// fold fullwidth Latin punctuation (U+FF01–U+FF5E) to halfwidth ASCII,
 /// and fold to lowercase. Handles both ASCII and CJK text.
+///
+/// The fullwidth→halfwidth step makes "没有辣妹会对阿宅温柔！？" (TMDB) and
+/// "没有辣妹会对阿宅温柔!?" (bgm.tv scraped) compare as equal.
 pub fn normalize_title(s: &str) -> String {
     s.trim()
         .chars()
         .filter(|c| !c.is_whitespace())
+        .map(|c| {
+            // U+FF01 FULLWIDTH EXCLAMATION MARK … U+FF5E FULLWIDTH TILDE
+            // map linearly to U+0021 … U+007E (printable ASCII).
+            if ('\u{FF01}'..='\u{FF5E}').contains(&c) {
+                char::from_u32(c as u32 - 0xFF01 + 0x0021).unwrap_or(c)
+            } else {
+                c
+            }
+        })
         .flat_map(char::to_lowercase)
         .collect()
 }
@@ -1757,6 +1770,20 @@ mod tests {
         assert_eq!(normalize_title("A B C"), "abc");
         // Full-width space is whitespace and must be stripped.
         assert_eq!(normalize_title("魔法　姐妹"), "魔法姐妹");
+    }
+
+    #[test]
+    fn normalize_title_equalizes_fullwidth_and_halfwidth_punctuation() {
+        // bgm.tv scrapes "!?" (halfwidth); TMDB returns "！？" (fullwidth).
+        // Both must normalise to the same string so the web-fallback matches.
+        let bgm = normalize_title("没有辣妹会对阿宅温柔!?");
+        let tmdb = normalize_title("没有辣妹会对阿宅温柔！？");
+        assert_eq!(bgm, tmdb);
+
+        // Verify the entire fullwidth range maps correctly for common chars.
+        assert_eq!(normalize_title("ＡＢＣＤ"), "abcd");
+        assert_eq!(normalize_title("１２３"), "123");
+        assert_eq!(normalize_title("（test）"), "(test)");
     }
 
     // ── parse_bgm_search_html ─────────────────────────────────────────────────
