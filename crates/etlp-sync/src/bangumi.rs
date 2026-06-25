@@ -323,6 +323,122 @@ impl BangumiApi {
         crate::curl::json_logged(DOMAIN, resp).await
     }
 
+    /// Fetch [`bangumi_web::SubjectDetail`] for one subject using the JSON API.
+    ///
+    /// Calls `GET /v0/subjects/{id}` for metadata and
+    /// `GET /v0/subjects/{id}/episodes?type=0` (paginated) for the full episode
+    /// list, then builds a [`SubjectDetail`] compatible with the resolution
+    /// pipeline.
+    ///
+    /// Preferred over [`bangumi_web::fetch_subject_detail`] in production: it
+    /// uses authenticated JSON endpoints that are not affected by BGM's HTML
+    /// anti-bot measures.
+    pub(crate) async fn fetch_subject_detail_api(
+        &self,
+        subject_id: u64,
+    ) -> Option<crate::bangumi_web::SubjectDetail> {
+        use crate::bangumi_web::{EpEntry, SubjectDetail};
+
+        #[derive(serde::Deserialize)]
+        struct EpApiEntry {
+            sort: f64,
+            #[serde(default)]
+            name: String,
+            #[serde(default)]
+            name_cn: String,
+            date: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct EpApiPage {
+            total: u64,
+            #[serde(default)]
+            data: Vec<EpApiEntry>,
+        }
+
+        let subject = self.get_subject(subject_id).await.ok()?;
+        let start_date = subject.date.clone();
+        let (name, name_jp) = if subject.name_cn.is_empty() {
+            (subject.name.clone(), None)
+        } else {
+            (subject.name_cn.clone(), Some(subject.name.clone()))
+        };
+
+        let mut episodes: Vec<EpEntry> = Vec::new();
+        const LIMIT: u64 = 100;
+        let mut offset = 0u64;
+
+        loop {
+            let resp = match self
+                .http
+                .get(self.url(&format!("subjects/{subject_id}/episodes")))
+                .headers(self.auth_headers())
+                .query(&[("type", 0u64), ("limit", LIMIT), ("offset", offset)])
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    debug!(
+                        subject_id,
+                        "bangumi: api_episodes request failed: {e}"
+                    );
+                    break;
+                }
+            };
+            let page: EpApiPage = match resp.json().await {
+                Ok(p) => p,
+                Err(e) => {
+                    debug!(
+                        subject_id,
+                        "bangumi: api_episodes parse failed: {e}"
+                    );
+                    break;
+                }
+            };
+            if page.data.is_empty() {
+                break;
+            }
+            let fetched = page.data.len() as u64;
+            let total = page.total;
+            for entry in page.data {
+                let title = if entry.name_cn.is_empty() {
+                    entry.name
+                } else {
+                    entry.name_cn
+                };
+                episodes.push(EpEntry {
+                    sort: entry.sort as u32,
+                    title,
+                    airdate: entry.date,
+                });
+            }
+            offset += fetched;
+            if offset >= total {
+                break;
+            }
+        }
+
+        episodes.sort_by_key(|e| e.sort);
+        let ep_range = crate::bangumi_web::ep_range(&episodes);
+
+        debug!(
+            subject_id,
+            start_date = start_date.as_deref().unwrap_or(""),
+            ep_count = episodes.len(),
+            ep_range = ?ep_range,
+            "bangumi: detail_fetch_api"
+        );
+
+        Some(SubjectDetail {
+            subject_id,
+            name,
+            name_jp,
+            start_date,
+            episodes,
+            ep_range,
+        })
+    }
+
     // ── User collection ───────────────────────────────────────────────────────
 
     /// Get the user's collection entry for a subject, or `None` if uncollected.
@@ -552,10 +668,14 @@ impl BangumiApi {
     /// BGM's anti-bot protection intercepts the scraping request. Applies the
     /// same pre-screening filter so results are compatible with the rest of the
     /// resolution pipeline.
+    ///
+    /// When `air_date_from` is provided, the search adds an `air_date >=`
+    /// filter so that obviously irrelevant older subjects are excluded up front.
     pub(crate) async fn search_subjects_api(
         &self,
         keyword: &str,
         limit: u32,
+        air_date_from: Option<&str>,
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         use crate::bangumi_web::{
             BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
@@ -576,14 +696,29 @@ impl BangumiApi {
             date: Option<String>,
         }
 
+        // NOTE: base_url already ends with "/v0"; append the search path
+        // directly without an extra "/v0" prefix.
         let url = format!(
-            "{}/v0/search/subjects?limit={limit}&offset=0",
+            "{}/search/subjects?limit={limit}&offset=0",
             self.base_url.trim_end_matches('/')
         );
-        let body = serde_json::json!({
-            "keyword": keyword,
-            "filter": { "type": [2], "nsfw": true },
-        });
+        let body = if let Some(from) = air_date_from {
+            serde_json::json!({
+                "keyword": keyword,
+                "sort": "match",
+                "filter": {
+                    "type": [2],
+                    "nsfw": true,
+                    "air_date": [format!(">={from}")]
+                }
+            })
+        } else {
+            serde_json::json!({
+                "keyword": keyword,
+                "sort": "match",
+                "filter": { "type": [2], "nsfw": true }
+            })
+        };
 
         let resp = match self
             .http
@@ -638,7 +773,12 @@ impl BangumiApi {
             })
             .collect();
 
-        debug!(keyword, hits = candidates.len(), "bangumi: api_search");
+        debug!(
+            keyword,
+            hits = candidates.len(),
+            air_date_from = air_date_from.unwrap_or("none"),
+            "bangumi: api_search"
+        );
         candidates
     }
 }
@@ -726,6 +866,17 @@ fn best_subject_score(
         .fold(0.0_f64, f64::max)
 }
 
+/// Derive an ISO air-date lower bound from an episode premiere date for BGM
+/// subject search filtering.  Returns the first day of the calendar year that
+/// precedes `premiere_date` so the window is wide enough to cover arcs that
+/// started in the year before the queried episode aired.
+///
+/// Example: `"2026-05-27T…"` → `"2025-01-01"`
+fn air_date_from_premiere(premiere_date: &str) -> Option<String> {
+    let year: i64 = premiere_date.get(..4)?.parse().ok()?;
+    Some(format!("{:04}-01-01", year - 1))
+}
+
 /// Collect [`SubjectDetail`]s for all candidates found by `keywords`.
 ///
 /// Uses `scrape_cache` to avoid duplicate searches and detail fetches within
@@ -738,6 +889,7 @@ async fn collect_details(
     keywords: &[&str],
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: Option<&BangumiApi>,
+    premiere_date: Option<&str>,
 ) -> Vec<crate::bangumi_web::SubjectDetail> {
     use crate::bangumi_web;
     use std::collections::hash_map::Entry;
@@ -763,7 +915,11 @@ async fn collect_details(
                     keyword,
                     "bangumi: web_search empty, falling back to api_search"
                 );
-                results = api.search_subjects_api(keyword, 50).await;
+                let air_date_from =
+                    premiere_date.and_then(air_date_from_premiere);
+                results = api
+                    .search_subjects_api(keyword, 50, air_date_from.as_deref())
+                    .await;
             }
             e.insert(results);
         }
@@ -778,15 +934,20 @@ async fn collect_details(
             if !seen.insert(id) {
                 continue;
             }
-            if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
-                && let Some(d) = bangumi_web::fetch_subject_detail(
-                    http,
-                    bgm_base_url,
-                    &candidate,
-                )
-                .await
-            {
-                e.insert(d);
+            if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id) {
+                let detail = if let Some(api) = api {
+                    api.fetch_subject_detail_api(id).await
+                } else {
+                    bangumi_web::fetch_subject_detail(
+                        http,
+                        bgm_base_url,
+                        &candidate,
+                    )
+                    .await
+                };
+                if let Some(d) = detail {
+                    e.insert(d);
+                }
             }
             if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
                 details.push(d);
@@ -809,12 +970,9 @@ async fn collect_details(
 /// candidate count exceeds `MAX_CHAIN_SUBJECTS` (safety cap).
 async fn enrich_with_chain(
     api: &BangumiApi,
-    http: &reqwest::Client,
-    bgm_base_url: &str,
     details: &mut Vec<crate::bangumi_web::SubjectDetail>,
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
 ) {
-    use crate::bangumi_web;
     use std::collections::{HashSet, VecDeque};
 
     const MAX_CHAIN_SUBJECTS: usize = 30;
@@ -858,24 +1016,7 @@ async fn enrich_with_chain(
             {
                 d
             } else {
-                let (name, name_jp) = if rel.name_cn.is_empty() {
-                    (rel.name.clone(), None)
-                } else {
-                    (rel.name_cn.clone(), Some(rel.name.clone()))
-                };
-                let candidate = bangumi_web::SubjectCandidate {
-                    subject_id: rid,
-                    name,
-                    name_jp,
-                    search_date: None,
-                };
-                let Some(d) = bangumi_web::fetch_subject_detail(
-                    http,
-                    bgm_base_url,
-                    &candidate,
-                )
-                .await
-                else {
+                let Some(d) = api.fetch_subject_detail_api(rid).await else {
                     continue;
                 };
                 scrape_cache.subject_details.insert(rid, d.clone());
@@ -920,13 +1061,18 @@ async fn resolve_by_web_scrape_inner(
         "bangumi: resolve_subject"
     );
 
-    let mut details =
-        collect_details(http, bgm_base_url, req.keywords, scrape_cache, api)
-            .await;
+    let mut details = collect_details(
+        http,
+        bgm_base_url,
+        req.keywords,
+        scrape_cache,
+        api,
+        premiere_date_for_log,
+    )
+    .await;
 
     if let Some(api) = api {
-        enrich_with_chain(api, http, bgm_base_url, &mut details, scrape_cache)
-            .await;
+        enrich_with_chain(api, &mut details, scrape_cache).await;
     }
 
     let all_titles: Vec<&str> = req
@@ -1524,6 +1670,110 @@ mod tests {
         assert_eq!(related.len(), 1);
         assert_eq!(related.first().map(|r| r.id), Some(43));
         assert_eq!(related.first().map(|r| r.relation.as_str()), Some("续集"));
+    }
+
+    // ── search_subjects_api ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn search_subjects_api_uses_correct_path() {
+        // Verifies that the URL does not double the /v0 prefix.
+        // Old bug: base_url="…/v0" + "/v0/search/subjects" → "…/v0/v0/search/…".
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let results = api.search_subjects_api("AnimeA", 50, None).await;
+        // Mock matched (correct path) → no parse error → empty list returned.
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_subjects_api_returns_candidates() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{
+                        "id": 516416,
+                        "name": "AnimeA 年番2",
+                        "name_cn": "",
+                        "date": "2025-06-05"
+                    }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let results = api
+            .search_subjects_api("AnimeA", 50, Some("2025-01-01"))
+            .await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results.first().map(|c| c.subject_id), Some(516416));
+    }
+
+    // ── fetch_subject_detail_api ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn fetch_subject_detail_api_builds_detail_from_json() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/516416"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "id": 516416,
+                    "name": "师兔啊师兔 年番2",
+                    "name_cn": "",
+                    "date": "2025-06-05",
+                    "platform": "WEB"
+                }),
+            ))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/516416/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "sort": 92.0, "name": "Ep92", "name_cn": "",
+                          "date": "2025-06-05" },
+                        { "sort": 93.0, "name": "Ep93", "name_cn": "第93集",
+                          "date": "2025-06-12" }
+                    ]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let detail = api.fetch_subject_detail_api(516416).await.unwrap();
+        assert_eq!(detail.subject_id, 516416);
+        assert_eq!(detail.name, "师兔啊师兔 年番2");
+        assert!(detail.name_jp.is_none()); // name_cn is empty → no jp alias
+        assert_eq!(detail.start_date.as_deref(), Some("2025-06-05"));
+        assert_eq!(detail.episodes.len(), 2);
+        assert_eq!(detail.ep_range, Some((92, 93)));
+        // name_cn present on ep93 → used as title
+        assert_eq!(
+            detail.episodes.get(1).map(|e| e.title.as_str()),
+            Some("第93集")
+        );
+        // name_cn empty on ep92 → falls back to name
+        assert_eq!(
+            detail.episodes.first().map(|e| e.title.as_str()),
+            Some("Ep92")
+        );
     }
 
     // ── get_subject_collection ────────────────────────────────────────────────
