@@ -117,8 +117,10 @@ export const uk: typeof zhCN = {
 
     // Network
     page_network: "Мережа",
-    net_proxy: "Проксі",
-    net_proxy_desc: "Підтримує http://, https://, socks5://；напр. http://127.0.0.1:6152 або socks5://127.0.0.1:6153；залиште порожнім щоб вимкнути",
+    net_proxy_http: "HTTP проксі",
+    net_proxy_https: "HTTPS проксі",
+    net_proxy_socks5: "SOCKS5 проксі",
+    net_proxy_desc: "Лише host:port; вставте повний URL для автовизначення схеми; залиште порожнім щоб вимкнути",
     net_proxy_enabled: "Увімкнути проксі",
     net_proxy_enabled_desc: "Коли вимкнено, URL зберігається, але всі підключення прямі; приватні IP (192.168.x, 10.x тощо) завжди автоматично обходять проксі",
     net_skip_tls: "Пропускати перевірку TLS",

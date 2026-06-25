@@ -116,8 +116,10 @@ export const sk: typeof zhCN = {
 
     // Network
     page_network: "Sieť",
-    net_proxy: "Proxy",
-    net_proxy_desc: "Podporuje http://, https://, socks5://；napr. http://127.0.0.1:6152 alebo socks5://127.0.0.1:6153；nechajte prázdne na zakázanie",
+    net_proxy_http: "HTTP proxy",
+    net_proxy_https: "HTTPS proxy",
+    net_proxy_socks5: "SOCKS5 proxy",
+    net_proxy_desc: "Iba host:port; vložte celú URL pre automatické rozpoznanie schémy; nechajte prázdne pre zakázanie",
     net_proxy_enabled: "Povoliť proxy",
     net_proxy_enabled_desc: "Pri deaktivácii sa URL zachová, ale všetky spojenia sú priame; privátne IP adresy (192.168.x, 10.x) vždy automaticky obchádzajú proxy",
     net_skip_tls: "Preskočiť overenie TLS",

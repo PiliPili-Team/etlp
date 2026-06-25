@@ -114,8 +114,10 @@ export const ar: typeof zhCN = {
 
     // Network
     page_network: "الشبكة",
-    net_proxy: "الوكيل",
-    net_proxy_desc: "يدعم http://، https://، socks5://؛ مثال: http://127.0.0.1:6152 أو socks5://127.0.0.1:6153؛ اتركه فارغًا للتعطيل",
+    net_proxy_http: "HTTP بروكسي",
+    net_proxy_https: "HTTPS بروكسي",
+    net_proxy_socks5: "بروكسي SOCKS5",
+    net_proxy_desc: "أدخل host:port فقط؛ لصق URL كامل لاكتشاف البروتوكول تلقائياً؛ اتركه فارغاً لتعطيله",
     net_proxy_enabled: "تفعيل البروكسي",
     net_proxy_enabled_desc: "عند الإيقاف، تُحتفظ بعنوان البروكسي لكن تُجرى الاتصالات مباشرةً؛ عناوين IP الخاصة (192.168.x وَ10.x) تتجاوز البروكسي تلقائياً",
     net_skip_tls: "تخطّي التحقق من TLS",

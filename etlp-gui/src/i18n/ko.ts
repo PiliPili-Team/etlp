@@ -113,8 +113,10 @@ export const ko: typeof zhCN = {
 
     // Network
     page_network: "네트워크",
-    net_proxy: "프록시",
-    net_proxy_desc: "http://, https://, socks5:// 지원；예: http://127.0.0.1:6152 또는 socks5://127.0.0.1:6153；비우면 비활성화",
+    net_proxy_http: "HTTP 프록시",
+    net_proxy_https: "HTTPS 프록시",
+    net_proxy_socks5: "SOCKS5 프록시",
+    net_proxy_desc: "host:port만 입력；전체 URL을 붙여넣으면 자동 감지；비워두면 비활성화",
     net_proxy_enabled: "프록시 활성화",
     net_proxy_enabled_desc: "비활성화해도 URL은 유지되지만 모든 연결이 직접 이루어집니다；사설 IP(192.168.x, 10.x 등)는 항상 자동으로 프록시를 우회합니다",
     net_skip_tls: "TLS 검증 건너뛰기",

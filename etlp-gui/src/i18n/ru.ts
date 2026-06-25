@@ -115,8 +115,10 @@ export const ru: typeof zhCN = {
 
     // Network
     page_network: "Сеть",
-    net_proxy: "Прокси",
-    net_proxy_desc: "Поддерживает http://, https://, socks5://；напр. http://127.0.0.1:6152 или socks5://127.0.0.1:6153；оставьте пустым для отключения",
+    net_proxy_http: "HTTP прокси",
+    net_proxy_https: "HTTPS прокси",
+    net_proxy_socks5: "SOCKS5 прокси",
+    net_proxy_desc: "Только host:port; вставьте полный URL для автоопределения схемы; оставьте пустым для отключения",
     net_proxy_enabled: "Включить прокси",
     net_proxy_enabled_desc: "При отключении URL сохраняется, но все соединения прямые; приватные IP (192.168.x, 10.x и др.) всегда обходят прокси автоматически",
     net_skip_tls: "Пропускать проверку TLS",

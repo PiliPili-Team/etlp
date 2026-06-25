@@ -113,8 +113,10 @@ export const th: typeof zhCN = {
 
     // Network
     page_network: "เครือข่าย",
-    net_proxy: "Proxy",
-    net_proxy_desc: "รองรับ http://, https://, socks5://；เช่น http://127.0.0.1:6152 หรือ socks5://127.0.0.1:6153；ปล่อยว่างเพื่อปิด",
+    net_proxy_http: "HTTP Proxy",
+    net_proxy_https: "HTTPS Proxy",
+    net_proxy_socks5: "SOCKS5 Proxy",
+    net_proxy_desc: "ใส่แค่ host:port；วางURL เต็มเพื่อตรวจจับ scheme อัตโนมัติ；ปล่อยว่างเพื่อปิด",
     net_proxy_enabled: "เปิดใช้ Proxy",
     net_proxy_enabled_desc: "เมื่อปิด URL จะถูกเก็บไว้แต่การเชื่อมต่อทั้งหมดจะตรง；IP ส่วนตัว (192.168.x, 10.x) จะข้าม proxy โดยอัตโนมัติ",
     net_skip_tls: "ข้ามการตรวจสอบ TLS",

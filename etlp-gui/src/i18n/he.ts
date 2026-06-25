@@ -113,8 +113,10 @@ export const he: typeof zhCN = {
 
     // Network
     page_network: "רשת",
-    net_proxy: "פרוקסי",
-    net_proxy_desc: "תומך ב-http://‏, https://‏, socks5://；לדוג׳ http://127.0.0.1:6152 או socks5://127.0.0.1:6153；השאר ריק להשבתה",
+    net_proxy_http: "פרוקסי HTTP",
+    net_proxy_https: "פרוקסי HTTPS",
+    net_proxy_socks5: "פרוקסי SOCKS5",
+    net_proxy_desc: "הכנס host:port בלבד; הדבק URL מלא לזיהוי אוטומטי של הפרוטוקול; השאר ריק להשבתה",
     net_proxy_enabled: "הפעל פרוקסי",
     net_proxy_enabled_desc: "כשמושבת, ה-URL נשמר אך כל החיבורים ישירים; כתובות IP פרטיות (192.168.x, 10.x) עוקפות את הפרוקסי אוטומטית",
     net_skip_tls: "דלג על אימות TLS",

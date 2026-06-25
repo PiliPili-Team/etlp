@@ -28,7 +28,9 @@ interface ConfigDto {
     kill_process_at_start: boolean;
     last_ep_disable_playlist: boolean;
     version_prefer_for_playlist: boolean;
-    proxy: string;
+    proxy_http: string;
+    proxy_https: string;
+    proxy_socks5: string;
     proxy_enabled: boolean;
     redirect_check_host: string[];
     skip_certificate_verify: boolean;
@@ -380,6 +382,97 @@ function SelectRow({
                         </option>
                     ))}
                 </select>
+            </div>
+        </div>
+    );
+}
+
+// ── Proxy row ─────────────────────────────────────────────────────────────────
+
+type ProxyScheme = "http" | "https" | "socks5";
+
+function parseProxyUrl(full: string, def: ProxyScheme): [ProxyScheme, string] {
+    const m = full.match(/^(https?|socks[45]):\/\/(.+)$/i);
+    if (m) {
+        const s = m[1].toLowerCase();
+        const scheme: ProxyScheme = s.startsWith("socks") ? "socks5" : (s as ProxyScheme);
+        return [scheme, m[2]];
+    }
+    return [def, full];
+}
+
+function ProxyRow({
+    label,
+    desc,
+    value,
+    defaultScheme,
+    onCommit,
+}: {
+    label: string;
+    desc?: string;
+    value: string;
+    defaultScheme: ProxyScheme;
+    onCommit: (v: string | null) => void;
+}) {
+    const [prevValue, setPrevValue] = useState(value);
+    const [scheme, setScheme] = useState<ProxyScheme>(() => parseProxyUrl(value, defaultScheme)[0]);
+    const [hostPort, setHostPort] = useState(() => parseProxyUrl(value, defaultScheme)[1]);
+
+    if (prevValue !== value) {
+        setPrevValue(value);
+        const [s, hp] = parseProxyUrl(value, defaultScheme);
+        setScheme(s);
+        setHostPort(hp);
+    }
+
+    const handleInput = (raw: string) => {
+        const m = raw.match(/^(https?|socks[45]):\/\/(.+)$/i);
+        if (m) {
+            const s = m[1].toLowerCase();
+            setScheme(s.startsWith("socks") ? "socks5" : (s as ProxyScheme));
+            setHostPort(m[2]);
+        } else {
+            setHostPort(raw);
+        }
+    };
+
+    const commit = (hp: string, sc: ProxyScheme) => {
+        const trimmed = hp.trim();
+        onCommit(trimmed ? `${sc}://${trimmed}` : null);
+    };
+
+    return (
+        <div className="row">
+            <div className="row-label">
+                <div>{label}</div>
+                {desc && <div className="row-desc">{desc}</div>}
+            </div>
+            <div className="row-control">
+                <div className="proxy-input">
+                    <select
+                        className="select proxy-scheme"
+                        value={scheme}
+                        onChange={(e) => {
+                            const next = e.target.value as ProxyScheme;
+                            setScheme(next);
+                            if (hostPort.trim()) commit(hostPort, next);
+                        }}
+                    >
+                        <option value="http">http://</option>
+                        <option value="https">https://</option>
+                        <option value="socks5">socks5://</option>
+                    </select>
+                    <input
+                        className="input code"
+                        value={hostPort}
+                        placeholder="127.0.0.1:6152"
+                        onChange={(e) => handleInput(e.target.value)}
+                        onBlur={() => commit(hostPort, scheme)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                    />
+                </div>
             </div>
         </div>
     );
@@ -1225,13 +1318,24 @@ function NetworkSection({
         <>
             <div className="page-title">{t("page_network")}</div>
             <div className="settings-group">
-                <InputRow
-                    label={t("net_proxy")}
+                <ProxyRow
+                    label={t("net_proxy_http")}
                     desc={t("net_proxy_desc")}
-                    value={cfg.proxy}
-                    placeholder="http://127.0.0.1:6152"
-                    mono
-                    onCommit={(v) => update("dev", "proxy", v || null)}
+                    value={cfg.proxy_http}
+                    defaultScheme="http"
+                    onCommit={(v) => update("dev", "proxy_http", v)}
+                />
+                <ProxyRow
+                    label={t("net_proxy_https")}
+                    value={cfg.proxy_https}
+                    defaultScheme="https"
+                    onCommit={(v) => update("dev", "proxy_https", v)}
+                />
+                <ProxyRow
+                    label={t("net_proxy_socks5")}
+                    value={cfg.proxy_socks5}
+                    defaultScheme="socks5"
+                    onCommit={(v) => update("dev", "proxy_socks5", v)}
                 />
                 <ToggleRow
                     label={t("net_proxy_enabled")}

@@ -115,8 +115,10 @@ export const tr: typeof zhCN = {
 
     // Network
     page_network: "Ağ",
-    net_proxy: "Proxy",
-    net_proxy_desc: "http://, https://, socks5:// desteklenir；örn. http://127.0.0.1:6152 veya socks5://127.0.0.1:6153；devre dışı için boş bırakın",
+    net_proxy_http: "HTTP Proxy",
+    net_proxy_https: "HTTPS Proxy",
+    net_proxy_socks5: "SOCKS5 Proxy",
+    net_proxy_desc: "Sadece host:port girin; tam URL yapıştırarak şemayı otomatik algılayın; devre dışı için boş bırakın",
     net_proxy_enabled: "Proxy'yi Etkinleştir",
     net_proxy_enabled_desc: "Devre dışıyken URL korunur ancak tüm bağlantılar doğrudan yapılır; özel IP'ler (192.168.x, 10.x) her zaman otomatik olarak atlanır",
     net_skip_tls: "TLS Doğrulamasını Atla",

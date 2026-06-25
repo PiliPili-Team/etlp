@@ -838,6 +838,22 @@ html[data-center-nav="true"] .sidebar {
     box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ── Proxy row ─────────────────────────────────────────────────────────── */
+.proxy-input {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.proxy-input .input {
+    flex: 1;
+}
+
+.select.proxy-scheme {
+    min-width: 100px;
+    flex-shrink: 0;
+}
+
 /* ── Tag list ──────────────────────────────────────────────────────────── */
 .tag-list {
     display: flex;

@@ -115,7 +115,9 @@ pub struct ConfigDto {
     pub last_ep_disable_playlist: bool,
     pub version_prefer_for_playlist: bool,
     // [dev] – network
-    pub proxy: String,
+    pub proxy_http: String,
+    pub proxy_https: String,
+    pub proxy_socks5: String,
     pub proxy_enabled: bool,
     pub redirect_check_host: Vec<String>,
     pub skip_certificate_verify: bool,
@@ -167,7 +169,9 @@ impl From<&Config> for ConfigDto {
             kill_process_at_start: c.dev.kill_process_at_start,
             last_ep_disable_playlist: c.dev.last_ep_disable_playlist,
             version_prefer_for_playlist: c.dev.version_prefer_for_playlist,
-            proxy: c.dev.proxy.clone().unwrap_or_default(),
+            proxy_http: c.dev.proxy_http.clone().unwrap_or_default(),
+            proxy_https: c.dev.proxy_https.clone().unwrap_or_default(),
+            proxy_socks5: c.dev.proxy_socks5.clone().unwrap_or_default(),
             proxy_enabled: c.dev.proxy_enabled,
             redirect_check_host: c.dev.redirect_check_host.clone(),
             skip_certificate_verify: c.dev.skip_certificate_verify,
@@ -240,10 +244,11 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         }
     }
 
-    let proxy = config.dev.proxy.clone();
     let cert_verify = !config.dev.skip_certificate_verify;
     let http_client = HttpClientBuilder::new()
-        .proxy(proxy)
+        .proxy_http(config.dev.proxy_http.clone())
+        .proxy_https(config.dev.proxy_https.clone())
+        .proxy_socks5(config.dev.proxy_socks5.clone())
         .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())

@@ -109,8 +109,10 @@ export const zhCN = {
 
     // Network
     page_network: "网络",
-    net_proxy: "代理",
-    net_proxy_desc: "支持 http://、https://、socks5://；如 http://127.0.0.1:6152 或 socks5://127.0.0.1:6153；留空不使用",
+    net_proxy_http: "HTTP 代理",
+    net_proxy_https: "HTTPS 代理",
+    net_proxy_socks5: "SOCKS5 代理",
+    net_proxy_desc: "仅填 host:port，如 127.0.0.1:6152；粘贴完整 URL 自动识别协议；留空不使用",
     net_proxy_enabled: "启用代理",
     net_proxy_enabled_desc: "关闭后代理地址仍保留，但所有连接直接发出；内网媒体服务器无需关闭此项，私有 IP 自动绕过代理",
     net_skip_tls: "跳过 TLS 证书验证",

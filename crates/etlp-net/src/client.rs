@@ -86,54 +86,65 @@ pub enum NetError {
 pub type Result<T> = std::result::Result<T, NetError>;
 
 /// Builder for [`HttpClient`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HttpClientBuilder {
-    proxy: Option<String>,
+    /// Proxy for HTTP traffic.  Full URL: `http://host:port`.
+    proxy_http: Option<String>,
+    /// Proxy for HTTPS traffic (CONNECT tunnel).  Usually `http://host:port`.
+    proxy_https: Option<String>,
+    /// SOCKS5 catch-all.  Used for traffic not matched by the per-scheme proxies.
+    proxy_socks5: Option<String>,
+    /// When `false`, all proxy config is ignored and connections are direct.
     proxy_enabled: bool,
     cert_verify: bool,
-    timeout: Duration,
+    timeout: Option<Duration>,
     retry: u32,
     /// User-Agent for normal requests. `None` → [`UA_ETLP`].
     user_agent: Option<String>,
-}
-
-impl Default for HttpClientBuilder {
-    fn default() -> Self {
-        Self {
-            proxy: None,
-            proxy_enabled: true,
-            cert_verify: true,
-            timeout: DEFAULT_TIMEOUT,
-            retry: DEFAULT_RETRY,
-            user_agent: None,
-        }
-    }
 }
 
 impl HttpClientBuilder {
     /// Start from defaults.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            proxy_enabled: true,
+            cert_verify: true,
+            timeout: None,
+            retry: DEFAULT_RETRY,
+            ..Default::default()
+        }
     }
 
-    /// HTTP proxy as `host:port` (no scheme). `None` disables proxying.
+    /// Proxy for HTTP traffic (full URL: `http://host:port`).
     #[must_use]
-    pub fn proxy(mut self, proxy: Option<String>) -> Self {
-        self.proxy = proxy;
+    pub fn proxy_http(mut self, proxy: Option<String>) -> Self {
+        self.proxy_http = proxy;
         self
     }
 
-    /// Whether the configured proxy is active.  When `false`, the URL stored
-    /// in `proxy` is retained but ignored — all connections are direct.
+    /// Proxy for HTTPS traffic (full URL: `http://host:port` or `https://...`).
+    #[must_use]
+    pub fn proxy_https(mut self, proxy: Option<String>) -> Self {
+        self.proxy_https = proxy;
+        self
+    }
+
+    /// SOCKS5 catch-all proxy (full URL: `socks5://host:port`).
+    #[must_use]
+    pub fn proxy_socks5(mut self, proxy: Option<String>) -> Self {
+        self.proxy_socks5 = proxy;
+        self
+    }
+
+    /// Whether any configured proxy is active.
     #[must_use]
     pub fn proxy_enabled(mut self, enabled: bool) -> Self {
         self.proxy_enabled = enabled;
         self
     }
 
-    /// Whether to verify TLS certificates (`false` mirrors
-    /// `dev.skip_certificate_verify`).
+    /// Whether to verify TLS certificates.
     #[must_use]
     pub fn cert_verify(mut self, verify: bool) -> Self {
         self.cert_verify = verify;
@@ -143,7 +154,7 @@ impl HttpClientBuilder {
     /// Default per-request timeout.
     #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+        self.timeout = Some(timeout);
         self
     }
 
@@ -156,22 +167,24 @@ impl HttpClientBuilder {
 
     /// Override the User-Agent for normal requests.
     ///
-    /// Empty strings are treated the same as `None` — both fall back to
-    /// [`UA_ETLP`]. Download and prefetch clients are not affected.
+    /// Empty strings fall back to [`UA_ETLP`].
     #[must_use]
     pub fn user_agent(mut self, ua: Option<String>) -> Self {
         self.user_agent = ua.filter(|s| !s.is_empty());
         self
     }
 
-    /// Build the client (constructs one redirect-following and one
-    /// redirect-stopping inner client).
+    /// Build the client.
     pub fn build(self) -> Result<HttpClient> {
-        let effective_proxy = if self.proxy_enabled { self.proxy.as_ref() } else { None };
-        let follow =
-            build_inner(effective_proxy, self.cert_verify, self.timeout, true)?;
-        let no_follow =
-            build_inner(effective_proxy, self.cert_verify, self.timeout, false)?;
+        let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
+        let proxies = if self.proxy_enabled {
+            Some((self.proxy_http, self.proxy_https, self.proxy_socks5))
+        } else {
+            tracing::debug!("http_client: proxy disabled");
+            None
+        };
+        let follow = build_inner(&proxies, self.cert_verify, timeout, true)?;
+        let no_follow = build_inner(&proxies, self.cert_verify, timeout, false)?;
         let ua = self.user_agent.unwrap_or_else(|| UA_ETLP.to_owned());
         Ok(HttpClient {
             follow,
@@ -179,19 +192,6 @@ impl HttpClientBuilder {
             retry: self.retry,
             user_agent: ua,
         })
-    }
-}
-
-/// Normalise the user-supplied proxy string to a full URL.
-///
-/// Bare `host:port` (no scheme) is treated as HTTP.  A string that already
-/// contains `://` is left untouched so `http://`, `https://`, and `socks5://`
-/// all work as-is.
-fn normalise_proxy_url(raw: &str) -> String {
-    if raw.contains("://") {
-        raw.to_owned()
-    } else {
-        format!("http://{raw}")
     }
 }
 
@@ -217,25 +217,34 @@ fn is_bypass_host(host: &str, full_url: &str) -> bool {
     false
 }
 
+type ProxyTriple = (Option<String>, Option<String>, Option<String>);
+
 fn build_inner(
-    proxy: Option<&String>,
+    proxies: &Option<ProxyTriple>,
     cert_verify: bool,
     timeout: Duration,
     follow_redirects: bool,
 ) -> Result<Client> {
-    let policy = if follow_redirects {
-        Policy::default()
-    } else {
-        Policy::none()
-    };
+    let policy = if follow_redirects { Policy::default() } else { Policy::none() };
     let mut builder = Client::builder().timeout(timeout).redirect(policy);
     if !cert_verify {
         builder = builder.danger_accept_invalid_certs(true);
     }
-    if let Some(raw) = proxy {
-        let proxy_url = normalise_proxy_url(raw);
-        tracing::debug!(proxy = %proxy_url, "http_client: proxy configured");
-        let proxy_url2 = proxy_url.clone();
+    if let Some((ph, ps, p5)) = proxies {
+        let any = ph.as_deref().or(ps.as_deref()).or(p5.as_deref());
+        if any.is_some() {
+            tracing::debug!(
+                http = ?ph.as_deref(),
+                https = ?ps.as_deref(),
+                socks5 = ?p5.as_deref(),
+                "http_client: proxy configured"
+            );
+        } else {
+            tracing::debug!("http_client: no proxy configured");
+        }
+        let ph = ph.clone();
+        let ps = ps.clone();
+        let p5 = p5.clone();
         let custom = Proxy::custom(move |url| {
             let host = url.host_str().unwrap_or("");
             if is_bypass_host(host, url.as_str()) {
@@ -243,14 +252,23 @@ fn build_inner(
                     target_host = %host,
                     "http_client: proxy bypassed (local/private/plex)"
                 );
-                None
-            } else {
+                return None;
+            }
+            // Route by request scheme; SOCKS5 acts as catch-all.
+            let candidate: Option<&str> = match url.scheme() {
+                "http" => ph.as_deref().or(p5.as_deref()),
+                "https" => ps.as_deref().or(p5.as_deref()),
+                _ => p5.as_deref(),
+            };
+            if let Some(proxy_url) = candidate {
                 tracing::debug!(
                     target_url = %url,
-                    proxy = %proxy_url2,
+                    proxy = %proxy_url,
                     "http_client: routing via proxy"
                 );
-                Url::parse(&proxy_url2).ok()
+                Url::parse(proxy_url).ok()
+            } else {
+                None
             }
         });
         builder = builder.proxy(custom);

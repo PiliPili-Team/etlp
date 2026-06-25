@@ -113,8 +113,10 @@ export const ja: typeof zhCN = {
 
     // Network
     page_network: "ネットワーク",
-    net_proxy: "プロキシ",
-    net_proxy_desc: "http://、https://、socks5:// に対応；例 http://127.0.0.1:6152 または socks5://127.0.0.1:6153；空で無効",
+    net_proxy_http: "HTTP プロキシ",
+    net_proxy_https: "HTTPS プロキシ",
+    net_proxy_socks5: "SOCKS5 プロキシ",
+    net_proxy_desc: "host:portのみ入力；完全なURLを貼り付けると自動検出；空欄で無効",
     net_proxy_enabled: "プロキシを有効化",
     net_proxy_enabled_desc: "無効にしてもURLは保存されすべての接続が直接行われます；プライベートIP（192.168.x、10.xなど）は常に自動的にプロキシを回避します",
     net_skip_tls: "TLS 検証をスキップ",

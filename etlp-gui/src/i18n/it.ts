@@ -117,8 +117,10 @@ export const it: typeof zhCN = {
 
     // Network
     page_network: "Rete",
-    net_proxy: "Proxy",
-    net_proxy_desc: "Supporta http://, https://, socks5://；es. http://127.0.0.1:6152 o socks5://127.0.0.1:6153；vuoto per disabilitare",
+    net_proxy_http: "Proxy HTTP",
+    net_proxy_https: "Proxy HTTPS",
+    net_proxy_socks5: "Proxy SOCKS5",
+    net_proxy_desc: "Solo host:port; incolla un URL completo per rilevare lo schema automaticamente; vuoto per disattivare",
     net_proxy_enabled: "Abilita proxy",
     net_proxy_enabled_desc: "Se disabilitato, l'URL viene mantenuto ma tutte le connessioni sono dirette; gli IP privati (192.168.x, 10.x ecc.) vengono bypassati automaticamente",
     net_skip_tls: "Salta verifica TLS",

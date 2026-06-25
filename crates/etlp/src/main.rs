@@ -115,10 +115,11 @@ async fn main() {
         );
     }
 
-    let proxy = config.dev.proxy.clone();
     let cert_verify = !config.dev.skip_certificate_verify;
     let http_client = match HttpClientBuilder::new()
-        .proxy(proxy)
+        .proxy_http(config.dev.proxy_http.clone())
+        .proxy_https(config.dev.proxy_https.clone())
+        .proxy_socks5(config.dev.proxy_socks5.clone())
         .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())

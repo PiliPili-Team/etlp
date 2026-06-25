@@ -95,19 +95,17 @@ pub struct DevSection {
     pub log_max_files: usize,
     /// Kill leftover player processes on startup.
     pub kill_process_at_start: bool,
-    /// Unified proxy for etlp's own HTTP client and the player.
-    ///
-    /// Accepts a full URL including scheme:
-    /// - `http://host:port`
-    /// - `https://host:port`
-    /// - `socks5://host:port`
-    ///
-    /// Legacy bare `host:port` without a scheme is treated as HTTP.
-    /// SOCKS5 is forwarded to etlp's own HTTP requests only; the player
-    /// receives it only when it supports non-HTTP proxies natively.
-    pub proxy: Option<String>,
-    /// When `false`, the proxy URL is stored but ignored — all connections are
-    /// made directly. Defaults to `true` so a configured proxy is active.
+    /// Proxy for HTTP traffic (`http://host:port`).  Also forwarded to the
+    /// player via `--http-proxy` when it speaks HTTP/HTTPS.
+    pub proxy_http: Option<String>,
+    /// Proxy for HTTPS traffic.  Usually an HTTP proxy server that speaks
+    /// CONNECT tunnelling (`http://host:port`), but can also be `https://`.
+    pub proxy_https: Option<String>,
+    /// SOCKS5 proxy used as a catch-all for any traffic not matched by the
+    /// per-protocol proxies above.  Not forwarded to the player.
+    pub proxy_socks5: Option<String>,
+    /// When `false`, all proxy URLs are retained but every connection is made
+    /// directly.  Private IP ranges (RFC 1918) are always bypassed.
     pub proxy_enabled: bool,
     /// Disable TLS certificate verification (insecure; for local dev only).
     pub skip_certificate_verify: bool,
@@ -167,7 +165,9 @@ impl Default for DevSection {
             log_max_size_mb: 50,
             log_max_files: 7,
             kill_process_at_start: true,
-            proxy: None,
+            proxy_http: None,
+            proxy_https: None,
+            proxy_socks5: None,
             proxy_enabled: true,
             skip_certificate_verify: false,
             strm_direct_host: Vec::new(),

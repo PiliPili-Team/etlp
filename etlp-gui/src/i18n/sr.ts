@@ -114,8 +114,10 @@ export const sr: typeof zhCN = {
 
     // Network
     page_network: "Мрежа",
-    net_proxy: "Прокси",
-    net_proxy_desc: "Подржава http://, https://, socks5://；нпр. http://127.0.0.1:6152 или socks5://127.0.0.1:6153；оставите празно за онемогућавање",
+    net_proxy_http: "HTTP прокси",
+    net_proxy_https: "HTTPS прокси",
+    net_proxy_socks5: "SOCKS5 прокси",
+    net_proxy_desc: "Само host:port; налепите пун URL за аутоматско откривање схеме; оставите празно за онемогућавање",
     net_proxy_enabled: "Омогући прокси",
     net_proxy_enabled_desc: "Када је искључено, URL се чува али су све конекције директне; приватне IP адресе (192.168.x, 10.x) увек аутоматски заобилазе прокси",
     net_skip_tls: "Прескочи TLS верификацију",
