@@ -354,7 +354,7 @@ fn extract_popup_airdate(text: &str) -> Option<String> {
     let after = text[pos + marker.len()..].trim_start();
     let candidate = after.get(..10)?;
     let b = candidate.as_bytes();
-    if b.len() == 10 && b[4] == b'-' && b[7] == b'-' {
+    if b.get(4) == Some(&b'-') && b.get(7) == Some(&b'-') {
         Some(candidate.to_owned())
     } else {
         None
@@ -445,7 +445,7 @@ pub(crate) fn airdate_matches_premiere(
     episodes.iter().any(|e| {
         e.airdate
             .as_deref()
-            .and_then(|d| crate::bangumi::date_to_days_pub(d))
+            .and_then(crate::bangumi::date_to_days_pub)
             .is_some_and(|ep_d| (ep_d - t).abs() <= window_days)
     })
 }
@@ -527,6 +527,9 @@ pub struct ScrapeCache {
     pub search_results:
         std::collections::HashMap<String, Vec<SubjectCandidate>>,
     pub subject_details: std::collections::HashMap<u64, SubjectDetail>,
+    /// Subject IDs whose 前传/续集 relations have been fetched this pass.
+    /// Prevents redundant API calls when multiple episodes share the same arc.
+    pub chain_walked: std::collections::HashSet<u64>,
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────

@@ -544,6 +544,103 @@ impl BangumiApi {
         }
         Ok(map)
     }
+
+    /// Search subjects via the BGM JSON API.
+    ///
+    /// Called as fallback inside [`collect_details`] when
+    /// [`bangumi_web::web_search_all_pages`] returns zero results — e.g. when
+    /// BGM's anti-bot protection intercepts the scraping request. Applies the
+    /// same pre-screening filter so results are compatible with the rest of the
+    /// resolution pipeline.
+    pub(crate) async fn search_subjects_api(
+        &self,
+        keyword: &str,
+        limit: u32,
+    ) -> Vec<crate::bangumi_web::SubjectCandidate> {
+        use crate::bangumi_web::{
+            BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
+            base_match_score,
+        };
+
+        #[derive(serde::Deserialize)]
+        struct Page {
+            #[serde(default)]
+            data: Vec<Entry>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Entry {
+            id: u64,
+            name: String,
+            #[serde(default)]
+            name_cn: String,
+            date: Option<String>,
+        }
+
+        let url = format!(
+            "{}/v0/search/subjects?limit={limit}&offset=0",
+            self.base_url.trim_end_matches('/')
+        );
+        let body = serde_json::json!({
+            "keyword": keyword,
+            "filter": { "type": [2], "nsfw": true },
+        });
+
+        let resp = match self
+            .http
+            .post(&url)
+            .headers(self.auth_headers())
+            .json(&body)
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(keyword, "bangumi: api_search request failed: {e}");
+                return Vec::new();
+            }
+        };
+        let page: Page = match resp.json().await {
+            Ok(p) => p,
+            Err(e) => {
+                debug!(keyword, "bangumi: api_search parse failed: {e}");
+                return Vec::new();
+            }
+        };
+
+        let candidates: Vec<SubjectCandidate> = page
+            .data
+            .into_iter()
+            .filter_map(|e| {
+                let (name, name_jp) = if e.name_cn.is_empty() {
+                    (e.name.clone(), None)
+                } else {
+                    (e.name_cn.clone(), Some(e.name.clone()))
+                };
+                let score = base_match_score(
+                    keyword,
+                    &name,
+                    name_jp.as_deref().unwrap_or(""),
+                );
+                let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
+                debug!(
+                    subject_id = e.id,
+                    name = %name,
+                    score,
+                    result = if pass { "pass" } else { "skip" },
+                    "bangumi: api_candidate_prescreen"
+                );
+                pass.then_some(SubjectCandidate {
+                    subject_id: e.id,
+                    name,
+                    name_jp,
+                    search_date: e.date,
+                })
+            })
+            .collect();
+
+        debug!(keyword, hits = candidates.len(), "bangumi: api_search");
+        candidates
+    }
 }
 
 // ── Web-scrape resolution algorithm ────────────────────────────────────────────
@@ -632,12 +729,15 @@ fn best_subject_score(
 /// Collect [`SubjectDetail`]s for all candidates found by `keywords`.
 ///
 /// Uses `scrape_cache` to avoid duplicate searches and detail fetches within
-/// the same sync pass.
+/// the same sync pass. When `api` is provided and the web-scrape search returns
+/// no candidates (e.g. blocked by BGM anti-bot protection), falls back to the
+/// BGM JSON search API automatically.
 async fn collect_details(
     http: &reqwest::Client,
     bgm_base_url: &str,
     keywords: &[&str],
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    api: Option<&BangumiApi>,
 ) -> Vec<crate::bangumi_web::SubjectDetail> {
     use crate::bangumi_web;
     use std::collections::hash_map::Entry;
@@ -650,9 +750,21 @@ async fn collect_details(
         let key = (*keyword).to_owned();
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
-            let results =
+            let mut results =
                 bangumi_web::web_search_all_pages(http, bgm_base_url, keyword)
                     .await;
+            // BGM's anti-bot protection occasionally returns a challenge page
+            // that parses as zero results.  Fall back to the authenticated JSON
+            // API when that happens so the pipeline can still find candidates.
+            if results.is_empty()
+                && let Some(api) = api
+            {
+                debug!(
+                    keyword,
+                    "bangumi: web_search empty, falling back to api_search"
+                );
+                results = api.search_subjects_api(keyword, 50).await;
+            }
             e.insert(results);
         }
         let candidates = scrape_cache
@@ -684,34 +796,138 @@ async fn collect_details(
     details
 }
 
-/// Resolve a Bangumi subject by scraping bgm.tv search + detail pages.
+/// Walk the 前传/续集 relation chain from every subject currently in `details`,
+/// fetching detail pages for newly discovered arc subjects not yet in the cache.
 ///
-/// Implements the Priority-3 resolution path described in the spec:
-/// - Episode: ep-range filter → Round 1 exact title → Round 2 combined score
-/// - Movie: Round 1 exact title + date → Round 2 title similarity + date
+/// This ensures that arc subjects with BGM titles that differ from Emby's title
+/// (e.g. "年番2" vs the Emby season name) are still included in the matching
+/// candidate pool. Without chain enrichment, such subjects would only appear if
+/// the keyword search happened to return them; with enrichment they are reached
+/// transitively via the series' prequel/sequel links.
 ///
-/// `scrape_cache` is shared across all per-episode calls in one `sync_bangumi`
-/// pass so the same search / detail page is never fetched twice.
-pub async fn resolve_by_web_scrape(
+/// Enrichment stops when all reachable subjects have been walked or the total
+/// candidate count exceeds `MAX_CHAIN_SUBJECTS` (safety cap).
+async fn enrich_with_chain(
+    api: &BangumiApi,
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    details: &mut Vec<crate::bangumi_web::SubjectDetail>,
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+) {
+    use crate::bangumi_web;
+    use std::collections::{HashSet, VecDeque};
+
+    const MAX_CHAIN_SUBJECTS: usize = 30;
+
+    let mut in_result: HashSet<u64> =
+        details.iter().map(|d| d.subject_id).collect();
+    let mut queue: VecDeque<u64> = in_result.iter().copied().collect();
+
+    while let Some(id) = queue.pop_front() {
+        if scrape_cache.chain_walked.contains(&id) {
+            continue;
+        }
+        if in_result.len() >= MAX_CHAIN_SUBJECTS {
+            break;
+        }
+        scrape_cache.chain_walked.insert(id);
+
+        let related = match api.get_related_subjects(id).await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(subject_id = id, "bangumi: chain walk error: {e}");
+                continue;
+            }
+        };
+
+        for rel in related {
+            if !matches!(rel.relation.as_str(), "前传" | "续集") {
+                continue;
+            }
+            let rid = rel.id;
+            if !in_result.insert(rid) {
+                // Already in result set; still queue for its own chain walk.
+                if !scrape_cache.chain_walked.contains(&rid) {
+                    queue.push_back(rid);
+                }
+                continue;
+            }
+
+            let detail = if let Some(d) =
+                scrape_cache.subject_details.get(&rid).cloned()
+            {
+                d
+            } else {
+                let (name, name_jp) = if rel.name_cn.is_empty() {
+                    (rel.name.clone(), None)
+                } else {
+                    (rel.name_cn.clone(), Some(rel.name.clone()))
+                };
+                let candidate = bangumi_web::SubjectCandidate {
+                    subject_id: rid,
+                    name,
+                    name_jp,
+                    search_date: None,
+                };
+                let Some(d) = bangumi_web::fetch_subject_detail(
+                    http,
+                    bgm_base_url,
+                    &candidate,
+                )
+                .await
+                else {
+                    continue;
+                };
+                scrape_cache.subject_details.insert(rid, d.clone());
+                d
+            };
+
+            debug!(
+                subject_id = rid,
+                relation = %rel.relation,
+                from = id,
+                "bangumi: chain_enrichment"
+            );
+            details.push(detail);
+            queue.push_back(rid);
+        }
+    }
+}
+
+/// Core implementation shared by [`resolve_by_web_scrape`] and
+/// [`resolve_by_web_scrape_with_chain`].
+async fn resolve_by_web_scrape_inner(
     http: &reqwest::Client,
     bgm_base_url: &str,
     req: &WebScrapeReq<'_>,
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    api: Option<&BangumiApi>,
 ) -> Option<u64> {
-    let episode_for_log = match &req.target {
-        WebResolveTarget::Episode { episode, .. } => *episode,
-        WebResolveTarget::Movie { .. } => 0,
+    let (episode_for_log, premiere_date_for_log) = match &req.target {
+        WebResolveTarget::Episode {
+            episode,
+            premiere_date,
+            ..
+        } => (*episode, *premiere_date),
+        WebResolveTarget::Movie { premiere_date } => (0, *premiere_date),
     };
     debug!(
         series = req.series,
         season = req.season,
         episode = episode_for_log,
+        premiere_date = premiere_date_for_log.unwrap_or("none"),
         keywords = ?req.keywords,
         "bangumi: resolve_subject"
     );
 
-    let details =
-        collect_details(http, bgm_base_url, req.keywords, scrape_cache).await;
+    let mut details =
+        collect_details(http, bgm_base_url, req.keywords, scrape_cache, api)
+            .await;
+
+    if let Some(api) = api {
+        enrich_with_chain(api, http, bgm_base_url, &mut details, scrape_cache)
+            .await;
+    }
 
     let all_titles: Vec<&str> = req
         .keywords
@@ -745,6 +961,53 @@ pub async fn resolve_by_web_scrape(
             &details,
         ),
     }
+}
+
+/// Resolve a Bangumi subject by scraping bgm.tv search + detail pages.
+///
+/// Implements the Priority-3 resolution path described in the spec:
+/// - Episode: ep-range filter → Round 1 exact title → Round 2 combined score
+/// - Movie: Round 1 exact title + date → Round 2 title similarity + date
+///
+/// `scrape_cache` is shared across all per-episode calls in one `sync_bangumi`
+/// pass so the same search / detail page is never fetched twice.
+///
+/// For production use, prefer [`resolve_by_web_scrape_with_chain`], which
+/// additionally walks 前传/续集 relations to discover arc subjects that may
+/// have different BGM titles from the Emby series name.
+pub async fn resolve_by_web_scrape(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    req: &WebScrapeReq<'_>,
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+) -> Option<u64> {
+    resolve_by_web_scrape_inner(http, bgm_base_url, req, scrape_cache, None)
+        .await
+}
+
+/// Like [`resolve_by_web_scrape`] but also walks the 前传/续集 relation chain
+/// for every found subject, enriching the candidate pool with arc subjects
+/// whose BGM titles differ from the Emby series name.
+///
+/// Requires a [`BangumiApi`] reference for the `GET /v0/subjects/{id}/subjects`
+/// relation-list calls. The relation walk is cached in `scrape_cache` so
+/// repeated calls for the same series within one sync pass cost at most one API
+/// call per chain node.
+pub async fn resolve_by_web_scrape_with_chain(
+    http: &reqwest::Client,
+    bgm_base_url: &str,
+    req: &WebScrapeReq<'_>,
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    api: &BangumiApi,
+) -> Option<u64> {
+    resolve_by_web_scrape_inner(
+        http,
+        bgm_base_url,
+        req,
+        scrape_cache,
+        Some(api),
+    )
+    .await
 }
 
 fn pick_top(
@@ -802,11 +1065,29 @@ fn resolve_episode_matching(
         let by_date: Vec<_> = details
             .iter()
             .filter(|d| {
-                crate::bangumi_web::airdate_matches_premiere(
+                let matched = crate::bangumi_web::airdate_matches_premiere(
                     pd,
                     &d.episodes,
                     crate::bangumi_web::BANGUMI_DATE_WINDOW_DAYS,
-                )
+                );
+                // Diagnostic: log the first known episode airdate so the
+                // resolution trace shows exactly which date was compared.
+                let sample_ep_airdate = d
+                    .episodes
+                    .iter()
+                    .find(|e| e.airdate.is_some())
+                    .and_then(|e| e.airdate.as_deref())
+                    .unwrap_or("?");
+                debug!(
+                    subject_id = d.subject_id,
+                    name = %d.name,
+                    premiere_date = pd,
+                    sample_ep_airdate,
+                    ep_range = ?d.ep_range,
+                    airdate_match = matched,
+                    "bangumi: airdate_check"
+                );
+                matched
             })
             .collect();
         if !by_date.is_empty() {
