@@ -849,9 +849,43 @@ html[data-center-nav="true"] .sidebar {
     flex: 1;
 }
 
-.select.proxy-scheme {
-    min-width: 100px;
+/* Segmented scheme selector — pure React/CSS, no native macOS popup. */
+.proxy-scheme-tabs {
+    display: flex;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1.5px solid var(--border);
     flex-shrink: 0;
+}
+
+.proxy-scheme-tab {
+    padding: 5px 9px;
+    font-size: 12px;
+    font-family: "SF Mono", "Cascadia Code", ui-monospace, monospace;
+    border: none;
+    border-right: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-2);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    user-select: none;
+    transition:
+        background 0.12s,
+        color 0.12s;
+}
+
+.proxy-scheme-tab:last-child {
+    border-right: none;
+}
+
+.proxy-scheme-tab.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.proxy-scheme-tab:hover:not(.active) {
+    background: var(--surface-hover);
+    color: var(--text);
 }
 
 /* ── Tag list ──────────────────────────────────────────────────────────── */

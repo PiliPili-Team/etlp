@@ -102,12 +102,11 @@ fn portable_root() -> Option<PathBuf> {
         .get_or_init(|| {
             let exe = std::env::current_exe().ok()?;
             let exe_dir = exe.parent()?;
-            if exe_dir.join("portable.bin").exists()
-                || exe_dir.join("config").is_dir()
+            if (exe_dir.join("portable.bin").exists()
+                || exe_dir.join("config").is_dir())
+                && is_dir_writable(exe_dir)
             {
-                if is_dir_writable(exe_dir) {
-                    return Some(exe_dir.to_path_buf());
-                }
+                return Some(exe_dir.to_path_buf());
             }
             None
         })
