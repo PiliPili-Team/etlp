@@ -2425,7 +2425,7 @@ function GroupedSubjectMap({
     const [showUrlInput, setShowUrlInput] = useState(false);
     const [urlInput, setUrlInput] = useState("");
     const [urlBusy, setUrlBusy] = useState(false);
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const [deleteGroupTarget, setDeleteGroupTarget] = useState<string | null>(null);
     const [deleteItemTarget, setDeleteItemTarget] = useState<{
         groupName: string;
@@ -2770,13 +2770,13 @@ function GroupedSubjectMap({
                     {allGroupNames.map((groupName) => {
                         const mappings = getGroupMappings(groupName);
                         const isDefault = groupName === "#";
-                        const isCollapsed = collapsedGroups.has(groupName);
+                        const isCollapsed = !expandedGroups.has(groupName);
                         const isDropActive =
                             dragItem !== null &&
                             overTarget?.group === groupName &&
                             dragItem.group !== groupName;
                         const toggleCollapse = () =>
-                            setCollapsedGroups((prev) => {
+                            setExpandedGroups((prev) => {
                                 const next = new Set(prev);
                                 if (next.has(groupName)) next.delete(groupName);
                                 else next.add(groupName);
