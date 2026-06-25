@@ -394,4 +394,20 @@ export const zhTW: typeof zhCN = {
     dl_browse: "瀏覽…",
     dl_placeholder: "",
     dl_path_error: "路徑不存在，請檢查輸入",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "允許重複標記",
+    sys_bangumi_dup_desc:
+        "開啟後每次看完都會再次標記同一劇集 / 影片；關閉則啟用節流去重：同一條目在下方設置的節流時間內重複看完只標記一次",
+    sys_bangumi_dup_throttle: "重複標記節流時間（秒）",
+    sys_bangumi_dup_throttle_desc:
+        "關閉「允許重複標記」時生效：同一條目在該秒數內重複看完只記錄一次；最少 120 秒",
+    sys_bangumi_dup_throttle_floored: "節流時間不能小於 120 秒，已修正為 120",
+
+    // TMDB
+    sys_tmdb: "TMDB 整合",
+    sys_tmdb_key: "API Key",
+    sys_tmdb_key_desc:
+        "TMDB API Key，用於在媒體伺服器缺少放映日期時查詢集的首播日期；留空使用內建公共 Key",
+    sys_tmdb_key_placeholder: "",
 };

@@ -410,4 +410,21 @@ export const en: typeof zhCN = {
     dl_browse: "Browse…",
     dl_placeholder: "",
     dl_path_error: "Path does not exist, please check the input",
+
+    // Bangumi duplicate throttle
+    sys_bangumi_dup: "Allow Duplicate Marks",
+    sys_bangumi_dup_desc:
+        "When on, every completed watch re-marks the same episode/movie. When off, a throttle window deduplicates: the same item is only marked once within the configured window.",
+    sys_bangumi_dup_throttle: "Duplicate Mark Throttle (seconds)",
+    sys_bangumi_dup_throttle_desc:
+        "Active when Allow Duplicate Marks is off: the same item is recorded at most once within this many seconds. Minimum 120 s.",
+    sys_bangumi_dup_throttle_floored:
+        "Throttle cannot be less than 120 s, corrected to 120",
+
+    // TMDB
+    sys_tmdb: "TMDB Integration",
+    sys_tmdb_key: "API Key",
+    sys_tmdb_key_desc:
+        "TMDB API Key used to look up episode air dates when the media server has no PremiereDate. Leave empty to use the built-in public key.",
+    sys_tmdb_key_placeholder: "",
 };

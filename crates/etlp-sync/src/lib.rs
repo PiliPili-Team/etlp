@@ -16,6 +16,7 @@ pub mod bangumi;
 pub mod bangumi_map;
 mod curl;
 pub mod error;
+pub mod tmdb;
 pub mod trakt;
 
 pub use bangumi::{
@@ -27,6 +28,7 @@ pub use bangumi_map::{
     parse_mapping, parse_mappings, strip_group_prefix,
 };
 pub use error::{Result, SyncError};
+pub use tmdb::TmdbClient;
 pub use trakt::{
     DeviceCodeResponse, ScrobbleAction, TraktApi, TraktEpisode,
     TraktHistoryItem, TraktIds, TraktItemKind, TraktToken, sync_history,

@@ -1125,6 +1125,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         redirect_uri,
         enable_host,
         allow_duplicate,
+        trakt_throttle,
     ) = {
         let Ok(cfg) = state.config.read() else {
             warn!("trakt: config lock poisoned, skip");
@@ -1141,6 +1142,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.trakt.redirect_uri.clone(),
             cfg.trakt.enable_host.clone(),
             cfg.trakt.allow_duplicate,
+            cfg.trakt.duplicate_throttle(),
         )
     };
 
@@ -1219,7 +1221,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         let key = format!("trakt:{}:{}", data.netloc, data.item_id);
         let throttled = entry.completed
             && !allow_duplicate
-            && state.sync_recently_done(&key);
+            && state.sync_recently_done(&key, trakt_throttle);
 
         // Two APIs, split by progress so each does its own job and a watch is
         // never recorded twice:
@@ -1333,6 +1335,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         title_fallback,
         subject_map,
         mark_watching,
+        bangumi_allow_dup,
+        bangumi_throttle,
+        tmdb_api_key,
     ) = {
         let Ok(cfg) = state.config.read() else {
             return;
@@ -1349,6 +1354,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.title_search_fallback,
             cfg.bangumi.subject_map.clone(),
             cfg.bangumi.mark_watching,
+            cfg.bangumi.allow_duplicate,
+            cfg.bangumi.duplicate_throttle(),
+            cfg.tmdb.effective_api_key().to_owned(),
         )
     };
     // User-pinned subject mappings take priority over auto-resolution.
@@ -1399,6 +1407,16 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
 
+    // TMDB client used to look up episode air dates when Emby does not supply
+    // PremiereDate. Constructed once and shared across all entries in this pass.
+    let Ok(tmdb) = etlp_sync::TmdbClient::new(
+        &tmdb_api_key,
+        etlp_sync::TmdbClient::DEFAULT_BASE_URL,
+    ) else {
+        warn!("bangumi: failed to build TMDB client, air-date lookup disabled");
+        return;
+    };
+
     // Cache for series-level provider IDs fetched from Emby (keyed by
     // series_id). Emby stores the TMDB *series* id on the series item, not on
     // individual episode items, so a direct lookup of the episode's
@@ -1427,7 +1445,10 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // Throttle only once the episode is finished; while it is still in
         // progress, keep reporting so newer progress always reaches Bangumi.
         let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
-        if entry.completed && state.sync_recently_done(&key) {
+        if entry.completed
+            && !bangumi_allow_dup
+            && state.sync_recently_done(&key, bangumi_throttle)
+        {
             debug!(item = %data.media_title, "bangumi: throttled, skip");
             continue;
         }
@@ -1464,6 +1485,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 
         let Some(target) = resolve_bangumi_subject(
             &api,
+            &tmdb,
             data,
             title_fallback,
             &genres,
@@ -1597,6 +1619,7 @@ impl BangumiTarget {
 #[allow(clippy::too_many_arguments)]
 async fn resolve_bangumi_subject(
     api: &etlp_sync::BangumiApi,
+    tmdb: &etlp_sync::TmdbClient,
     data: &PlaybackData,
     title_fallback: bool,
     genres: &str,
@@ -1681,8 +1704,22 @@ async fn resolve_bangumi_subject(
     }
 
     let season = data.season_number.unwrap_or(1);
+    let episode = data.index.unwrap_or(0);
+
+    // Season 0 in TMDB means "Specials / Extras". These do not map reliably
+    // to any Bangumi subject via title search or the sequel chain.
+    if season == 0 {
+        warn!(
+            item = %data.media_title,
+            series = %data.series_name,
+            "bangumi: S0 specials cannot be auto-resolved — \
+             add an explicit ID mapping in Settings → Bangumi to sync this item"
+        );
+        return None;
+    }
+
     if !data.series_id.is_empty()
-        && let Some(id) = cache.get(&data.series_id, season)
+        && let Some(id) = cache.get(&data.series_id, season, episode)
     {
         debug!(id, "bangumi: subject from cache");
         return Some(BangumiTarget::auto(id));
@@ -1697,10 +1734,56 @@ async fn resolve_bangumi_subject(
         debug!("bangumi: no title keywords for fallback, skip");
         return None;
     }
-    let target_season = u32::try_from(season.max(1)).unwrap_or(1);
+    let target_season = u32::try_from(season).unwrap_or(1);
+
+    // Determine the episode's air date for date-guided subject resolution.
+    // Priority: Emby item's PremiereDate → TMDB API (when a series TMDB id
+    // and episode number are available). When both are absent we fall back
+    // to title-only resolution (legacy behaviour, higher false-positive risk).
+    let premiere_date: Option<String> = if data.premiere_date.is_some() {
+        data.premiere_date.clone()
+    } else {
+        let tmdb_series_id = series_provider_ids
+            .get("Tmdb")
+            .filter(|v| !v.is_empty())
+            .and_then(|v| v.parse::<u64>().ok());
+        let episode_u32 = data.index.and_then(|i| u32::try_from(i).ok());
+        let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
+        if let (Some(tid), Some(ep), Some(s)) =
+            (tmdb_series_id, episode_u32, season_u32)
+        {
+            let date = tmdb.episode_air_date(tid, s, ep).await;
+            if date.is_none() {
+                warn!(
+                    series = %data.series_name,
+                    season,
+                    episode,
+                    "bangumi: no air date from Emby or TMDB; \
+                     falling back to title-only resolution"
+                );
+            }
+            date
+        } else {
+            if !data.item_type.eq_ignore_ascii_case("movie") {
+                warn!(
+                    series = %data.series_name,
+                    season,
+                    episode,
+                    "bangumi: no TMDB series id or episode number available; \
+                     falling back to title-only resolution"
+                );
+            }
+            None
+        }
+    };
 
     match api
-        .resolve_subject_id(&keywords, target_season, BANGUMI_TITLE_MIN_SCORE)
+        .resolve_subject_id(
+            &keywords,
+            target_season,
+            BANGUMI_TITLE_MIN_SCORE,
+            premiere_date.as_deref(),
+        )
         .await
     {
         Ok(Some(id)) => {
@@ -1711,8 +1794,13 @@ async fn resolve_bangumi_subject(
                 "bangumi: resolved subject via title search"
             );
             if !data.series_id.is_empty()
-                && let Err(e) =
-                    cache.insert(&data.series_id, season, id, cache_path)
+                && let Err(e) = cache.insert(
+                    &data.series_id,
+                    season,
+                    episode,
+                    id,
+                    cache_path,
+                )
             {
                 warn!("bangumi: subject cache write failed: {e}");
             }

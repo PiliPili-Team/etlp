@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::error::{Result, SyncError};
 
@@ -311,6 +311,23 @@ fn date_diff_days(a: &str, b: &str) -> Option<i64> {
     Some((date_to_days(a)? - date_to_days(b)?).abs())
 }
 
+/// Convert a day index (from [`date_to_days`]) back to `"YYYY-MM-DD"`.
+///
+/// Uses the inverse of Howard Hinnant's days-from-civil algorithm.
+fn days_to_date_str(z: i64) -> String {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// Resolve a target episode to a Bangumi episode ID.
 ///
 /// Prefers the closest air-date match within `fuzzy_days` — robust against
@@ -547,25 +564,40 @@ impl BangumiApi {
 
     // ── Subject resolution by title ───────────────────────────────────────────
 
-    /// Resolve a Bangumi subject ID for a season using title search.
+    /// Resolve a Bangumi subject ID for an episode using title search and an
+    /// optional air-date hint.
     ///
-    /// Used when the media item lacks a `ProviderIds.Bangumi`. Tries each
-    /// keyword in order (native title first, then series name), scores every
-    /// candidate against all keywords, and walks the `续集` (sequel) chain from
-    /// the best-scoring franchise root to the subject for `season`. Returns
-    /// `None` when no candidate clears `min_score` or the season is unreachable.
+    /// When `premiere_date` (`"YYYY-MM-DD"` or an ISO-8601 prefix) is supplied,
+    /// the search is filtered to subjects whose air date is on or after
+    /// `premiere_date − 30 days`, narrowing the candidate set to the right
+    /// season or arc.  Among the filtered candidates the method picks the one
+    /// whose subject `date` is **closest** to `premiere_date`; title similarity
+    /// serves as a tiebreaker.  When no unique best candidate can be identified,
+    /// a warning is emitted and `None` is returned so the caller can prompt the
+    /// user to add an ID mapping.
+    ///
+    /// When `premiere_date` is absent the method falls back to the original
+    /// behaviour: score candidates by title similarity only and walk the `续集`
+    /// sequel chain to reach `season`.
     pub async fn resolve_subject_id(
         &self,
         keywords: &[&str],
         season: u32,
         min_score: f64,
+        premiere_date: Option<&str>,
     ) -> Result<Option<u64>> {
+        // When we have a premiere date, compute the search lower bound.
+        let search_from: Option<String> = premiere_date.and_then(|d| {
+            date_to_days(d).map(|days| days_to_date_str(days - 30))
+        });
+
         // Gather candidates from every keyword, de-duplicated by subject id.
         let mut candidates: Vec<BangumiSearchSubject> = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
-            for candidate in
-                self.search_subjects(keyword, None, None, 10).await?
+            for candidate in self
+                .search_subjects(keyword, search_from.as_deref(), None, 10)
+                .await?
             {
                 if seen.insert(candidate.id) {
                     candidates.push(candidate);
@@ -573,7 +605,16 @@ impl BangumiApi {
             }
         }
         if candidates.is_empty() {
-            debug!("bangumi: title search returned no candidates");
+            if premiere_date.is_some() {
+                warn!(
+                    keywords = ?keywords,
+                    premiere_date,
+                    "bangumi: no subject found for air date — \
+                     add an ID mapping in Settings → Bangumi"
+                );
+            } else {
+                debug!("bangumi: title search returned no candidates");
+            }
             return Ok(None);
         }
 
@@ -584,6 +625,77 @@ impl BangumiApi {
                 .map(|k| base_match_score(k, &c.name, &c.name_cn))
                 .fold(0.0_f64, f64::max)
         };
+
+        // ── Date-guided selection (when premiere_date is supplied) ────────────
+        //
+        // Rank candidates by absolute date difference from `premiere_date`, then
+        // break ties by title similarity.  Warn and return `None` when two or
+        // more candidates share the same (diff, score) pair — forcing the user
+        // to add an explicit mapping rather than guessing.
+        if let Some(ref target_date) = premiere_date.map(str::to_owned) {
+            let target_days = date_to_days(target_date);
+
+            // (date_diff_days, -score_millionths, subject_id)
+            // Sorting ascending puts best candidates first.
+            let mut scored: Vec<(i64, i64, u64)> = candidates
+                .iter()
+                .filter(|c| score_of(c) >= min_score)
+                .map(|c| {
+                    let diff = c.date.as_deref().and_then(|d| {
+                        target_days.and_then(|td| {
+                            date_to_days(d).map(|cd| (cd - td).abs())
+                        })
+                    });
+                    let diff = diff.unwrap_or(i64::MAX);
+                    // Negate score so that higher score sorts before lower.
+                    let neg_score = -(score_of(c) * 1_000_000.0) as i64;
+                    (diff, neg_score, c.id)
+                })
+                .collect();
+
+            if scored.is_empty() {
+                warn!(
+                    keywords = ?keywords,
+                    premiere_date = target_date.as_str(),
+                    "bangumi: no subject candidate cleared min_score — \
+                     add an ID mapping in Settings → Bangumi"
+                );
+                return Ok(None);
+            }
+
+            scored.sort_unstable_by_key(|(d, s, _)| (*d, *s));
+            let Some(&(best_diff, best_neg_score, _)) = scored.first() else {
+                return Ok(None);
+            };
+            let finalists: Vec<u64> = scored
+                .iter()
+                .filter(|(d, s, _)| *d == best_diff && *s == best_neg_score)
+                .map(|(_, _, id)| *id)
+                .collect();
+
+            return match finalists.as_slice() {
+                [id] => {
+                    debug!(
+                        subject_id = id,
+                        date_diff = best_diff,
+                        "bangumi: resolved subject by air date"
+                    );
+                    Ok(Some(*id))
+                }
+                _ => {
+                    warn!(
+                        keywords = ?keywords,
+                        premiere_date = target_date.as_str(),
+                        finalists = ?finalists,
+                        "bangumi: multiple subjects equally match air date — \
+                         add an ID mapping in Settings → Bangumi"
+                    );
+                    Ok(None)
+                }
+            };
+        }
+
+        // ── Fallback: title-only resolution (no premiere_date) ────────────────
 
         // Direct hit: a candidate whose own title states the target season and
         // whose base title matches. This handles franchises with continuous
@@ -642,7 +754,12 @@ impl BangumiApi {
         root: u64,
         season: u32,
     ) -> Result<Option<u64>> {
-        if season <= 1 {
+        // season == 0 means TMDB "Specials" — there is no reliable Bangumi
+        // equivalent reachable via the sequel chain; let the caller decide.
+        if season == 0 {
+            return Ok(None);
+        }
+        if season == 1 {
             return Ok(Some(root));
         }
         let mut current = root;
@@ -918,12 +1035,15 @@ impl BangumiApi {
 
 // ── Subject ID cache ────────────────────────────────────────────────────────────
 
-/// On-disk cache mapping `series_id:season` to a resolved Bangumi subject ID.
+/// On-disk cache mapping `series_id:season:episode` to a resolved Bangumi
+/// subject ID.
 ///
-/// Title search is fuzzy and costs several requests, so a resolved mapping is
-/// persisted and reused for the remaining episodes of the same season. The
-/// cache is advisory: any read/parse failure degrades to an empty cache rather
-/// than aborting the sync.
+/// The key is episode-granular so that different episodes within the same TMDB
+/// season can map to different Bangumi subjects (e.g. when a franchise is split
+/// into separate arc subjects on bgm.tv). Title search is fuzzy and costs
+/// several requests, so a resolved mapping is persisted and reused on the next
+/// playback of the same episode. The cache is advisory: any read/parse failure
+/// degrades to an empty cache rather than aborting the sync.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SubjectCache {
     #[serde(flatten)]
@@ -931,9 +1051,9 @@ pub struct SubjectCache {
 }
 
 impl SubjectCache {
-    /// Build the cache key for a series/season pair.
-    fn key(series_id: &str, season: i64) -> String {
-        format!("{series_id}:{season}")
+    /// Build the cache key for a series/season/episode triple.
+    fn key(series_id: &str, season: i64, episode: i64) -> String {
+        format!("{series_id}:{season}:{episode}")
     }
 
     /// Load the cache from `path`, returning an empty cache when the file is
@@ -946,10 +1066,17 @@ impl SubjectCache {
             .unwrap_or_default()
     }
 
-    /// Look up a cached subject ID for a series/season pair.
+    /// Look up a cached subject ID for a series/season/episode triple.
     #[must_use]
-    pub fn get(&self, series_id: &str, season: i64) -> Option<u64> {
-        self.map.get(&Self::key(series_id, season)).copied()
+    pub fn get(
+        &self,
+        series_id: &str,
+        season: i64,
+        episode: i64,
+    ) -> Option<u64> {
+        self.map
+            .get(&Self::key(series_id, season, episode))
+            .copied()
     }
 
     /// Insert a mapping and persist the whole cache to `path`.
@@ -957,10 +1084,13 @@ impl SubjectCache {
         &mut self,
         series_id: &str,
         season: i64,
+        episode: i64,
         subject_id: u64,
         path: &Path,
     ) -> Result<()> {
-        let _ = self.map.insert(Self::key(series_id, season), subject_id);
+        let _ = self
+            .map
+            .insert(Self::key(series_id, season, episode), subject_id);
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
@@ -1540,6 +1670,7 @@ mod tests {
                 &["Re:ゼロから始める異世界生活", "Re：从零开始的异世界生活"],
                 4,
                 0.6,
+                None,
             )
             .await
             .unwrap();
@@ -1619,7 +1750,10 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let id = api.resolve_subject_id(&["Show"], 1, 0.5).await.unwrap();
+        let id = api
+            .resolve_subject_id(&["Show"], 1, 0.5, None)
+            .await
+            .unwrap();
         assert_eq!(id, Some(100));
     }
 
@@ -1664,7 +1798,10 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let id = api.resolve_subject_id(&["Re:Zero"], 2, 0.5).await.unwrap();
+        let id = api
+            .resolve_subject_id(&["Re:Zero"], 2, 0.5, None)
+            .await
+            .unwrap();
         assert_eq!(id, Some(200));
     }
 
@@ -1684,7 +1821,10 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let id = api.resolve_subject_id(&["Re:Zero"], 1, 0.9).await.unwrap();
+        let id = api
+            .resolve_subject_id(&["Re:Zero"], 1, 0.9, None)
+            .await
+            .unwrap();
         assert_eq!(id, None);
     }
 
@@ -1739,22 +1879,24 @@ mod tests {
         let path = tmp.path();
 
         let mut cache = SubjectCache::load(path);
-        assert_eq!(cache.get("series-1", 4), None);
+        assert_eq!(cache.get("series-1", 4, 1), None);
 
-        cache.insert("series-1", 4, 12345, path).unwrap();
-        cache.insert("series-1", 1, 678, path).unwrap();
+        cache.insert("series-1", 4, 1, 12345, path).unwrap();
+        cache.insert("series-1", 1, 5, 678, path).unwrap();
 
         // A fresh load sees the persisted entries.
         let reloaded = SubjectCache::load(path);
-        assert_eq!(reloaded.get("series-1", 4), Some(12345));
-        assert_eq!(reloaded.get("series-1", 1), Some(678));
-        assert_eq!(reloaded.get("series-1", 2), None);
+        assert_eq!(reloaded.get("series-1", 4, 1), Some(12345));
+        assert_eq!(reloaded.get("series-1", 1, 5), Some(678));
+        // Different episode → different cache entry.
+        assert_eq!(reloaded.get("series-1", 4, 2), None);
+        assert_eq!(reloaded.get("series-1", 2, 1), None);
     }
 
     #[test]
     fn subject_cache_load_missing_file_is_empty() {
         let path = std::path::Path::new("/nonexistent/etlp/bgm_cache.json");
         let cache = SubjectCache::load(path);
-        assert_eq!(cache.get("x", 1), None);
+        assert_eq!(cache.get("x", 1, 1), None);
     }
 }
