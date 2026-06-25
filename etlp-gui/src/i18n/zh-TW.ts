@@ -117,9 +117,12 @@ export const zhTW: typeof zhCN = {
     net_proxy_socks5: "SOCKS5 代理",
     net_proxy_desc:
         "僅填 host:port，如 127.0.0.1:6152；貼上完整 URL 自動識別協議；留空不使用",
+    net_proxy_https_desc:
+        "加密（HTTPS）連線使用此代理；留空則退回 HTTP 代理；格式同 HTTP",
+    net_proxy_socks5_desc: "支援全協議流量代理，適合無 HTTP 隧道的網路環境；留空不使用",
     net_proxy_enabled: "啟用代理",
     net_proxy_enabled_desc:
-        "關閉後代理位址仍保留，但所有連線直接發出；私有 IP 自動繞過代理",
+        "啟用時：mpv 的 HTTP/HTTPS 流量走 HTTP 代理，Bangumi / Trakt / TMDB 等 API 請求按協議走對應代理；私有 IP（192.168.x、10.x、172.16–31.x 等）始終直連，內網媒體伺服器無需關閉此項。關閉後位址仍保留，所有連線直接發出。",
     net_skip_tls: "略過 TLS 憑證驗證",
     net_skip_tls_desc: "用於自簽憑證的 Emby 伺服器（存在安全風險）",
     net_redirect: "重新導向偵測",
@@ -219,7 +222,7 @@ export const zhTW: typeof zhCN = {
         "播放結束後自動同步到 Bangumi：進度 ≥ 80% 才將當前集標記為「看過」，不足 80% 則不標記當前集；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。進度不足 80% 且無可補標歷史時，若有效播放時長 ≥ 20 秒則將條目置為「在看」，否則跳過，避免誤觸發。",
     sys_bangumi_host: "啟用網域",
     sys_bangumi_host_desc:
-        '逗號分隔的網域關鍵字，留空停用；如 emby.local, 192.168.1；填 "." 啟用全部',
+        '逗號分隔的網域關鍵字，符合任一項即啟用同步；留空則不同步任何伺服器。若要對所有伺服器啟用，在輸入框中填入英文句點 "." 並點擊新增即可。',
     sys_bangumi_host_placeholder: "例如：localhost, 192.168., emby.example.com",
     sys_bangumi_user: "使用者名稱 / UID",
     sys_bangumi_user_desc: "bgm.tv 使用者名稱，或 bgm.tv/user/123456 中的數字",

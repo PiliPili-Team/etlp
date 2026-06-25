@@ -1338,12 +1338,14 @@ function NetworkSection({
                 />
                 <ProxyRow
                     label={t("net_proxy_https")}
+                    desc={t("net_proxy_https_desc")}
                     value={cfg.proxy_https}
                     defaultScheme="https"
                     onCommit={(v) => update("dev", "proxy_https", v)}
                 />
                 <ProxyRow
                     label={t("net_proxy_socks5")}
+                    desc={t("net_proxy_socks5_desc")}
                     value={cfg.proxy_socks5}
                     defaultScheme="socks5"
                     onCommit={(v) => update("dev", "proxy_socks5", v)}

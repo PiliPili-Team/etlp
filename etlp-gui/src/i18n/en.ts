@@ -120,9 +120,13 @@ export const en: typeof zhCN = {
     net_proxy_socks5: "SOCKS5 Proxy",
     net_proxy_desc:
         "Host:port only (e.g. 127.0.0.1:6152); paste a full URL to auto-detect the scheme; leave empty to disable",
+    net_proxy_https_desc:
+        "Used for encrypted (HTTPS) connections; falls back to HTTP proxy if empty; same format as HTTP",
+    net_proxy_socks5_desc:
+        "Proxies all protocol traffic; ideal for networks without an HTTP tunnel; leave empty to disable",
     net_proxy_enabled: "Enable Proxy",
     net_proxy_enabled_desc:
-        "When off, the proxy URL is kept but all connections are direct; private IPs (192.168.x, 10.x, etc.) are always bypassed automatically",
+        "When enabled: mpv HTTP/HTTPS traffic uses the HTTP proxy; Bangumi / Trakt / TMDB API requests use the matching-protocol proxy; private IPs (192.168.x, 10.x, 172.16–31.x, etc.) are always direct — no need to disable for LAN servers. When off, all connections are direct.",
     net_skip_tls: "Skip TLS Verification",
     net_skip_tls_desc: "For self-signed Emby servers — insecure",
     net_redirect: "Redirect Detection",
@@ -229,7 +233,7 @@ export const en: typeof zhCN = {
         "When playback ends, your viewing is synced to Bangumi automatically: ≥ 80% progress marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
-        'Comma-separated host keywords; leave empty to disable. e.g. emby.local, 192.168.1 — enter "." to enable all',
+        'Comma-separated host keywords; sync is enabled when any keyword matches. Leave empty to disable sync for all servers. To enable for every server, type "." in the input box and click Add.',
     sys_bangumi_host_placeholder: "e.g. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Username / UID",
     sys_bangumi_user_desc: "bgm.tv username or the digits in bgm.tv/user/123456",
