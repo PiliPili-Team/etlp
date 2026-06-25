@@ -114,6 +114,8 @@ export const zhTW: typeof zhCN = {
     page_network: "網路",
     net_proxy: "代理",
     net_proxy_desc: "支援 http://、https://、socks5://；如 http://127.0.0.1:6152 或 socks5://127.0.0.1:6153；留空不使用",
+    net_proxy_enabled: "啟用代理",
+    net_proxy_enabled_desc: "關閉後代理位址仍保留，但所有連線直接發出；私有 IP 自動繞過代理",
     net_skip_tls: "略過 TLS 憑證驗證",
     net_skip_tls_desc: "用於自簽憑證的 Emby 伺服器（存在安全風險）",
     net_redirect: "重新導向偵測",

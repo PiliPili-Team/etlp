@@ -117,6 +117,8 @@ export const id: typeof zhCN = {
     page_network: "Jaringan",
     net_proxy: "Proxy",
     net_proxy_desc: "Mendukung http://, https://, socks5://；mis. http://127.0.0.1:6152 atau socks5://127.0.0.1:6153；kosong untuk menonaktifkan",
+    net_proxy_enabled: "Aktifkan Proxy",
+    net_proxy_enabled_desc: "Saat dinonaktifkan, URL disimpan tetapi semua koneksi langsung; IP privat (192.168.x, 10.x dll.) selalu melewati proxy secara otomatis",
     net_skip_tls: "Lewati Verifikasi TLS",
     net_skip_tls_desc:
         "Untuk server Emby dengan sertifikat yang ditandatangani sendiri — tidak aman",

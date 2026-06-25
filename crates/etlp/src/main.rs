@@ -119,6 +119,7 @@ async fn main() {
     let cert_verify = !config.dev.skip_certificate_verify;
     let http_client = match HttpClientBuilder::new()
         .proxy(proxy)
+        .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())
         .build()

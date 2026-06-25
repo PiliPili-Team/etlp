@@ -117,6 +117,8 @@ export const en: typeof zhCN = {
     page_network: "Network",
     net_proxy: "Proxy",
     net_proxy_desc: "Supports http://, https://, socks5://; e.g. http://127.0.0.1:6152 or socks5://127.0.0.1:6153; leave empty to disable",
+    net_proxy_enabled: "Enable Proxy",
+    net_proxy_enabled_desc: "When off, the proxy URL is kept but all connections are direct; private IPs (192.168.x, 10.x, etc.) are always bypassed automatically",
     net_skip_tls: "Skip TLS Verification",
     net_skip_tls_desc: "For self-signed Emby servers — insecure",
     net_redirect: "Redirect Detection",

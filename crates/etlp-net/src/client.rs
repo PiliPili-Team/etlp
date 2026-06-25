@@ -89,6 +89,7 @@ pub type Result<T> = std::result::Result<T, NetError>;
 #[derive(Debug, Clone)]
 pub struct HttpClientBuilder {
     proxy: Option<String>,
+    proxy_enabled: bool,
     cert_verify: bool,
     timeout: Duration,
     retry: u32,
@@ -100,6 +101,7 @@ impl Default for HttpClientBuilder {
     fn default() -> Self {
         Self {
             proxy: None,
+            proxy_enabled: true,
             cert_verify: true,
             timeout: DEFAULT_TIMEOUT,
             retry: DEFAULT_RETRY,
@@ -119,6 +121,14 @@ impl HttpClientBuilder {
     #[must_use]
     pub fn proxy(mut self, proxy: Option<String>) -> Self {
         self.proxy = proxy;
+        self
+    }
+
+    /// Whether the configured proxy is active.  When `false`, the URL stored
+    /// in `proxy` is retained but ignored — all connections are direct.
+    #[must_use]
+    pub fn proxy_enabled(mut self, enabled: bool) -> Self {
+        self.proxy_enabled = enabled;
         self
     }
 
@@ -157,10 +167,11 @@ impl HttpClientBuilder {
     /// Build the client (constructs one redirect-following and one
     /// redirect-stopping inner client).
     pub fn build(self) -> Result<HttpClient> {
+        let effective_proxy = if self.proxy_enabled { self.proxy.as_ref() } else { None };
         let follow =
-            build_inner(&self.proxy, self.cert_verify, self.timeout, true)?;
+            build_inner(effective_proxy, self.cert_verify, self.timeout, true)?;
         let no_follow =
-            build_inner(&self.proxy, self.cert_verify, self.timeout, false)?;
+            build_inner(effective_proxy, self.cert_verify, self.timeout, false)?;
         let ua = self.user_agent.unwrap_or_else(|| UA_ETLP.to_owned());
         Ok(HttpClient {
             follow,
@@ -184,8 +195,30 @@ fn normalise_proxy_url(raw: &str) -> String {
     }
 }
 
+/// Return `true` for addresses that should always bypass the proxy:
+/// loopback, RFC 1918 private ranges, and Plex-direct hostnames.
+fn is_bypass_host(host: &str, full_url: &str) -> bool {
+    if host == "localhost" || host == "::1" {
+        return true;
+    }
+    if full_url.contains("plex.direct") {
+        return true;
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return match ip {
+            std::net::IpAddr::V4(v4) => {
+                // Covers loopback (127.x), private (10.x/172.16-31.x/192.168.x),
+                // and link-local (169.254.x).
+                v4.is_loopback() || v4.is_private() || v4.is_link_local()
+            }
+            std::net::IpAddr::V6(v6) => v6.is_loopback() || v6.is_unicast_link_local(),
+        };
+    }
+    false
+}
+
 fn build_inner(
-    proxy: &Option<String>,
+    proxy: Option<&String>,
     cert_verify: bool,
     timeout: Duration,
     follow_redirects: bool,
@@ -203,17 +236,12 @@ fn build_inner(
         let proxy_url = normalise_proxy_url(raw);
         tracing::debug!(proxy = %proxy_url, "http_client: proxy configured");
         let proxy_url2 = proxy_url.clone();
-        // Skip the proxy for localhost and plex.direct.
         let custom = Proxy::custom(move |url| {
             let host = url.host_str().unwrap_or("");
-            let is_local = host == "localhost"
-                || host.starts_with("127.")
-                || host == "::1";
-            let is_plex = url.as_str().contains("plex.direct");
-            if is_local || is_plex {
+            if is_bypass_host(host, url.as_str()) {
                 tracing::debug!(
                     target_host = %host,
-                    "http_client: proxy bypassed (local/plex)"
+                    "http_client: proxy bypassed (local/private/plex)"
                 );
                 None
             } else {

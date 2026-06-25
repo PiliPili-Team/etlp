@@ -119,6 +119,8 @@ export const uk: typeof zhCN = {
     page_network: "Мережа",
     net_proxy: "Проксі",
     net_proxy_desc: "Підтримує http://, https://, socks5://；напр. http://127.0.0.1:6152 або socks5://127.0.0.1:6153；залиште порожнім щоб вимкнути",
+    net_proxy_enabled: "Увімкнути проксі",
+    net_proxy_enabled_desc: "Коли вимкнено, URL зберігається, але всі підключення прямі; приватні IP (192.168.x, 10.x тощо) завжди автоматично обходять проксі",
     net_skip_tls: "Пропускати перевірку TLS",
     net_skip_tls_desc: "Для самопідписаних серверів Emby — небезпечно",
     net_redirect: "Виявлення перенаправлень",

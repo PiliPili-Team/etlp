@@ -29,6 +29,7 @@ interface ConfigDto {
     last_ep_disable_playlist: boolean;
     version_prefer_for_playlist: boolean;
     proxy: string;
+    proxy_enabled: boolean;
     redirect_check_host: string[];
     skip_certificate_verify: boolean;
     log_level: string;
@@ -1231,6 +1232,12 @@ function NetworkSection({
                     placeholder="http://127.0.0.1:6152"
                     mono
                     onCommit={(v) => update("dev", "proxy", v || null)}
+                />
+                <ToggleRow
+                    label={t("net_proxy_enabled")}
+                    desc={t("net_proxy_enabled_desc")}
+                    checked={cfg.proxy_enabled}
+                    onChange={(v) => update("dev", "proxy_enabled", v)}
                 />
                 <ToggleRow
                     label={t("net_skip_tls")}
