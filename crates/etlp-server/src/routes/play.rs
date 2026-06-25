@@ -1489,32 +1489,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             std::collections::BTreeMap::new()
         };
 
-        let Some(target) = resolve_bangumi_subject(
-            &api,
-            &tmdb,
-            data,
-            title_fallback,
-            &genres,
-            &mappings,
-            &series_provider_ids,
-            &mut cache,
-            &cache_path,
-            &mut scrape_cache,
-        )
-        .await
-        else {
-            continue;
-        };
-        let subject_id = target.subject_id;
-
-        // Translate a local episode index to a Bangumi sort number, applying
-        // the mapping's per-season offset; drops indices that fall out of range.
-        let to_bgm_sort = |index: i64| -> Option<u32> {
-            u32::try_from(index + target.ep_offset)
-                .ok()
-                .filter(|s| *s > 0)
-        };
-
         // Bangumi has no per-episode progress, so it cannot represent a partial
         // view of an episode: the current episode is marked watched only once
         // playback passes the completion threshold, and left unmarked below it
@@ -1529,68 +1503,131 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             );
         }
 
-        // Collect the episodes to mark watched: every earlier one the client
-        // already finished, plus the current episode when it passed the watched
-        // threshold. An unfinished current episode is dropped so it is not marked.
+        // Collect all episodes the user has already finished in Emby/Jellyfin.
         let backfill = emby_played_backfill(state, data).await;
-        let mut eps: Vec<(u32, Option<String>)> = backfill
-            .iter()
-            .filter(|p| current_watched || p.index != ep_index)
-            .filter_map(|p| {
-                to_bgm_sort(p.index).map(|s| (s, p.premiere_date.clone()))
-            })
-            .collect();
-        // Non-Emby servers report no backfill; fall back to the current episode
-        // when it passed the watched threshold.
-        if eps.is_empty()
-            && current_watched
-            && let Some(s) = to_bgm_sort(ep_index)
-        {
-            eps.push((s, data.premiere_date.clone()));
-        }
-        eps.sort_by_key(|(s, _)| *s);
-        eps.dedup_by_key(|(s, _)| *s);
 
-        // Nothing watched to mark (only a momentary open of the current episode
-        // and no earlier history): register the subject as "watching" when the
-        // user has enabled the option. When disabled, partial views do not add
-        // the subject to the collection — it is only collected once an episode
-        // crosses the watched threshold via sync_episodes below.
-        if eps.is_empty() {
-            if !mark_watching {
-                info!(
-                    "bangumi: subject {subject_id} skipped watching mark \
-                     (disabled by config, {}%)",
-                    entry.progress as i64
-                );
+        // Resolve each backfill episode independently so multi-arc series where
+        // episodes belong to different Bangumi subjects are handled correctly.
+        // Results are grouped by subject_id for a single sync_episodes call each.
+        let mut subject_groups: std::collections::HashMap<
+            u64,
+            Vec<(u32, Option<String>)>,
+        > = std::collections::HashMap::new();
+
+        for played_ep in &backfill {
+            if !current_watched && played_ep.index == ep_index {
                 continue;
             }
-            match api.ensure_collected_watching(subject_id).await {
-                Ok(()) => info!(
-                    "bangumi: subject {subject_id} marked watching ({}%)",
-                    entry.progress as i64
-                ),
-                Err(e) => {
-                    warn!("bangumi watching mark failed for {subject_id}: {e}")
+            if let Some(t) = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                played_ep.index,
+                played_ep.premiere_date.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await
+                && let Some(sort) = u32::try_from(played_ep.index + t.ep_offset)
+                    .ok()
+                    .filter(|&s| s > 0)
+            {
+                subject_groups
+                    .entry(t.subject_id)
+                    .or_default()
+                    .push((sort, played_ep.premiere_date.clone()));
+            }
+        }
+
+        // Non-Emby servers report no backfill; fall back to the current episode
+        // when it passed the watched threshold.
+        if subject_groups.is_empty()
+            && current_watched
+            && let Some(t) = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                ep_index,
+                data.premiere_date.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await
+            && let Some(sort) = u32::try_from(ep_index + t.ep_offset)
+                .ok()
+                .filter(|&s| s > 0)
+        {
+            subject_groups
+                .entry(t.subject_id)
+                .or_default()
+                .push((sort, data.premiere_date.clone()));
+        }
+
+        // Nothing watched to mark: register the subject as "watching" when the
+        // user has enabled the option.
+        if subject_groups.is_empty() {
+            if let Some(t) = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                ep_index,
+                data.premiere_date.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await
+            {
+                if !mark_watching {
+                    info!(
+                        "bangumi: subject {} skipped watching mark \
+                         (disabled by config, {}%)",
+                        t.subject_id, entry.progress as i64
+                    );
+                    continue;
+                }
+                match api.ensure_collected_watching(t.subject_id).await {
+                    Ok(()) => info!(
+                        "bangumi: subject {} marked watching ({}%)",
+                        t.subject_id, entry.progress as i64
+                    ),
+                    Err(e) => warn!(
+                        "bangumi watching mark failed for {}: {e}",
+                        t.subject_id
+                    ),
                 }
             }
             continue;
         }
 
-        debug!(
-            subject_id,
-            ep_offset = target.ep_offset,
-            count = eps.len(),
-            "bangumi: syncing entry"
-        );
-        match sync_episodes(&api, subject_id, &eps).await {
-            Ok(ids) => {
-                info!(
+        // Sort and dedup episodes within each subject group, then sync.
+        for (subject_id, mut eps) in subject_groups {
+            eps.sort_by_key(|(s, _)| *s);
+            eps.dedup_by_key(|(s, _)| *s);
+            debug!(subject_id, count = eps.len(), "bangumi: syncing entry");
+            match sync_episodes(&api, subject_id, &eps).await {
+                Ok(ids) => info!(
                     "bangumi: marked {} episode(s) for subject {subject_id}",
                     ids.len()
-                )
+                ),
+                Err(e) => {
+                    warn!("bangumi sync error for subject {subject_id}: {e}")
+                }
             }
-            Err(e) => warn!("bangumi sync error for subject {subject_id}: {e}"),
         }
     }
 }
@@ -1628,6 +1665,8 @@ async fn resolve_bangumi_subject(
     api: &etlp_sync::BangumiApi,
     tmdb: &etlp_sync::TmdbClient,
     data: &PlaybackData,
+    ep_index: i64,
+    ep_premiere_date: Option<String>,
     title_fallback: bool,
     genres: &str,
     mappings: &[etlp_sync::SubjectMapping],
@@ -1642,7 +1681,7 @@ async fn resolve_bangumi_subject(
     // tmdb/imdb/tvdb id (and season + episode for TV).
     let is_movie = data.item_type.eq_ignore_ascii_case("movie");
     let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
-    let episode_u32 = data.index.and_then(|i| u32::try_from(i).ok());
+    let episode_u32 = u32::try_from(ep_index).ok();
 
     // Build the provider id list from both series-level and episode-level ids.
     // Series ids are checked first so a mapping keyed on the series TMDB id
@@ -1667,11 +1706,9 @@ async fn resolve_bangumi_subject(
     if let Some(m) =
         match_mapping(mappings, &ids, is_movie, season_u32, episode_u32)
     {
-        // For TV, the offset must land the current episode on a positive
-        // Bangumi sort. A non-positive result (e.g. `E-59` while watching ep 1)
-        // means the mapping cannot serve this episode: skip it and fall back to
-        // id/title resolution rather than erroring.
-        if m.yields_positive_episode(data.index) {
+        // For TV, the offset must land the episode on a positive Bangumi sort.
+        // A non-positive result means the mapping cannot serve this episode.
+        if m.yields_positive_episode(Some(ep_index)) {
             info!(
                 subject_id = m.subject_id,
                 ep_offset = m.ep_offset,
@@ -1685,7 +1722,7 @@ async fn resolve_bangumi_subject(
         warn!(
             subject_id = m.subject_id,
             ep_offset = m.ep_offset,
-            episode = data.index.unwrap_or_default(),
+            episode = ep_index,
             "bangumi: mapping offset yields a non-positive episode; \
              skipping mapping and falling back to query"
         );
@@ -1712,7 +1749,6 @@ async fn resolve_bangumi_subject(
     }
 
     let season = data.season_number.unwrap_or(1);
-    let episode = data.index.unwrap_or(0);
 
     // Season 0 in TMDB means "Specials / Extras". These do not map reliably
     // to any Bangumi subject via title search or the sequel chain.
@@ -1727,7 +1763,7 @@ async fn resolve_bangumi_subject(
     }
 
     if !data.series_id.is_empty()
-        && let Some(id) = cache.get(&data.series_id, season, episode)
+        && let Some(id) = cache.get(&data.series_id, season, ep_index)
     {
         debug!(id, "bangumi: subject from cache");
         return Some(BangumiTarget::auto(id));
@@ -1744,42 +1780,37 @@ async fn resolve_bangumi_subject(
     }
     let target_season = u32::try_from(season).unwrap_or(1);
 
-    // Hoist the TMDB series id so it is available for both the air-date lookup
-    // below and the web-fallback alternate-title fetch further down.
     let tmdb_series_id: Option<u64> = series_provider_ids
         .get("Tmdb")
         .filter(|v| !v.is_empty())
         .and_then(|v| v.parse::<u64>().ok());
 
-    // Determine the episode's air date for date-guided subject resolution.
-    // Priority: Emby item's PremiereDate → TMDB API (when a series TMDB id
-    // and episode number are available). When both are absent we fall back
-    // to title-only resolution (legacy behaviour, higher false-positive risk).
-    let premiere_date: Option<String> = if data.premiere_date.is_some() {
-        data.premiere_date.clone()
+    // Premiere date: use what the caller provides (from Emby or resolved
+    // outside the function). Fall back to TMDB when nothing is available.
+    let premiere_date: Option<String> = if ep_premiere_date.is_some() {
+        ep_premiere_date
     } else {
-        let episode_u32 = data.index.and_then(|i| u32::try_from(i).ok());
-        let season_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
-        if let (Some(tid), Some(ep), Some(s)) =
-            (tmdb_series_id, episode_u32, season_u32)
+        let ep_u32 = u32::try_from(ep_index).ok();
+        let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
+        if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
         {
             let date = tmdb.episode_air_date(tid, s, ep).await;
             if date.is_none() {
                 warn!(
                     series = %data.series_name,
                     season,
-                    episode,
+                    episode = ep_index,
                     "bangumi: no air date from Emby or TMDB; \
                      falling back to title-only resolution"
                 );
             }
             date
         } else {
-            if !data.item_type.eq_ignore_ascii_case("movie") {
+            if !is_movie {
                 warn!(
                     series = %data.series_name,
                     season,
-                    episode,
+                    episode = ep_index,
                     "bangumi: no TMDB series id or episode number available; \
                      falling back to title-only resolution"
                 );
@@ -1795,7 +1826,13 @@ async fn resolve_bangumi_subject(
         Vec::new()
     };
 
-    let episode_title = if is_movie || data.media_title.trim().is_empty() {
+    // Use the Emby episode title only for the current (directly triggered)
+    // episode. For backfill episodes the title is unknown, so we leave it None
+    // and let Round 2 fall back to subject-title similarity.
+    let episode_title = if is_movie
+        || data.media_title.trim().is_empty()
+        || ep_index != data.index.unwrap_or(ep_index)
+    {
         None
     } else {
         Some(data.media_title.as_str())
@@ -1807,7 +1844,7 @@ async fn resolve_bangumi_subject(
         }
     } else {
         etlp_sync::WebResolveTarget::Episode {
-            episode: u32::try_from(episode).unwrap_or(0),
+            episode: u32::try_from(ep_index).unwrap_or(0),
             premiere_date: premiere_date.as_deref(),
             episode_title,
         }
@@ -1837,7 +1874,7 @@ async fn resolve_bangumi_subject(
     );
     if !data.series_id.is_empty()
         && let Err(e) =
-            cache.insert(&data.series_id, season, episode, id, cache_path)
+            cache.insert(&data.series_id, season, ep_index, id, cache_path)
     {
         warn!("bangumi: subject cache write failed: {e}");
     }
