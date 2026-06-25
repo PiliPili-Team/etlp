@@ -184,7 +184,8 @@ impl HttpClientBuilder {
             None
         };
         let follow = build_inner(&proxies, self.cert_verify, timeout, true)?;
-        let no_follow = build_inner(&proxies, self.cert_verify, timeout, false)?;
+        let no_follow =
+            build_inner(&proxies, self.cert_verify, timeout, false)?;
         let ua = self.user_agent.unwrap_or_else(|| UA_ETLP.to_owned());
         Ok(HttpClient {
             follow,
@@ -211,7 +212,9 @@ fn is_bypass_host(host: &str, full_url: &str) -> bool {
                 // and link-local (169.254.x).
                 v4.is_loopback() || v4.is_private() || v4.is_link_local()
             }
-            std::net::IpAddr::V6(v6) => v6.is_loopback() || v6.is_unicast_link_local(),
+            std::net::IpAddr::V6(v6) => {
+                v6.is_loopback() || v6.is_unicast_link_local()
+            }
         };
     }
     false
@@ -225,7 +228,11 @@ fn build_inner(
     timeout: Duration,
     follow_redirects: bool,
 ) -> Result<Client> {
-    let policy = if follow_redirects { Policy::default() } else { Policy::none() };
+    let policy = if follow_redirects {
+        Policy::default()
+    } else {
+        Policy::none()
+    };
     let mut builder = Client::builder().timeout(timeout).redirect(policy);
     if !cert_verify {
         builder = builder.danger_accept_invalid_certs(true);
