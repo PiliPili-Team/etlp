@@ -3084,6 +3084,11 @@ function GroupedSubjectMap({
     );
 }
 
+// ── Bangumi ────────────────────────────────────────────────────────────────────
+
+const BGM_TOKEN_URL = "https://next.bgm.tv/demo/access-token";
+const BGM_TOKEN_URL_DISPLAY = "next.bgm.tv/demo/access-token";
+
 function BangumiSection({
     cfg,
     update,
@@ -3151,7 +3156,26 @@ function BangumiSection({
                 />
                 <InputRow
                     label={t("sys_bangumi_token")}
-                    desc={t("sys_bangumi_token_desc")}
+                    desc={(() => {
+                        const raw = t("sys_bangumi_token_desc");
+                        const idx = raw.indexOf(BGM_TOKEN_URL_DISPLAY);
+                        if (idx === -1) return raw;
+                        return (
+                            <>
+                                {raw.slice(0, idx)}
+                                <a
+                                    href={BGM_TOKEN_URL}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        void openUrl(BGM_TOKEN_URL);
+                                    }}
+                                >
+                                    {BGM_TOKEN_URL_DISPLAY}
+                                </a>
+                                {raw.slice(idx + BGM_TOKEN_URL_DISPLAY.length)}
+                            </>
+                        );
+                    })()}
                     value={cfg.bangumi_access_token}
                     placeholder={t("sys_bangumi_token_placeholder")}
                     mono
