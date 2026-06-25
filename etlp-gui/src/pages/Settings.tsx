@@ -415,8 +415,12 @@ function ProxyRow({
     onCommit: (v: string | null) => void;
 }) {
     const [prevValue, setPrevValue] = useState(value);
-    const [scheme, setScheme] = useState<ProxyScheme>(() => parseProxyUrl(value, defaultScheme)[0]);
-    const [hostPort, setHostPort] = useState(() => parseProxyUrl(value, defaultScheme)[1]);
+    const [scheme, setScheme] = useState<ProxyScheme>(
+        () => parseProxyUrl(value, defaultScheme)[0],
+    );
+    const [hostPort, setHostPort] = useState(
+        () => parseProxyUrl(value, defaultScheme)[1],
+    );
 
     if (prevValue !== value) {
         setPrevValue(value);

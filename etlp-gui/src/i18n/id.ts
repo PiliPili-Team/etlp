@@ -118,9 +118,11 @@ export const id: typeof zhCN = {
     net_proxy_http: "Proxy HTTP",
     net_proxy_https: "Proxy HTTPS",
     net_proxy_socks5: "Proxy SOCKS5",
-    net_proxy_desc: "Isi host:port saja; tempel URL lengkap untuk deteksi skema otomatis; kosongkan untuk menonaktifkan",
+    net_proxy_desc:
+        "Isi host:port saja; tempel URL lengkap untuk deteksi skema otomatis; kosongkan untuk menonaktifkan",
     net_proxy_enabled: "Aktifkan Proxy",
-    net_proxy_enabled_desc: "Saat dinonaktifkan, URL disimpan tetapi semua koneksi langsung; IP privat (192.168.x, 10.x dll.) selalu melewati proxy secara otomatis",
+    net_proxy_enabled_desc:
+        "Saat dinonaktifkan, URL disimpan tetapi semua koneksi langsung; IP privat (192.168.x, 10.x dll.) selalu melewati proxy secara otomatis",
     net_skip_tls: "Lewati Verifikasi TLS",
     net_skip_tls_desc:
         "Untuk server Emby dengan sertifikat yang ditandatangani sendiri — tidak aman",
@@ -213,7 +215,7 @@ export const id: typeof zhCN = {
     sys_trakt_user_placeholder: "mis. your_trakt_user",
     sys_trakt_host: "Aktifkan Host",
     sys_trakt_host_desc:
-        "Kata kunci host yang dipisahkan koma, kosong untuk menonaktifkan；mis. emby.local, 192.168.1；masukkan \".\" untuk mengaktifkan semua",
+        'Kata kunci host yang dipisahkan koma, kosong untuk menonaktifkan；mis. emby.local, 192.168.1；masukkan "." untuk mengaktifkan semua',
     sys_trakt_host_placeholder: "mis. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Izinkan Penandaan Ulang",
     sys_trakt_dup_desc:
@@ -228,7 +230,7 @@ export const id: typeof zhCN = {
         "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Bangumi: mencapai ≥ 80% menandai episode saat ini sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditambahkan, tanpa menduplikasi yang sudah ada. Jika tidak ada yang ditandai (< 80% dan tidak ada riwayat), karya diatur ke status 'sedang menonton' hanya jika durasi pemutaran efektif ≥ 20 detik, jika tidak dilewati untuk mencegah penambahan tidak sengaja.",
     sys_bangumi_host: "Aktifkan Host",
     sys_bangumi_host_desc:
-        "Kata kunci host yang dipisahkan koma, kosong untuk menonaktifkan；mis. emby.local, 192.168.1；masukkan \".\" untuk mengaktifkan semua",
+        'Kata kunci host yang dipisahkan koma, kosong untuk menonaktifkan；mis. emby.local, 192.168.1；masukkan "." untuk mengaktifkan semua',
     sys_bangumi_host_placeholder: "mis. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nama Pengguna / UID",
     sys_bangumi_user_desc: "Nama pengguna bgm.tv atau angka di bgm.tv/user/123456",

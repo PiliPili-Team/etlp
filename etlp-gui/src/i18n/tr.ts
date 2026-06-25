@@ -118,9 +118,11 @@ export const tr: typeof zhCN = {
     net_proxy_http: "HTTP Proxy",
     net_proxy_https: "HTTPS Proxy",
     net_proxy_socks5: "SOCKS5 Proxy",
-    net_proxy_desc: "Sadece host:port girin; tam URL yapıştırarak şemayı otomatik algılayın; devre dışı için boş bırakın",
+    net_proxy_desc:
+        "Sadece host:port girin; tam URL yapıştırarak şemayı otomatik algılayın; devre dışı için boş bırakın",
     net_proxy_enabled: "Proxy'yi Etkinleştir",
-    net_proxy_enabled_desc: "Devre dışıyken URL korunur ancak tüm bağlantılar doğrudan yapılır; özel IP'ler (192.168.x, 10.x) her zaman otomatik olarak atlanır",
+    net_proxy_enabled_desc:
+        "Devre dışıyken URL korunur ancak tüm bağlantılar doğrudan yapılır; özel IP'ler (192.168.x, 10.x) her zaman otomatik olarak atlanır",
     net_skip_tls: "TLS Doğrulamasını Atla",
     net_skip_tls_desc: "Öz imzalı sertifikalı Emby sunucuları için — güvensiz",
     net_redirect: "Yönlendirme Tespiti",
@@ -213,7 +215,7 @@ export const tr: typeof zhCN = {
     sys_trakt_user_placeholder: "örn. your_trakt_user",
     sys_trakt_host: "Ana Bilgisayarı Etkinleştir",
     sys_trakt_host_desc:
-        "Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için \".\" girin",
+        'Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için "." girin',
     sys_trakt_host_placeholder: "örn. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Yeniden İşaretlemeye İzin Ver",
     sys_trakt_dup_desc:
@@ -227,7 +229,7 @@ export const tr: typeof zhCN = {
         "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: ≥ %80'e ulaşmak mevcut bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de eklenir, mevcut olanlar çoğaltılmaz. İşaretlenecek bir şey yoksa (< %80 ve geçmiş yoksa), eserin durumu yalnızca gerçek oynatma süresi ≥ 20 saniyeyse 'izliyorum' olarak ayarlanır, aksi takdirde yanlışlıkla eklemeyi önlemek için atlanır.",
     sys_bangumi_host: "Ana Bilgisayarı Etkinleştir",
     sys_bangumi_host_desc:
-        "Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için \".\" girin",
+        'Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için "." girin',
     sys_bangumi_host_placeholder: "örn. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Kullanıcı Adı / UID",
     sys_bangumi_user_desc: "bgm.tv kullanıcı adı veya bgm.tv/user/123456'daki sayılar",

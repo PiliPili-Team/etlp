@@ -116,9 +116,11 @@ export const th: typeof zhCN = {
     net_proxy_http: "HTTP Proxy",
     net_proxy_https: "HTTPS Proxy",
     net_proxy_socks5: "SOCKS5 Proxy",
-    net_proxy_desc: "ใส่แค่ host:port；วางURL เต็มเพื่อตรวจจับ scheme อัตโนมัติ；ปล่อยว่างเพื่อปิด",
+    net_proxy_desc:
+        "ใส่แค่ host:port；วางURL เต็มเพื่อตรวจจับ scheme อัตโนมัติ；ปล่อยว่างเพื่อปิด",
     net_proxy_enabled: "เปิดใช้ Proxy",
-    net_proxy_enabled_desc: "เมื่อปิด URL จะถูกเก็บไว้แต่การเชื่อมต่อทั้งหมดจะตรง；IP ส่วนตัว (192.168.x, 10.x) จะข้าม proxy โดยอัตโนมัติ",
+    net_proxy_enabled_desc:
+        "เมื่อปิด URL จะถูกเก็บไว้แต่การเชื่อมต่อทั้งหมดจะตรง；IP ส่วนตัว (192.168.x, 10.x) จะข้าม proxy โดยอัตโนมัติ",
     net_skip_tls: "ข้ามการตรวจสอบ TLS",
     net_skip_tls_desc:
         "สำหรับเซิร์ฟเวอร์ Emby ที่มีใบรับรองที่ลงนามด้วยตนเอง — ไม่ปลอดภัย",
@@ -209,7 +211,7 @@ export const th: typeof zhCN = {
     sys_trakt_user_placeholder: "เช่น your_trakt_user",
     sys_trakt_host: "เปิดใช้งานโฮสต์",
     sys_trakt_host_desc:
-        "คำหลักโฮสต์คั่นด้วยจุลภาค ปล่อยว่างเพื่อปิด；เช่น emby.local, 192.168.1；กรอก \".\" เพื่อเปิดทั้งหมด",
+        'คำหลักโฮสต์คั่นด้วยจุลภาค ปล่อยว่างเพื่อปิด；เช่น emby.local, 192.168.1；กรอก "." เพื่อเปิดทั้งหมด',
     sys_trakt_host_placeholder: "เช่น localhost, 192.168., emby.example.com",
     sys_trakt_dup: "อนุญาตการทำเครื่องหมายซ้ำ",
     sys_trakt_dup_desc:
@@ -223,7 +225,7 @@ export const th: typeof zhCN = {
         "เมื่อการเล่นเสร็จสิ้น การรับชมของคุณจะซิงค์กับ Bangumi โดยอัตโนมัติ: การถึง ≥ 80% จะทำเครื่องหมายตอนปัจจุบันว่าดูแล้ว น้อยกว่านั้นจะไม่ถูกทำเครื่องหมาย ตอนอื่นๆ ในซีซันเดียวกันที่ดูจบบนเซิร์ฟเวอร์สื่อจะถูกเพิ่มด้วย โดยไม่ซ้ำรายการที่มีอยู่ หากไม่มีอะไรต้องทำเครื่องหมาย (< 80% และไม่มีประวัติ) ผลงานจะถูกตั้งเป็น 'กำลังดู' เฉพาะเมื่อเวลาเล่นจริง ≥ 20 วินาที มิฉะนั้นจะข้ามเพื่อป้องกันการเพิ่มโดยไม่ตั้งใจ",
     sys_bangumi_host: "เปิดใช้งานโฮสต์",
     sys_bangumi_host_desc:
-        "คำหลักโฮสต์คั่นด้วยจุลภาค ปล่อยว่างเพื่อปิด；เช่น emby.local, 192.168.1；กรอก \".\" เพื่อเปิดทั้งหมด",
+        'คำหลักโฮสต์คั่นด้วยจุลภาค ปล่อยว่างเพื่อปิด；เช่น emby.local, 192.168.1；กรอก "." เพื่อเปิดทั้งหมด',
     sys_bangumi_host_placeholder: "เช่น localhost, 192.168., emby.example.com",
     sys_bangumi_user: "ชื่อผู้ใช้ / UID",
     sys_bangumi_user_desc: "ชื่อผู้ใช้ bgm.tv หรือตัวเลขใน bgm.tv/user/123456",

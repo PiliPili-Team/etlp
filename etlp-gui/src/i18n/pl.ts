@@ -118,9 +118,11 @@ export const pl: typeof zhCN = {
     net_proxy_http: "Proxy HTTP",
     net_proxy_https: "Proxy HTTPS",
     net_proxy_socks5: "Proxy SOCKS5",
-    net_proxy_desc: "Wpisz tylko host:port; wklej pełny URL dla automatycznego wykrycia schematu; zostaw puste aby wyłączyć",
+    net_proxy_desc:
+        "Wpisz tylko host:port; wklej pełny URL dla automatycznego wykrycia schematu; zostaw puste aby wyłączyć",
     net_proxy_enabled: "Włącz proxy",
-    net_proxy_enabled_desc: "Po wyłączeniu URL jest zachowany, ale wszystkie połączenia są bezpośrednie; prywatne adresy IP (192.168.x, 10.x) są zawsze automatycznie pomijane",
+    net_proxy_enabled_desc:
+        "Po wyłączeniu URL jest zachowany, ale wszystkie połączenia są bezpośrednie; prywatne adresy IP (192.168.x, 10.x) są zawsze automatycznie pomijane",
     net_skip_tls: "Pomiń weryfikację TLS",
     net_skip_tls_desc:
         "Dla serwerów Emby z certyfikatami samopodpisanymi — niebezpieczne",
@@ -217,7 +219,7 @@ export const pl: typeof zhCN = {
     sys_trakt_user_placeholder: "np. your_trakt_user",
     sys_trakt_host: "Włącz hosta",
     sys_trakt_host_desc:
-        "Słowa kluczowe hosta oddzielone przecinkami, puste aby wyłączyć；np. emby.local, 192.168.1；wpisz \".\" by włączyć wszystkich",
+        'Słowa kluczowe hosta oddzielone przecinkami, puste aby wyłączyć；np. emby.local, 192.168.1；wpisz "." by włączyć wszystkich',
     sys_trakt_host_placeholder: "np. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Zezwalaj na ponowne oznaczanie",
     sys_trakt_dup_desc:
@@ -232,7 +234,7 @@ export const pl: typeof zhCN = {
         "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Bangumi: osiągnięcie ≥ 80% oznacza bieżący odcinek jako obejrzany, poniżej pozostaje nieoznaczony; inne odcinki tego samego sezonu ukończone na serwerze multimediów są również dodawane bez duplikatów. Jeśli nie ma nic do oznaczenia (< 80% i brak historii), dzieło jest ustawiane jako 'oglądam' tylko jeśli efektywny czas odtwarzania wynosi ≥ 20 sekund, w przeciwnym razie jest pomijane, aby zapobiec przypadkowym wpisom.",
     sys_bangumi_host: "Włącz hosta",
     sys_bangumi_host_desc:
-        "Słowa kluczowe hosta oddzielone przecinkami, puste aby wyłączyć；np. emby.local, 192.168.1；wpisz \".\" by włączyć wszystkich",
+        'Słowa kluczowe hosta oddzielone przecinkami, puste aby wyłączyć；np. emby.local, 192.168.1；wpisz "." by włączyć wszystkich',
     sys_bangumi_host_placeholder: "np. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nazwa użytkownika / UID",
     sys_bangumi_user_desc: "Nazwa użytkownika bgm.tv lub cyfry w bgm.tv/user/123456",

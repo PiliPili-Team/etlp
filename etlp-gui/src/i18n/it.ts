@@ -120,9 +120,11 @@ export const it: typeof zhCN = {
     net_proxy_http: "Proxy HTTP",
     net_proxy_https: "Proxy HTTPS",
     net_proxy_socks5: "Proxy SOCKS5",
-    net_proxy_desc: "Solo host:port; incolla un URL completo per rilevare lo schema automaticamente; vuoto per disattivare",
+    net_proxy_desc:
+        "Solo host:port; incolla un URL completo per rilevare lo schema automaticamente; vuoto per disattivare",
     net_proxy_enabled: "Abilita proxy",
-    net_proxy_enabled_desc: "Se disabilitato, l'URL viene mantenuto ma tutte le connessioni sono dirette; gli IP privati (192.168.x, 10.x ecc.) vengono bypassati automaticamente",
+    net_proxy_enabled_desc:
+        "Se disabilitato, l'URL viene mantenuto ma tutte le connessioni sono dirette; gli IP privati (192.168.x, 10.x ecc.) vengono bypassati automaticamente",
     net_skip_tls: "Salta verifica TLS",
     net_skip_tls_desc: "Per server Emby autofirmati — non sicuro",
     net_redirect: "Rilevamento reindirizzamenti",
@@ -216,7 +218,7 @@ export const it: typeof zhCN = {
     sys_trakt_user_placeholder: "es. your_trakt_user",
     sys_trakt_host: "Abilita host",
     sys_trakt_host_desc:
-        "Parole chiave host separate da virgole, vuoto per disabilitare；es. emby.local, 192.168.1；inserisci \".\" per abilitare tutti",
+        'Parole chiave host separate da virgole, vuoto per disabilitare；es. emby.local, 192.168.1；inserisci "." per abilitare tutti',
     sys_trakt_host_placeholder: "es. localhost, 192.168., emby.example.com",
     sys_trakt_dup: "Consenti contrassegno duplicato",
     sys_trakt_dup_desc:
@@ -231,7 +233,7 @@ export const it: typeof zhCN = {
         "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Bangumi: raggiungere ≥ 80% contrassegna l'episodio corrente come visto, al di sotto non viene contrassegnato; vengono aggiunti anche gli altri episodi della stessa stagione già completati nel tuo server multimediale, senza duplicati. Se non c'è nulla da contrassegnare (< 80% e nessuna cronologia), l'opera viene impostata su «in visione» solo se il tempo di riproduzione effettivo è ≥ 20 secondi, altrimenti viene saltata per evitare aggiunte accidentali.",
     sys_bangumi_host: "Abilita host",
     sys_bangumi_host_desc:
-        "Parole chiave host separate da virgole, vuoto per disabilitare；es. emby.local, 192.168.1；inserisci \".\" per abilitare tutti",
+        'Parole chiave host separate da virgole, vuoto per disabilitare；es. emby.local, 192.168.1；inserisci "." per abilitare tutti',
     sys_bangumi_host_placeholder: "es. localhost, 192.168., emby.example.com",
     sys_bangumi_user: "Nome utente / UID",
     sys_bangumi_user_desc: "Nome utente bgm.tv o le cifre in bgm.tv/user/123456",
