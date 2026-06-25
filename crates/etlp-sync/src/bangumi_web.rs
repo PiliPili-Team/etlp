@@ -420,7 +420,7 @@ fn parse_ep_entries(html: &str) -> Vec<EpEntry> {
 }
 
 /// Compute `(min, max)` sort number across a non-empty episode list.
-fn ep_range(episodes: &[EpEntry]) -> Option<(u32, u32)> {
+pub(crate) fn ep_range(episodes: &[EpEntry]) -> Option<(u32, u32)> {
     let min = episodes.iter().map(|e| e.sort).min()?;
     let max = episodes.iter().map(|e| e.sort).max()?;
     Some((min, max))
