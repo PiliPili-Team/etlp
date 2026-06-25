@@ -6,6 +6,7 @@ import {
     useRef,
     useMemo,
 } from "react";
+import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -243,7 +244,7 @@ function InputRow({
     onCommit,
 }: {
     label: string;
-    desc?: string;
+    desc?: ReactNode;
     value: string;
     placeholder?: string;
     mono?: boolean;
@@ -3212,9 +3213,22 @@ function BangumiSection({
                 <div className="settings-group-title">{t("sys_tmdb")}</div>
                 <InputRow
                     label={t("sys_tmdb_key")}
-                    desc={t("sys_tmdb_key_desc")}
+                    desc={
+                        <>
+                            {t("sys_tmdb_key_desc")}{" "}
+                            <a
+                                href={TMDB_API_URL}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    void openUrl(TMDB_API_URL);
+                                }}
+                            >
+                                {t("sys_tmdb_api_link")}
+                            </a>
+                        </>
+                    }
                     value={cfg.tmdb_api_key}
-                    placeholder=""
+                    placeholder={`例如：${TMDB_EXAMPLE_KEY}`}
                     mono
                     onCommit={(v) => update("tmdb", "api_key", v)}
                 />
@@ -3233,6 +3247,11 @@ function BangumiSection({
         </>
     );
 }
+
+// ── TMDB ───────────────────────────────────────────────────────────────────────
+
+const TMDB_API_URL = "https://www.themoviedb.org/settings/api";
+const TMDB_EXAMPLE_KEY = "C2ZNPRRG8GPQXMKB9MUOHO2NWIPPLJSJ";
 
 // ── Trakt ──────────────────────────────────────────────────────────────────────
 

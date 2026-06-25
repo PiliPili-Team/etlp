@@ -410,7 +410,7 @@ export const zhTW: typeof zhCN = {
     // TMDB
     sys_tmdb: "TMDB 整合",
     sys_tmdb_key: "API Key",
-    sys_tmdb_key_desc:
-        "TMDB API Key，用於在媒體伺服器缺少放映日期時查詢集的首播日期；留空使用內建公共 Key",
+    sys_tmdb_key_desc: "TMDB API Key，用於在媒體伺服器缺少放映日期時查詢集的首播日期。",
+    sys_tmdb_api_link: "在此建立 API 密鑰",
     sys_tmdb_key_placeholder: "",
 };

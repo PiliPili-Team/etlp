@@ -407,7 +407,7 @@ export const zhCN = {
     // TMDB
     sys_tmdb: "TMDB 集成",
     sys_tmdb_key: "API Key",
-    sys_tmdb_key_desc:
-        "TMDB API Key，用于在媒体服务器缺少放映日期时查询集的首播日期；留空使用内置公共 Key",
+    sys_tmdb_key_desc: "TMDB API Key，用于在媒体服务器缺少放映日期时查询集的首播日期。",
+    sys_tmdb_api_link: "在此创建 API 密钥",
     sys_tmdb_key_placeholder: "",
 };
