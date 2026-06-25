@@ -20,8 +20,8 @@ pub mod tmdb;
 pub mod trakt;
 
 pub use bangumi::{
-    BangumiApi, CollectionState, SubjectCache, sync_episode_by_bangumi_id,
-    sync_episodes,
+    BangumiApi, BangumiWebHit, CollectionState, SubjectCache, normalize_title,
+    parse_bgm_search_html, sync_episode_by_bangumi_id, sync_episodes,
 };
 pub use bangumi_map::{
     EpRange, MapError, MapProvider, SubjectMapping, match_mapping,
