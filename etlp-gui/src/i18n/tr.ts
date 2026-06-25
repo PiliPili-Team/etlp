@@ -115,8 +115,8 @@ export const tr: typeof zhCN = {
 
     // Network
     page_network: "Ağ",
-    net_proxy: "HTTP Proxy",
-    net_proxy_desc: "Biçim: host:port (devre dışı bırakmak için boş bırakın)",
+    net_proxy: "Proxy",
+    net_proxy_desc: "http://, https://, socks5:// desteklenir；örn. http://127.0.0.1:6152 veya socks5://127.0.0.1:6153；devre dışı için boş bırakın",
     net_skip_tls: "TLS Doğrulamasını Atla",
     net_skip_tls_desc: "Öz imzalı sertifikalı Emby sunucuları için — güvensiz",
     net_redirect: "Yönlendirme Tespiti",

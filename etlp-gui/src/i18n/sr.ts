@@ -114,8 +114,8 @@ export const sr: typeof zhCN = {
 
     // Network
     page_network: "Мрежа",
-    net_proxy: "HTTP прокси",
-    net_proxy_desc: "Формат: host:port (оставите празно за онемогућавање)",
+    net_proxy: "Прокси",
+    net_proxy_desc: "Подржава http://, https://, socks5://；нпр. http://127.0.0.1:6152 или socks5://127.0.0.1:6153；оставите празно за онемогућавање",
     net_skip_tls: "Прескочи TLS верификацију",
     net_skip_tls_desc: "За Emby сервере са самопотписаним сертификатима — небезбедно",
     net_redirect: "Откривање преусмеравања",

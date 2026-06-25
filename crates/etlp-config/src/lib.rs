@@ -81,8 +81,6 @@ pub const LOG_MAX_FILES_MAX: usize = 14;
 pub struct DevSection {
     /// Absolute path to the player binary; overrides `emby.player` for lookup.
     pub player_path: Option<String>,
-    /// HTTP proxy passed to the player (`host:port`).
-    pub http_proxy: Option<String>,
     /// mpv `--input-ipc-server` socket path; enables IPC control.
     pub mpv_input_ipc_server: Option<String>,
     /// Enable log masking (mix sensitive tokens into placeholder text).
@@ -97,7 +95,16 @@ pub struct DevSection {
     pub log_max_files: usize,
     /// Kill leftover player processes on startup.
     pub kill_process_at_start: bool,
-    /// HTTP proxy for the etlp process itself (`host:port`).
+    /// Unified proxy for etlp's own HTTP client and the player.
+    ///
+    /// Accepts a full URL including scheme:
+    /// - `http://host:port`
+    /// - `https://host:port`
+    /// - `socks5://host:port`
+    ///
+    /// Legacy bare `host:port` without a scheme is treated as HTTP.
+    /// SOCKS5 is forwarded to etlp's own HTTP requests only; the player
+    /// receives it only when it supports non-HTTP proxies natively.
     pub proxy: Option<String>,
     /// Disable TLS certificate verification (insecure; for local dev only).
     pub skip_certificate_verify: bool,
@@ -150,7 +157,6 @@ impl Default for DevSection {
     fn default() -> Self {
         Self {
             player_path: None,
-            http_proxy: None,
             mpv_input_ipc_server: None,
             mix_log: true,
             log_level: "info".to_owned(),

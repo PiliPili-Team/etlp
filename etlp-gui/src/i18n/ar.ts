@@ -114,8 +114,8 @@ export const ar: typeof zhCN = {
 
     // Network
     page_network: "الشبكة",
-    net_proxy: "وكيل HTTP",
-    net_proxy_desc: "الصيغة: host:port (اتركه فارغًا للتعطيل)",
+    net_proxy: "الوكيل",
+    net_proxy_desc: "يدعم http://، https://، socks5://؛ مثال: http://127.0.0.1:6152 أو socks5://127.0.0.1:6153؛ اتركه فارغًا للتعطيل",
     net_skip_tls: "تخطّي التحقق من TLS",
     net_skip_tls_desc: "لخوادم Emby الموقّعة ذاتيًا — غير آمن",
     net_redirect: "كشف إعادة التوجيه",

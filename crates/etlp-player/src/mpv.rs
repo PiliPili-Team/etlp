@@ -250,7 +250,11 @@ pub struct LaunchArgs {
     pub fullscreen: bool,
     /// Disable audio track.
     pub disable_audio: bool,
-    /// HTTP proxy `host:port` forwarded to mpv.
+    /// Proxy URL forwarded to mpv (`http://`, `https://`, or bare `host:port`).
+    ///
+    /// SOCKS5 proxies are not passed to mpv because mpv does not support them
+    /// via `--http-proxy`; they are silently skipped here and only take effect
+    /// for etlp's own HTTP requests (Emby/Jellyfin API, Trakt, Bangumi).
     pub http_proxy: Option<String>,
     /// Override IPC socket path (dev config `mpv_input_ipc_server`).
     pub static_ipc: Option<String>,
@@ -315,9 +319,31 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
     if !args.mount_disk_mode {
         cmd.push("--force-window=immediate".into());
         if let Some(proxy) = &args.http_proxy {
-            cmd.push(format!("--http-proxy=http://{proxy}"));
-            if args.is_multiple_episodes {
-                cmd.push("--cache=no".into());
+            let scheme = proxy
+                .split("://")
+                .next()
+                .filter(|s| proxy.contains("://"))
+                .unwrap_or("http");
+            match scheme {
+                "http" | "https" => {
+                    let proxy_url = if proxy.contains("://") {
+                        proxy.clone()
+                    } else {
+                        format!("http://{proxy}")
+                    };
+                    tracing::debug!(proxy = %proxy_url, "mpv: --http-proxy set");
+                    cmd.push(format!("--http-proxy={proxy_url}"));
+                    if args.is_multiple_episodes {
+                        cmd.push("--cache=no".into());
+                    }
+                }
+                other => {
+                    tracing::debug!(
+                        scheme = %other,
+                        proxy = %proxy,
+                        "mpv: proxy scheme not supported by --http-proxy, skipping"
+                    );
+                }
             }
         }
     }
@@ -942,15 +968,36 @@ mod tests {
     }
 
     #[test]
-    fn build_args_proxy_with_multiple_episodes_disables_cache() {
+    fn build_args_proxy_http_with_multiple_episodes_disables_cache() {
         let mut args = default_launch();
         args.is_multiple_episodes = true;
-        args.http_proxy = Some("127.0.0.1:8080".into());
+        // Full http:// URL
+        args.http_proxy = Some("http://127.0.0.1:8080".into());
         let ipc = IpcPath::generate();
         let cmd = build_args(&args, &ipc);
         let flat = cmd.join(" ");
         assert!(flat.contains("--http-proxy=http://127.0.0.1:8080"));
         assert!(flat.contains("--cache=no"));
+    }
+
+    #[test]
+    fn build_args_proxy_bare_host_port_treated_as_http() {
+        let mut args = default_launch();
+        args.http_proxy = Some("127.0.0.1:8080".into());
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(flat.contains("--http-proxy=http://127.0.0.1:8080"));
+    }
+
+    #[test]
+    fn build_args_proxy_socks5_is_skipped_for_mpv() {
+        let mut args = default_launch();
+        args.http_proxy = Some("socks5://127.0.0.1:1080".into());
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(!flat.contains("--http-proxy"));
     }
 
     #[test]

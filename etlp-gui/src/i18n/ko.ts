@@ -113,8 +113,8 @@ export const ko: typeof zhCN = {
 
     // Network
     page_network: "네트워크",
-    net_proxy: "HTTP 프록시",
-    net_proxy_desc: "형식: host:port (비우면 비활성화)",
+    net_proxy: "프록시",
+    net_proxy_desc: "http://, https://, socks5:// 지원；예: http://127.0.0.1:6152 또는 socks5://127.0.0.1:6153；비우면 비활성화",
     net_skip_tls: "TLS 검증 건너뛰기",
     net_skip_tls_desc: "자체 서명된 Emby 서버용 — 안전하지 않음",
     net_redirect: "리다이렉트 감지",

@@ -113,8 +113,8 @@ export const ja: typeof zhCN = {
 
     // Network
     page_network: "ネットワーク",
-    net_proxy: "HTTP プロキシ",
-    net_proxy_desc: "形式：host:port（空で無効）",
+    net_proxy: "プロキシ",
+    net_proxy_desc: "http://、https://、socks5:// に対応；例 http://127.0.0.1:6152 または socks5://127.0.0.1:6153；空で無効",
     net_skip_tls: "TLS 検証をスキップ",
     net_skip_tls_desc: "自己署名の Emby サーバー用 — 安全ではありません",
     net_redirect: "リダイレクト検出",

@@ -117,8 +117,8 @@ export const it: typeof zhCN = {
 
     // Network
     page_network: "Rete",
-    net_proxy: "Proxy HTTP",
-    net_proxy_desc: "Formato: host:port (lascia vuoto per disabilitare)",
+    net_proxy: "Proxy",
+    net_proxy_desc: "Supporta http://, https://, socks5://；es. http://127.0.0.1:6152 o socks5://127.0.0.1:6153；vuoto per disabilitare",
     net_skip_tls: "Salta verifica TLS",
     net_skip_tls_desc: "Per server Emby autofirmati — non sicuro",
     net_redirect: "Rilevamento reindirizzamenti",

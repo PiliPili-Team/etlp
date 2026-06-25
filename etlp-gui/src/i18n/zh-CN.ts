@@ -109,8 +109,8 @@ export const zhCN = {
 
     // Network
     page_network: "网络",
-    net_proxy: "HTTP 代理",
-    net_proxy_desc: "格式：host:port（留空不使用）",
+    net_proxy: "代理",
+    net_proxy_desc: "支持 http://、https://、socks5://；如 http://127.0.0.1:6152 或 socks5://127.0.0.1:6153；留空不使用",
     net_skip_tls: "跳过 TLS 证书验证",
     net_skip_tls_desc: "用于自签名证书的 Emby 服务器（存在安全风险）",
     net_redirect: "重定向检测",

@@ -113,8 +113,8 @@ export const he: typeof zhCN = {
 
     // Network
     page_network: "רשת",
-    net_proxy: "פרוקסי HTTP",
-    net_proxy_desc: "פורמט: host:port (השאר ריק להשבתה)",
+    net_proxy: "פרוקסי",
+    net_proxy_desc: "תומך ב-http://‏, https://‏, socks5://；לדוג׳ http://127.0.0.1:6152 או socks5://127.0.0.1:6153；השאר ריק להשבתה",
     net_skip_tls: "דלג על אימות TLS",
     net_skip_tls_desc: "לשרתי Emby עם אישורים עצמאיים — לא מאובטח",
     net_redirect: "זיהוי הפניות",

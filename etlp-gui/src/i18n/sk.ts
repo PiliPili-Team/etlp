@@ -116,8 +116,8 @@ export const sk: typeof zhCN = {
 
     // Network
     page_network: "Sieť",
-    net_proxy: "HTTP proxy",
-    net_proxy_desc: "Formát: host:port (nechajte prázdne na zakázanie)",
+    net_proxy: "Proxy",
+    net_proxy_desc: "Podporuje http://, https://, socks5://；napr. http://127.0.0.1:6152 alebo socks5://127.0.0.1:6153；nechajte prázdne na zakázanie",
     net_skip_tls: "Preskočiť overenie TLS",
     net_skip_tls_desc: "Pre samopodpísané servery Emby — nezabezpečené",
     net_redirect: "Detekcia presmerovaní",

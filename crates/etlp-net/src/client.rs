@@ -171,6 +171,19 @@ impl HttpClientBuilder {
     }
 }
 
+/// Normalise the user-supplied proxy string to a full URL.
+///
+/// Bare `host:port` (no scheme) is treated as HTTP.  A string that already
+/// contains `://` is left untouched so `http://`, `https://`, and `socks5://`
+/// all work as-is.
+fn normalise_proxy_url(raw: &str) -> String {
+    if raw.contains("://") {
+        raw.to_owned()
+    } else {
+        format!("http://{raw}")
+    }
+}
+
 fn build_inner(
     proxy: &Option<String>,
     cert_verify: bool,
@@ -186,21 +199,35 @@ fn build_inner(
     if !cert_verify {
         builder = builder.danger_accept_invalid_certs(true);
     }
-    if let Some(proxy) = proxy {
-        let proxy_url = format!("http://{proxy}");
+    if let Some(raw) = proxy {
+        let proxy_url = normalise_proxy_url(raw);
+        tracing::debug!(proxy = %proxy_url, "http_client: proxy configured");
+        let proxy_url2 = proxy_url.clone();
         // Skip the proxy for localhost and plex.direct.
         let custom = Proxy::custom(move |url| {
             let host = url.host_str().unwrap_or("");
-            let skip = host.starts_with("127.0.0.1")
-                || host == "localhost"
-                || url.as_str().contains("plex.direct");
-            if skip {
+            let is_local = host == "localhost"
+                || host.starts_with("127.")
+                || host == "::1";
+            let is_plex = url.as_str().contains("plex.direct");
+            if is_local || is_plex {
+                tracing::debug!(
+                    target_host = %host,
+                    "http_client: proxy bypassed (local/plex)"
+                );
                 None
             } else {
-                Url::parse(&proxy_url).ok()
+                tracing::debug!(
+                    target_url = %url,
+                    proxy = %proxy_url2,
+                    "http_client: routing via proxy"
+                );
+                Url::parse(&proxy_url2).ok()
             }
         });
         builder = builder.proxy(custom);
+    } else {
+        tracing::debug!("http_client: no proxy configured");
     }
     builder.build().map_err(|e| NetError::Build(e.to_string()))
 }

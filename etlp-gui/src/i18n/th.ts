@@ -113,8 +113,8 @@ export const th: typeof zhCN = {
 
     // Network
     page_network: "เครือข่าย",
-    net_proxy: "HTTP Proxy",
-    net_proxy_desc: "รูปแบบ: host:port (ปล่อยว่างเพื่อปิดใช้งาน)",
+    net_proxy: "Proxy",
+    net_proxy_desc: "รองรับ http://, https://, socks5://；เช่น http://127.0.0.1:6152 หรือ socks5://127.0.0.1:6153；ปล่อยว่างเพื่อปิด",
     net_skip_tls: "ข้ามการตรวจสอบ TLS",
     net_skip_tls_desc:
         "สำหรับเซิร์ฟเวอร์ Emby ที่มีใบรับรองที่ลงนามด้วยตนเอง — ไม่ปลอดภัย",

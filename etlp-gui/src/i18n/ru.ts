@@ -115,8 +115,8 @@ export const ru: typeof zhCN = {
 
     // Network
     page_network: "Сеть",
-    net_proxy: "HTTP-прокси",
-    net_proxy_desc: "Формат: host:port (оставьте пустым для отключения)",
+    net_proxy: "Прокси",
+    net_proxy_desc: "Поддерживает http://, https://, socks5://；напр. http://127.0.0.1:6152 или socks5://127.0.0.1:6153；оставьте пустым для отключения",
     net_skip_tls: "Пропускать проверку TLS",
     net_skip_tls_desc: "Для самоподписанных серверов Emby — небезопасно",
     net_redirect: "Обнаружение перенаправлений",

@@ -115,7 +115,7 @@ pub struct ConfigDto {
     pub last_ep_disable_playlist: bool,
     pub version_prefer_for_playlist: bool,
     // [dev] – network
-    pub http_proxy: String,
+    pub proxy: String,
     pub redirect_check_host: Vec<String>,
     pub skip_certificate_verify: bool,
     // [dev] – misc
@@ -166,7 +166,7 @@ impl From<&Config> for ConfigDto {
             kill_process_at_start: c.dev.kill_process_at_start,
             last_ep_disable_playlist: c.dev.last_ep_disable_playlist,
             version_prefer_for_playlist: c.dev.version_prefer_for_playlist,
-            http_proxy: c.dev.http_proxy.clone().unwrap_or_default(),
+            proxy: c.dev.proxy.clone().unwrap_or_default(),
             redirect_check_host: c.dev.redirect_check_host.clone(),
             skip_certificate_verify: c.dev.skip_certificate_verify,
             log_level: c.dev.log_level.clone(),
