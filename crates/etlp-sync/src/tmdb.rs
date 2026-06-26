@@ -5,6 +5,7 @@
 //! in-process LRU cache to avoid redundant network requests.
 
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use lru::LruCache;
 use serde::Deserialize;
@@ -15,6 +16,36 @@ use crate::curl;
 use crate::error::{Result, SyncError};
 
 const DOMAIN: &str = "tmdb";
+
+/// Set once the first TMDB auth failure (HTTP 401/403) has been surfaced, so
+/// the actionable "invalid API key" warning is logged a single time per process
+/// rather than once per failed request.
+static TMDB_AUTH_WARNED: AtomicBool = AtomicBool::new(false);
+
+/// Log a failed TMDB enrichment call at the appropriate level.
+///
+/// HTTP 401/403 means the configured API key is invalid or unauthorised: every
+/// TMDB call will fail identically, so a single clear, actionable warning is
+/// emitted the first time and later occurrences are demoted to `debug`. All
+/// other errors (network blips, 404 misses, parse errors) are routine
+/// best-effort failures and are logged at `debug` to avoid alarming users.
+fn note_tmdb_error(context: &str, err: &SyncError) {
+    if let SyncError::Api { status, .. } = err
+        && (*status == 401 || *status == 403)
+    {
+        if !TMDB_AUTH_WARNED.swap(true, Ordering::Relaxed) {
+            warn!(
+                status = *status,
+                "tmdb: API key invalid or unauthorised — title/date \
+                 enrichment is disabled; check the TMDB API key in Settings"
+            );
+        } else {
+            debug!(status = *status, context, "tmdb: request unauthorised");
+        }
+        return;
+    }
+    debug!(context, "tmdb: request failed: {err}");
+}
 
 // ── Cache key ────────────────────────────────────────────────────────────────
 
@@ -193,7 +224,7 @@ impl TmdbClient {
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
-                warn!("tmdb: movie alt titles {tmdb_id} request failed: {e}");
+                note_tmdb_error("movie alt titles", &e);
                 return Vec::new();
             }
         };
@@ -223,7 +254,7 @@ impl TmdbClient {
                 jp
             }
             Err(e) => {
-                warn!("tmdb: movie alt titles {tmdb_id} parse failed: {e}");
+                note_tmdb_error("movie alt titles", &e);
                 Vec::new()
             }
         }
@@ -242,7 +273,7 @@ impl TmdbClient {
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
-                warn!("tmdb: alt titles {tmdb_id} request failed: {e}");
+                note_tmdb_error("series alt titles", &e);
                 return Vec::new();
             }
         };
@@ -270,7 +301,7 @@ impl TmdbClient {
                 jp
             }
             Err(e) => {
-                warn!("tmdb: alt titles {tmdb_id} parse failed: {e}");
+                note_tmdb_error("series alt titles", &e);
                 Vec::new()
             }
         }
@@ -288,7 +319,7 @@ impl TmdbClient {
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
-                warn!("tmdb: movie {tmdb_id} request failed: {e}");
+                note_tmdb_error("movie detail", &e);
                 return None;
             }
         };
@@ -302,12 +333,8 @@ impl TmdbClient {
                 }
                 date
             }
-            Err(SyncError::Api { status, .. }) => {
-                warn!("tmdb: movie {tmdb_id} returned HTTP {status}");
-                None
-            }
             Err(e) => {
-                warn!("tmdb: movie {tmdb_id} parse failed: {e}");
+                note_tmdb_error("movie detail", &e);
                 None
             }
         }
@@ -319,7 +346,7 @@ impl TmdbClient {
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
-                warn!("tmdb: series {tmdb_id} request failed: {e}");
+                note_tmdb_error("series detail", &e);
                 return None;
             }
         };
@@ -333,12 +360,8 @@ impl TmdbClient {
                 }
                 date
             }
-            Err(SyncError::Api { status, .. }) => {
-                warn!("tmdb: series {tmdb_id} returned HTTP {status}");
-                None
-            }
             Err(e) => {
-                warn!("tmdb: series {tmdb_id} parse failed: {e}");
+                note_tmdb_error("series detail", &e);
                 None
             }
         }
@@ -356,10 +379,7 @@ impl TmdbClient {
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
-                warn!(
-                    "tmdb: episode {tmdb_id} S{season}E{episode} \
-                     request failed: {e}"
-                );
+                note_tmdb_error("episode detail", &e);
                 return None;
             }
         };
@@ -382,18 +402,8 @@ impl TmdbClient {
                 }
                 date
             }
-            Err(SyncError::Api { status, .. }) => {
-                warn!(
-                    "tmdb: episode {tmdb_id} S{season}E{episode} \
-                     returned HTTP {status}"
-                );
-                None
-            }
             Err(e) => {
-                warn!(
-                    "tmdb: episode {tmdb_id} S{season}E{episode} \
-                     parse failed: {e}"
-                );
+                note_tmdb_error("episode detail", &e);
                 None
             }
         }
@@ -621,6 +631,30 @@ mod tests {
         let client = make_client(&server).await;
         let titles = client.series_alternative_titles(999).await;
         assert!(titles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn invalid_api_key_degrades_gracefully() {
+        // A 401 (invalid API key) must not crash or block the sync — every
+        // enrichment call simply returns its empty/None fallback.
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(
+                serde_json::json!({
+                    "status_code": 7,
+                    "status_message": "Invalid API key.",
+                    "success": false
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        assert!(client.movie_alternative_titles(40123).await.is_empty());
+        assert!(client.series_alternative_titles(40123).await.is_empty());
+        assert!(client.movie_release_date(40123).await.is_none());
+        assert!(client.series_first_air_date(40123).await.is_none());
+        assert!(client.episode_air_date(40123, 1, 1).await.is_none());
     }
 
     #[tokio::test]
