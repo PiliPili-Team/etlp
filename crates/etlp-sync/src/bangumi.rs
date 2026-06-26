@@ -206,8 +206,14 @@ fn date_diff_days(a: &str, b: &str) -> Option<i64> {
 
 /// Resolve a target episode to a Bangumi episode ID by air-date proximity.
 ///
-/// Prefers the closest air-date match within `fuzzy_days` — robust against
-/// per-subject numbering quirks — then falls back to exact `sort` match.
+/// Steps:
+/// 1. Collect every episode whose `airdate` diff from `date` is ≤ `fuzzy_days`.
+/// 2. Find the minimum diff among those candidates.
+/// 3. Within the minimum-diff group, prefer the episode whose `sort` equals
+///    `target_sort` — this handles same-day batch releases (e.g. Netflix drops
+///    or premiere weeks where episodes 1-4 all carry the same airdate).
+/// 4. If no sort-match exists in the group, take the first minimum-diff entry.
+/// 5. When no air-date candidates pass, fall back to exact `sort` lookup.
 fn pick_episode_id(
     episodes: &[BangumiEpisode],
     target_sort: u32,
@@ -215,17 +221,39 @@ fn pick_episode_id(
     fuzzy_days: i64,
 ) -> Option<u64> {
     if let Some(date) = air_date {
-        let best = episodes
+        let candidates: Vec<(i64, &BangumiEpisode)> = episodes
             .iter()
             .filter_map(|ep| {
                 let diff = date_diff_days(ep.date.as_deref()?, date)?;
-                (diff <= fuzzy_days).then_some((diff, ep.id))
+                (diff <= fuzzy_days).then_some((diff, ep))
             })
-            .min_by_key(|(diff, _)| *diff);
-        if let Some((_, id)) = best {
-            return Some(id);
+            .collect();
+
+        if !candidates.is_empty() {
+            let min_diff = candidates
+                .iter()
+                .map(|(d, _)| *d)
+                .min()
+                .unwrap_or(i64::MAX);
+
+            let group = candidates
+                .iter()
+                .filter(|(d, _)| *d == min_diff)
+                .map(|(_, ep)| *ep);
+
+            // Prefer the episode in the tie group whose sort matches the
+            // Emby index number; fall back to the first element in the group.
+            let chosen = group
+                .clone()
+                .find(|ep| ep.sort as u32 == target_sort)
+                .or_else(|| group.clone().next());
+
+            if let Some(ep) = chosen {
+                return Some(ep.id);
+            }
         }
     }
+    // No air-date match: fall back to exact sort lookup.
     episodes
         .iter()
         .find(|ep| ep.sort as u32 == target_sort)
@@ -2594,6 +2622,64 @@ mod tests {
         let eps = vec![(99u32, Some("2024-10-09T00:00:00Z".to_owned()))];
         let marked = sync_episodes(&api, 300, &eps).await.unwrap();
         assert_eq!(marked, vec![3002]);
+    }
+
+    // ── pick_episode_id: same-day batch tie-breaking ──────────────────────────
+
+    /// Episodes 1-4 all share the same airdate (premiere week batch release,
+    /// e.g. 葬送のフリーレン E01-E04 all airing on 2023-09-29).
+    /// Emby reports the target episode as S1E2, whose UTC premiere date is
+    /// 2023-09-28T16:00:00Z (= 2023-09-29 in JST).
+    /// `pick_episode_id` must resolve to episode 2 (sort=2), NOT episode 1.
+    #[tokio::test]
+    async fn sync_episodes_picks_correct_sort_when_same_day_batch() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/400602"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/400602"))
+            .respond_with(ResponseTemplate::new(202))
+            .mount(&server)
+            .await;
+        // Episodes 1-4 all share the same airdate.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 4,
+                    "data": [
+                        { "id": 1227087, "sort": 1.0, "ep": 1.0,
+                          "date": "2023-09-29" },
+                        { "id": 1227088, "sort": 2.0, "ep": 2.0,
+                          "date": "2023-09-29" },
+                        { "id": 1227089, "sort": 3.0, "ep": 3.0,
+                          "date": "2023-09-29" },
+                        { "id": 1227090, "sort": 4.0, "ep": 4.0,
+                          "date": "2023-09-29" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // The correct episode is E02 (id 1227088), not E01.
+        Mock::given(method("PUT"))
+            .and(path("/users/-/collections/-/episodes/1227088"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        // Emby reports S1E2; UTC premiere "2023-09-28T16:00:00Z" = 2023-09-29 JST.
+        // target_sort=2, diff to "2023-09-29" = 1 day (within fuzzy_days=2).
+        let eps =
+            vec![(2u32, Some("2023-09-28T16:00:00.0000000Z".to_owned()))];
+        let marked = sync_episodes(&api, 400602, &eps).await.unwrap();
+        assert_eq!(marked, vec![1227088]);
     }
 
     // ── normalize_title ───────────────────────────────────────────────────────
