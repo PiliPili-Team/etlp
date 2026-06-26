@@ -283,7 +283,7 @@ async fn run_bgm_mark_played(
     ep: u32,
     token_override: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use etlp_sync::{BangumiApi, sync_episode_by_bangumi_id};
+    use etlp_sync::{BangumiApi, new_bgm_read_cache, sync_episode_by_bangumi_id};
 
     let config = Config::load_from_dir(working_dir).ok();
     let token = token_override
@@ -305,6 +305,7 @@ async fn run_bgm_mark_played(
         &token,
         private,
         BangumiApi::DEFAULT_BASE_URL,
+        new_bgm_read_cache(),
     )?;
     sync_episode_by_bangumi_id(&api, subject_id, &[ep]).await?;
     println!("bgm.tv: episode {ep} of subject {subject_id} marked as watched.");

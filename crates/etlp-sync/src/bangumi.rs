@@ -9,18 +9,27 @@
 //!    a. Require a TMDB id; warn and bail if absent.
 //!    b. Resolve the season-premiere date (S×E1 air date) via TMDB (LRU cached).
 //!    c. Search the BGM JSON API with the series name + `season_premiere_date − 2 days`.
-//!    d. Walk the 前传/续集 relation chain to expand the candidate pool.
-//!    e. Select the subject whose `start_date` is closest to the season-premiere date;
-//!    break ties with TMDB alternative titles + name similarity.
-//!    f. Call `GET /v0/episodes?subject_id={id}` and match the episode whose
-//!    `airdate` is closest to the watched episode's air date (names are ignored).
+//!    d. Walk the 前传/续集 relation chain to expand the candidate pool (BFS).
+//!    e. Select the subject whose episode list contains an episode matching
+//!       the target air date (±2 days); break ties by title similarity.
+//!    f. Call `GET /v0/episodes?subject_id={id}&type=0` and match the episode
+//!       whose `airdate` is closest to the watched episode's air date.
 //!
 //! `provider_ids["Bangumi"]` is intentionally ignored: users frequently
 //! fill it with incorrect values, making it an unreliable signal.
+//!
+//! ## Read-cache design
+//!
+//! A process-global Moka cache (`BGM_READ_CACHE`) protects all read-only GET
+//! endpoints against concurrent webhook bursts (e.g. batch-marking 12 episodes
+//! triggers 12 simultaneous syncs). User-private `/users/` endpoints are
+//! explicitly excluded so stale state never silences a legitimate re-mark.
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
+use moka::future::Cache as MokaCache;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -28,6 +37,41 @@ use crate::error::{Result, SyncError};
 
 /// Log label for this provider's HTTP send/retry/response lines.
 const DOMAIN: &str = "bangumi";
+
+// ── BGM read-only API path constants ─────────────────────────────────────────
+
+const PATH_SUBJECTS: &str = "subjects";
+const PATH_EPISODES: &str = "episodes";
+const PATH_SEARCH_SUBJECTS: &str = "search/subjects";
+const PATH_ME: &str = "me";
+
+// ── Shared read cache ─────────────────────────────────────────────────────────
+
+/// Capacity of the in-process BGM read cache (number of distinct keys).
+const BGM_CACHE_CAPACITY: u64 = 2048;
+
+/// Raw JSON cache for BGM read-only API responses.
+///
+/// Keyed by an opaque string (`"search:{kw}:{from}"`, `"subject:{id}"`, …).
+/// Values are the raw JSON bytes already proven decodable. User-private
+/// endpoints (anything containing `/users/`) must never be cached here.
+pub type BgmReadCache = Arc<MokaCache<Arc<str>, serde_json::Value>>;
+
+/// Create a new BGM read cache with the default capacity and TTL.
+///
+/// In production, construct once (e.g. at server startup) and clone the
+/// `Arc` into each `BangumiApi`. In tests, create a fresh cache per test so
+/// test runs do not interfere with each other.
+pub fn new_bgm_read_cache() -> BgmReadCache {
+    Arc::new(
+        MokaCache::builder()
+            .max_capacity(BGM_CACHE_CAPACITY)
+            // 10-minute TTL: long enough to absorb bulk-mark bursts, short
+            // enough to pick up BGM wiki edits within a reasonable window.
+            .time_to_live(std::time::Duration::from_secs(600))
+            .build(),
+    )
+}
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -62,14 +106,22 @@ pub struct BangumiSubject {
 /// A single episode entry from `GET /episodes`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BangumiEpisode {
+    #[serde(default)]
     pub id: u64,
     /// Sort index (float because some specials use 0.5, etc.).
     pub sort: f64,
     /// Episode number within the season (0 = SP).
+    #[serde(default)]
     pub ep: f64,
     /// Air date, may be absent for unreleased episodes.
     #[serde(alias = "airdate")]
     pub date: Option<String>,
+    /// Japanese/original episode name.
+    #[serde(default)]
+    pub name: String,
+    /// Localised (Chinese) episode name.
+    #[serde(default)]
+    pub name_cn: String,
 }
 
 /// Container returned by `GET /episodes`.
@@ -206,13 +258,18 @@ pub fn normalize_title(s: &str) -> String {
 /// Bangumi (bgm.tv) REST API v0 client.
 ///
 /// Constructed with a `base_url` so unit tests can point it at a mock server
-/// without real network access.
+/// without real network access. A `BgmReadCache` can be shared across multiple
+/// `BangumiApi` instances (e.g. concurrent webhook handlers) to prevent
+/// duplicate read requests. Pass `new_bgm_read_cache()` for a fresh cache.
 pub struct BangumiApi {
     username: String,
     access_token: String,
     private: bool,
     base_url: String,
     http: reqwest::Client,
+    /// Shared read-only JSON cache. User-private `/users/` endpoints are
+    /// never stored here.
+    cache: BgmReadCache,
 }
 
 impl BangumiApi {
@@ -226,16 +283,18 @@ impl BangumiApi {
     /// Filename for the persisted `series:season:episode → subject_id` cache.
     pub const SUBJECT_CACHE_FILE: &'static str = "bangumi_subjects.json";
 
-    /// Create a new client.
+    /// Create a new client with a shared `BgmReadCache`.
     ///
     /// `base_url` is normally [`Self::DEFAULT_BASE_URL`]. Pass the address of a
     /// local mock server in tests. `private` controls whether new collection
-    /// entries are hidden from the user's public profile.
+    /// entries are hidden from the user's public profile. Clone the same
+    /// `BgmReadCache` across concurrent API instances to share the read cache.
     pub fn new(
         username: impl Into<String>,
         access_token: impl Into<String>,
         private: bool,
         base_url: impl Into<String>,
+        cache: BgmReadCache,
     ) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(etlp_core::UA_ETLP)
@@ -248,6 +307,7 @@ impl BangumiApi {
             private,
             base_url: base_url.into(),
             http,
+            cache,
         })
     }
 
@@ -256,7 +316,9 @@ impl BangumiApi {
         debug!(user = %self.username, "bangumi: GET /me (verify token)");
         let resp = crate::curl::send_logged(
             DOMAIN,
-            self.http.get(self.url("me")).headers(self.auth_headers()),
+            self.http
+                .get(self.url(PATH_ME))
+                .headers(self.auth_headers()),
         )
         .await?;
         let (status, body) =
@@ -293,74 +355,121 @@ impl BangumiApi {
 
     // ── Subject & episode info ────────────────────────────────────────────────
 
-    /// Fetch subject metadata by ID.
+    /// Fetch subject metadata by ID (Moka-cached).
     pub async fn get_subject(&self, subject_id: u64) -> Result<BangumiSubject> {
+        let cache_key: Arc<str> =
+            format!("subject:{subject_id}").into();
+        if let Some(cached) = self.cache.get(&cache_key).await {
+            debug!(subject_id, "bangumi: subject cache hit");
+            return serde_json::from_value(cached).map_err(SyncError::Json);
+        }
         let resp = crate::curl::send_logged(
             DOMAIN,
             self.http
-                .get(self.url(&format!("subjects/{subject_id}")))
+                .get(self.url(&format!("{PATH_SUBJECTS}/{subject_id}")))
                 .headers(self.auth_headers()),
         )
         .await?;
-        crate::curl::json_logged(DOMAIN, resp).await
+        let val: serde_json::Value =
+            crate::curl::json_logged(DOMAIN, resp).await?;
+        self.cache.insert(cache_key, val.clone()).await;
+        serde_json::from_value(val).map_err(SyncError::Json)
     }
 
-    /// Fetch all episodes for a subject (type 0 = main episodes).
+    /// Fetch all main episodes (type=0) for a subject (Moka-cached).
+    ///
+    /// Paginates automatically when `total > 100` so long-running series like
+    /// One Piece / Detective Conan are fetched in full.
     pub async fn get_episodes(
         &self,
         subject_id: u64,
     ) -> Result<BangumiEpisodeList> {
+        let cache_key: Arc<str> = format!("episodes:{subject_id}").into();
+        if let Some(cached) = self.cache.get(&cache_key).await {
+            debug!(subject_id, "bangumi: episodes cache hit");
+            return serde_json::from_value(cached).map_err(SyncError::Json);
+        }
+
         debug!(subject_id, "bangumi: GET /episodes");
-        let resp = crate::curl::send_logged(
-            DOMAIN,
-            self.http
-                .get(self.url("episodes"))
-                .headers(self.auth_headers())
-                .query(&[("subject_id", subject_id), ("type", 0)]),
-        )
-        .await?;
-        crate::curl::json_logged(DOMAIN, resp).await
+        const LIMIT: u64 = 100;
+        let mut all_data: Vec<serde_json::Value> = Vec::new();
+        let mut offset = 0u64;
+        let mut total = 0u64;
+
+        loop {
+            let resp = crate::curl::send_logged(
+                DOMAIN,
+                self.http
+                    .get(self.url(PATH_EPISODES))
+                    .headers(self.auth_headers())
+                    .query(&[
+                        ("subject_id", subject_id),
+                        ("type", 0),
+                        ("limit", LIMIT),
+                        ("offset", offset),
+                    ]),
+            )
+            .await?;
+            let page: serde_json::Value =
+                crate::curl::json_logged(DOMAIN, resp).await?;
+            if total == 0 {
+                total = page
+                    .get("total")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+            }
+            let items = page
+                .get("data")
+                .and_then(|d| d.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let fetched = items.len() as u64;
+            all_data.extend(items);
+            offset += fetched;
+            if fetched == 0 || offset >= total {
+                break;
+            }
+        }
+
+        let list_val = serde_json::json!({ "total": total, "data": all_data });
+        self.cache.insert(cache_key, list_val.clone()).await;
+        serde_json::from_value(list_val).map_err(SyncError::Json)
     }
 
-    /// Fetch subjects related to `subject_id` (e.g. sequels `续集`).
+    /// Fetch subjects related to `subject_id` (续集/前传/不同演绎, Moka-cached).
     pub async fn get_related_subjects(
         &self,
         subject_id: u64,
     ) -> Result<Vec<BangumiRelated>> {
+        let cache_key: Arc<str> = format!("related:{subject_id}").into();
+        if let Some(cached) = self.cache.get(&cache_key).await {
+            debug!(subject_id, "bangumi: related cache hit");
+            return serde_json::from_value(cached).map_err(SyncError::Json);
+        }
         let resp = crate::curl::send_logged(
             DOMAIN,
             self.http
-                .get(self.url(&format!("subjects/{subject_id}/subjects")))
+                .get(self.url(&format!(
+                    "{PATH_SUBJECTS}/{subject_id}/subjects"
+                )))
                 .headers(self.auth_headers()),
         )
         .await?;
-        crate::curl::json_logged(DOMAIN, resp).await
+        let val: serde_json::Value =
+            crate::curl::json_logged(DOMAIN, resp).await?;
+        self.cache.insert(cache_key, val.clone()).await;
+        serde_json::from_value(val).map_err(SyncError::Json)
     }
 
     /// Fetch [`bangumi_web::SubjectDetail`] for one subject using the JSON API.
+    ///
+    /// Delegates to the cached `get_subject` and `get_episodes` calls so
+    /// concurrent requests for the same subject are served from the Moka cache.
     pub(crate) async fn fetch_subject_detail_api(
         &self,
         subject_id: u64,
     ) -> Option<crate::bangumi_web::SubjectDetail> {
         use crate::bangumi_web::{EpEntry, SubjectDetail};
-
-        #[derive(serde::Deserialize)]
-        struct EpApiEntry {
-            sort: f64,
-            #[serde(default)]
-            name: String,
-            #[serde(default)]
-            name_cn: String,
-            // BGM API returns "airdate"; keep "date" as alias for robustness.
-            #[serde(alias = "date")]
-            airdate: Option<String>,
-        }
-        #[derive(serde::Deserialize)]
-        struct EpApiPage {
-            total: u64,
-            #[serde(default)]
-            data: Vec<EpApiEntry>,
-        }
 
         let subject = self.get_subject(subject_id).await.ok()?;
         let start_date = subject.date.clone();
@@ -370,65 +479,30 @@ impl BangumiApi {
             (subject.name_cn.clone(), Some(subject.name.clone()))
         };
 
-        let mut episodes: Vec<EpEntry> = Vec::new();
-        const LIMIT: u64 = 100;
-        let mut offset = 0u64;
+        let ep_list = match self.get_episodes(subject_id).await {
+            Ok(l) => l,
+            Err(e) => {
+                debug!(subject_id, "bangumi: detail fetch episodes failed: {e}");
+                return None;
+            }
+        };
 
-        loop {
-            let resp = match self
-                .http
-                .get(self.url("episodes"))
-                .headers(self.auth_headers())
-                .query(&[
-                    ("subject_id", subject_id),
-                    ("type", 0u64),
-                    ("limit", LIMIT),
-                    ("offset", offset),
-                ])
-                .send()
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    debug!(
-                        subject_id,
-                        "bangumi: api_episodes request failed: {e}"
-                    );
-                    break;
-                }
-            };
-            let page: EpApiPage = match resp.json().await {
-                Ok(p) => p,
-                Err(e) => {
-                    debug!(
-                        subject_id,
-                        "bangumi: api_episodes parse failed: {e}"
-                    );
-                    break;
-                }
-            };
-            if page.data.is_empty() {
-                break;
-            }
-            let fetched = page.data.len() as u64;
-            let total = page.total;
-            for entry in page.data {
-                let title = if entry.name_cn.is_empty() {
-                    entry.name
+        let mut episodes: Vec<EpEntry> = ep_list
+            .data
+            .iter()
+            .map(|e| {
+                let title = if !e.name_cn.is_empty() {
+                    e.name_cn.clone()
                 } else {
-                    entry.name_cn
+                    e.name.clone()
                 };
-                episodes.push(EpEntry {
-                    sort: entry.sort as u32,
+                EpEntry {
+                    sort: e.sort as u32,
                     title,
-                    airdate: entry.airdate,
-                });
-            }
-            offset += fetched;
-            if offset >= total {
-                break;
-            }
-        }
+                    airdate: e.date.clone(),
+                }
+            })
+            .collect();
 
         episodes.sort_by_key(|e| e.sort);
         let ep_range = crate::bangumi_web::ep_range(&episodes);
@@ -673,7 +747,7 @@ impl BangumiApi {
         map
     }
 
-    /// Search subjects via the BGM JSON v0 API.
+    /// Search subjects via the BGM JSON v0 API (Moka-cached).
     ///
     /// Authorization header is intentionally omitted — the v0 search endpoint
     /// can return 400 or empty results when a user token is present.
@@ -690,11 +764,13 @@ impl BangumiApi {
             base_match_score,
         };
 
-        #[derive(serde::Deserialize)]
-        struct Page {
-            #[serde(default)]
-            data: Vec<Entry>,
-        }
+        let cache_key: Arc<str> = format!(
+            "search:{}:{}",
+            keyword,
+            air_date_from.unwrap_or("none")
+        )
+        .into();
+
         #[derive(serde::Deserialize)]
         struct Entry {
             id: u64,
@@ -703,55 +779,65 @@ impl BangumiApi {
             name_cn: String,
         }
 
-        // V0 search path — no /v0 prefix since url() already includes it.
-        let url = format!(
-            "{}/search/subjects?limit={limit}&offset=0",
-            self.base_url.trim_end_matches('/')
-        );
-        // Deliberately omit `sort` — BGM defaults to `match` (综合匹配度),
-        // which ranks exact-name matches first, making it safe to blindly
-        // trust `data[0]` for well-formed queries.
-        let body = if let Some(from) = air_date_from {
-            serde_json::json!({
-                "keyword": keyword,
-                "filter": {
-                    "type": [2],
-                    "nsfw": true,
-                    "air_date": [format!(">={from}")]
-                }
-            })
-        } else {
-            serde_json::json!({
-                "keyword": keyword,
-                "filter": { "type": [2], "nsfw": true }
-            })
-        };
+        let page_val: serde_json::Value =
+            if let Some(cached) = self.cache.get(&cache_key).await {
+                debug!(keyword, "bangumi: search cache hit");
+                cached
+            } else {
+                // V0 search path — url() already includes the /v0 prefix.
+                let url = format!(
+                    "{}/{PATH_SEARCH_SUBJECTS}?limit={limit}&offset=0",
+                    self.base_url.trim_end_matches('/')
+                );
+                // Deliberately omit `sort` — BGM defaults to match ranking.
+                let body = if let Some(from) = air_date_from {
+                    serde_json::json!({
+                        "keyword": keyword,
+                        "filter": {
+                            "type": [2],
+                            "nsfw": true,
+                            "air_date": [format!(">={from}")]
+                        }
+                    })
+                } else {
+                    serde_json::json!({
+                        "keyword": keyword,
+                        "filter": { "type": [2], "nsfw": true }
+                    })
+                };
 
-        // No auth header: the v0 search endpoint rejects tokens with 400.
-        let resp = match self
-            .http
-            .post(&url)
-            .headers(self.anon_headers())
-            .json(&body)
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                debug!(keyword, "bangumi: api_search request failed: {e}");
-                return Vec::new();
-            }
-        };
-        let page: Page = match resp.json().await {
-            Ok(p) => p,
-            Err(e) => {
-                debug!(keyword, "bangumi: api_search parse failed: {e}");
-                return Vec::new();
-            }
-        };
+                // No auth header: v0 search rejects tokens with 400.
+                let resp = match self
+                    .http
+                    .post(&url)
+                    .headers(self.anon_headers())
+                    .json(&body)
+                    .send()
+                    .await
+                {
+                    Ok(r) => r,
+                    Err(e) => {
+                        debug!(keyword, "bangumi: api_search failed: {e}");
+                        return Vec::new();
+                    }
+                };
+                let val: serde_json::Value = match resp.json().await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        debug!(keyword, "bangumi: api_search parse failed: {e}");
+                        return Vec::new();
+                    }
+                };
+                self.cache.insert(cache_key, val.clone()).await;
+                val
+            };
 
-        let candidates: Vec<SubjectCandidate> = page
-            .data
+        let entries: Vec<Entry> = page_val
+            .get("data")
+            .and_then(|d| serde_json::from_value(d.clone()).ok())
+            .unwrap_or_default();
+
+        let candidates: Vec<SubjectCandidate> = entries
             .into_iter()
             .filter_map(|e| {
                 let (name, name_jp) = if e.name_cn.is_empty() {
@@ -1580,7 +1666,8 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn make_api(server: &MockServer) -> BangumiApi {
-        BangumiApi::new("testuser", "tok123", true, server.uri()).unwrap()
+        BangumiApi::new("testuser", "tok123", true, server.uri(), new_bgm_read_cache())
+            .unwrap()
     }
 
     // ── get_subject ───────────────────────────────────────────────────────────
@@ -2136,6 +2223,8 @@ mod tests {
             sort,
             ep: sort,
             date: date.map(str::to_owned),
+            name: String::new(),
+            name_cn: String::new(),
         }
     }
 
