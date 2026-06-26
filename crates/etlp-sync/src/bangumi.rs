@@ -653,12 +653,15 @@ impl BangumiApi {
             });
         }
 
-        let body = serde_json::json!({
-            "episode_id": ep_ids,
-            "type":        CollectionState::Watched as u8,
-        });
-        let resp =
-            crate::curl::send_logged(
+        // BGM's PATCH endpoint rejects payloads with more than 100 episode IDs.
+        // Split into chunks and send sequentially; first error aborts the loop.
+        const PATCH_CHUNK: usize = 100;
+        for chunk in ep_ids.chunks(PATCH_CHUNK) {
+            let body = serde_json::json!({
+                "episode_id": chunk,
+                "type":        CollectionState::Watched as u8,
+            });
+            let resp = crate::curl::send_logged(
                 DOMAIN,
                 self.http
                     .patch(self.url(&format!(
@@ -668,14 +671,16 @@ impl BangumiApi {
                     .json(&body),
             )
             .await?;
-        let (status, text) = crate::curl::read_logged(DOMAIN, resp).await?;
-        if status.is_success() {
-            return Ok(());
+            let (status, text) =
+                crate::curl::read_logged(DOMAIN, resp).await?;
+            if !status.is_success() {
+                return Err(SyncError::Api {
+                    status: status.as_u16(),
+                    body: text,
+                });
+            }
         }
-        Err(SyncError::Api {
-            status: status.as_u16(),
-            body: text,
-        })
+        Ok(())
     }
 
     /// Return a map of `sort_number → EpCollectionState` for a subject.

@@ -848,6 +848,23 @@ async fn emby_played_backfill(
             index: idx,
             premiere_date: item.premiere_date.clone(),
         });
+
+        // Expand multi-episode files (e.g. S01E02-E05 → [2, 3, 4, 5]).
+        // The premiere_date is only known for the start episode; the extras
+        // carry None and will be matched by sort number in Bangumi.
+        if let Some(end) = item.index_number_end.filter(|&e| e > idx) {
+            for extra in (idx + 1)..=end {
+                if extra > cur_index {
+                    break;
+                }
+                if seen.insert(extra) {
+                    out.push(PlayedEpisode {
+                        index: extra,
+                        premiere_date: None,
+                    });
+                }
+            }
+        }
     }
     debug!(
         series_id = %data.series_id,
