@@ -2061,6 +2061,66 @@ pub async fn sync_episode_by_bangumi_id(
     sync_episodes(api, subject_id, &eps).await
 }
 
+/// Sync a movie subject to Bangumi by marking all its main episodes as watched.
+///
+/// Implements the Stage 2.5 movie short-circuit path:
+/// 1. If the subject is already `Watched (2)`, return early to avoid redundant
+///    API calls (BGM silently ignores re-marks on completed subjects anyway).
+/// 2. Mark the subject as `Watching (3)` so it surfaces on the user's BGM
+///    timeline — the spec calls this "首屏活跃度唤醒".
+/// 3. Fetch all main episodes (`type=0`, paginated for long films) and mark
+///    them all as `Watched` in one batched call.
+///
+/// Stage 7 (`auto_mark_subject_watched`) must be triggered by the **caller**
+/// after this function returns, not here, to keep the movie and TV paths
+/// symmetrical at the call site.
+pub async fn sync_movie_subject(
+    api: &BangumiApi,
+    subject_id: u64,
+) -> Result<Vec<u64>> {
+    debug!(subject_id, "bangumi: sync_movie_subject start");
+
+    // Stage 5.1: if already Watched (2), skip to avoid redundant marking.
+    match api.get_subject_collection(subject_id).await? {
+        Some(ref c)
+            if c.get("type").and_then(|t| t.as_u64()) == Some(2) =>
+        {
+            info!(
+                subject_id,
+                "bangumi: movie subject already Watched, skip"
+            );
+            return Ok(Vec::new());
+        }
+        _ => {}
+    }
+
+    // Stage 2.5 "首屏活跃度唤醒": mark Watching so the entry shows on the
+    // user's BGM timeline before the episodes are marked.
+    api.add_collection_subject(subject_id, CollectionState::Watching)
+        .await?;
+
+    let ep_list = api.get_episodes(subject_id).await?;
+    debug!(
+        subject_id,
+        ep_count = ep_list.data.len(),
+        "bangumi: movie fetched episode list"
+    );
+
+    let ep_ids: Vec<u64> = ep_list.data.iter().map(|e| e.id).collect();
+    if ep_ids.is_empty() {
+        info!(subject_id, "bangumi: movie subject has no main episodes");
+        return Ok(Vec::new());
+    }
+
+    api.mark_episodes_watched(subject_id, &ep_ids).await?;
+    info!(
+        subject_id,
+        count = ep_ids.len(),
+        "bangumi: movie marked all episodes watched"
+    );
+    Ok(ep_ids)
+}
+
 /// Mark episodes of a known subject as watched.
 ///
 /// 1. Ensures the subject is in the user's collection.
@@ -2627,6 +2687,108 @@ mod tests {
         let api = make_api(&server).await;
         let marked = sync_episode_by_bangumi_id(&api, 42, &[]).await.unwrap();
         assert!(marked.is_empty());
+    }
+
+    // ── sync_movie_subject ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn sync_movie_subject_marks_all_episodes_watched() {
+        let server = MockServer::start().await;
+
+        // Not yet collected.
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/99"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        // Mark as Watching.
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/99"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "type": 3,
+            })))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // Two main episodes.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "id": 5001, "sort": 1.0, "ep": 1.0,
+                          "date": "2024-06-01" },
+                        { "id": 5002, "sort": 2.0, "ep": 2.0,
+                          "date": "2024-06-01" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // PATCH batch (>1 ep).
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/99/episodes"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let ids = sync_movie_subject(&api, 99).await.unwrap();
+        assert_eq!(ids, vec![5001, 5002]);
+    }
+
+    #[tokio::test]
+    async fn sync_movie_subject_skips_already_watched() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/99"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "type": 2, "subject_id": 99 }),
+            ))
+            .mount(&server)
+            .await;
+        // Must not POST or PATCH anything.
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/99"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let ids = sync_movie_subject(&api, 99).await.unwrap();
+        assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sync_movie_subject_handles_empty_episode_list() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/99"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/99"))
+            .respond_with(ResponseTemplate::new(202))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "total": 0, "data": [] }),
+            ))
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let ids = sync_movie_subject(&api, 99).await.unwrap();
+        assert!(ids.is_empty());
     }
 
     // ── sync_episodes with API date matching ──────────────────────────────────
