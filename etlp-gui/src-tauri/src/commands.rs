@@ -2069,7 +2069,8 @@ fn font_family_names(path: &std::path::Path) -> Vec<String> {
 
 /// Pick the best family name from a parsed face: the typographic family (name
 /// id 16) wins over the legacy family (id 1), and a Latin-script entry wins over
-/// a localized one so the picker shows e.g. "LXGW WenKai" rather than "霞鹜文楷".
+/// a localized one so the picker shows the Latin family name (e.g. "LXGW WenKai")
+/// rather than its native-script name.
 fn best_family_name(face: &ttf_parser::Face) -> Option<String> {
     use ttf_parser::name_id;
     let mut best: Option<(u8, bool, String)> = None;

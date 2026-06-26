@@ -9,7 +9,7 @@
 //!    a. Require a TMDB id; warn and bail if absent.
 //!    b. Resolve the season-premiere date (S×E1 air date) via TMDB (LRU cached).
 //!    c. Search the BGM JSON API with the series name + `season_premiere_date − 2 days`.
-//!    d. Walk the 前传/续集 relation chain to expand the candidate pool (BFS).
+//!    d. Walk the prequel/sequel relation chain to expand the candidate pool (BFS).
 //!    e. Pick the subject with an episode within ±2 days of target air date.
 //!    f. Match the specific episode by `airdate` via `GET /v0/episodes`.
 //!
@@ -80,15 +80,15 @@ pub fn new_bgm_read_cache() -> BgmReadCache {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum CollectionState {
-    /// 想看
+    /// Plan to watch.
     Wish = 1,
-    /// 看过
+    /// Finished watching.
     Watched = 2,
-    /// 在看
+    /// Currently watching.
     Watching = 3,
-    /// 搁置
+    /// Paused / on hold.
     OnHold = 4,
-    /// 抛弃
+    /// Abandoned.
     Dropped = 5,
 }
 
@@ -132,7 +132,7 @@ pub struct BangumiEpisodeList {
     pub data: Vec<BangumiEpisode>,
 }
 
-/// A related-subject entry (续集, 前传, etc.).
+/// A related-subject entry (sequel, prequel, etc.).
 #[derive(Debug, Clone, Deserialize)]
 pub struct BangumiRelated {
     pub id: u64,
@@ -288,8 +288,9 @@ fn pick_episode_id(
 /// fold fullwidth Latin punctuation (U+FF01–U+FF5E) to halfwidth ASCII,
 /// and fold to lowercase. Handles both ASCII and CJK text.
 ///
-/// The fullwidth→halfwidth step makes "没有辣妹会对阿宅温柔！？" (TMDB) and
-/// "没有辣妹会对阿宅温柔!?" (bgm.tv scraped) compare as equal.
+/// The fullwidth→halfwidth step folds fullwidth punctuation (e.g. U+FF01 "!",
+/// U+FF1F "?") to ASCII, so a title scraped from TMDB with fullwidth punctuation
+/// compares equal to the same title scraped from bgm.tv with ASCII punctuation.
 pub fn normalize_title(s: &str) -> String {
     s.trim()
         .chars()
@@ -483,7 +484,7 @@ impl BangumiApi {
         serde_json::from_value(list_val).map_err(SyncError::Json)
     }
 
-    /// Fetch subjects related to `subject_id` (续集/前传/不同演绎, Moka-cached).
+    /// Fetch subjects related to `subject_id` (sequel/prequel/alternate, Moka-cached).
     pub async fn get_related_subjects(
         &self,
         subject_id: u64,
@@ -1261,7 +1262,7 @@ async fn collect_details(
     details
 }
 
-/// Walk the 前传/续集 relation chain from every subject currently in `details`.
+/// Walk the prequel/sequel relation chain from every subject currently in `details`.
 async fn enrich_with_chain(
     api: &BangumiApi,
     details: &mut Vec<crate::bangumi_web::SubjectDetail>,
@@ -1292,9 +1293,9 @@ async fn enrich_with_chain(
             }
         };
 
-        // Primary BFS candidates: direct sequels (续集).
+        // Primary BFS candidates: direct sequels.
         // If none exist for this node, demote to alternate adaptations
-        // (不同演绎) so Fate/TYPE-MOON style multi-branch IPs are covered
+        // so Fate/TYPE-MOON style multi-branch IPs are covered
         // without blindly flooding the queue with every related subject.
         let sequels: Vec<u64> = related
             .iter()
@@ -1312,7 +1313,7 @@ async fn enrich_with_chain(
                 debug!(
                     subject_id = id,
                     count = alt.len(),
-                    "bangumi: no 续集, queuing 不同演绎 as secondary"
+                    "bangumi: no sequel, queuing alternate adaptation as secondary"
                 );
             }
             alt
@@ -1716,7 +1717,7 @@ fn select_subject_by_start_date_fuzzy(
 /// 2. Search the BGM JSON API with that filter; fallback to legacy API
 ///    when v0 returns nothing (Stage 2.3); retry with ±15 day window when
 ///    both return nothing (Stage 2.4).
-/// 3. Enrich results via 前传/续集 relation chain.
+/// 3. Enrich results via prequel/sequel relation chain.
 /// 4. Select the subject with `start_date` closest to `season_premiere_date`;
 ///    break ties by TMDB alternative-title similarity.
 ///
@@ -2067,7 +2068,7 @@ pub async fn sync_episode_by_bangumi_id(
 /// 1. If the subject is already `Watched (2)`, return early to avoid redundant
 ///    API calls (BGM silently ignores re-marks on completed subjects anyway).
 /// 2. Mark the subject as `Watching (3)` so it surfaces on the user's BGM
-///    timeline — the spec calls this "首屏活跃度唤醒".
+///    timeline — the spec calls this the "first-screen activity wake-up".
 /// 3. Fetch all main episodes (`type=0`, paginated for long films) and mark
 ///    them all as `Watched` in one batched call.
 ///
@@ -2089,8 +2090,8 @@ pub async fn sync_movie_subject(
         _ => {}
     }
 
-    // Stage 2.5 "首屏活跃度唤醒": mark Watching so the entry shows on the
-    // user's BGM timeline before the episodes are marked.
+    // Stage 2.5 "first-screen activity wake-up": mark Watching so the entry
+    // shows on the user's BGM timeline before the episodes are marked.
     api.add_collection_subject(subject_id, CollectionState::Watching)
         .await?;
 
@@ -2834,7 +2835,7 @@ mod tests {
     // ── pick_episode_id: same-day batch tie-breaking ──────────────────────────
 
     /// Episodes 1-4 all share the same airdate (premiere week batch release,
-    /// e.g. 葬送のフリーレン E01-E04 all airing on 2023-09-29).
+    /// e.g. Frieren E01-E04 all airing on 2023-09-29).
     /// Emby reports the target episode as S1E2, whose UTC premiere date is
     /// 2023-09-28T16:00:00Z (= 2023-09-29 in JST).
     /// `pick_episode_id` must resolve to episode 2 (sort=2), NOT episode 1.
@@ -3457,7 +3458,7 @@ mod tests {
         assert_eq!(id, Some(777));
     }
 
-    // ── BFS: 不同演绎 queued when no 续集 ────────────────────────────────────
+    // ── BFS: alternate adaptations queued when no sequels ─────────────────────
 
     #[tokio::test]
     async fn bfs_queues_alt_adaptations_when_no_sequels() {
@@ -3470,7 +3471,7 @@ mod tests {
         mount_api_episodes_with_dates(&server, 500, vec![(1, "2006-01-07")])
             .await;
 
-        // Root has no 続集 but one 不同演绎: subject 501.
+        // Root has no sequel but one alternate adaptation: subject 501.
         Mock::given(method("GET"))
             .and(path("/subjects/500/subjects"))
             .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -3507,7 +3508,7 @@ mod tests {
             episode_air_date: Some("2024-10-07"),
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
-        // The 不同演绎 subject 501 should be found via BFS.
+        // The alternate-adaptation subject 501 should be found via BFS.
         assert_eq!(id, Some(501));
     }
 

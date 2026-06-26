@@ -150,14 +150,14 @@ mod tests {
 
     #[test]
     fn unspecified_picks_embedded_by_priority() {
-        // streams: video(0), sub eng(1), sub chs "简"(2)
+        // streams: video(0), sub eng(1), sub simplified-Chinese(2)
         let streams = vec![
             video(),
             sub(1, false, "", "English"),
             sub(2, false, "", "简体中文"),
         ];
         let r = subtitle_checker(&streams, -1, false, &priority());
-        // Embedded "简" matches; it is the 2nd embedded subtitle -> sid 2.
+        // Embedded simplified-Chinese subtitle matches; 2nd embedded one -> sid 2.
         assert_eq!(r.sub_inner_idx, 2);
         assert!(r.selected.is_none());
     }
@@ -170,7 +170,7 @@ mod tests {
             sub(2, true, "", "中英双语"),
         ];
         let r = subtitle_checker(&streams, -1, false, &priority());
-        // External present -> embedded branch skipped; external "中英" chosen.
+        // External present -> embedded branch skipped; external bilingual chosen.
         assert_eq!(r.sub_inner_idx, 0);
         assert_eq!(r.selected.map(|s| s.index), Some(Some(2)));
         assert_eq!(r.sub_index, 2);
