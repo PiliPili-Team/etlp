@@ -1337,7 +1337,9 @@ const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
 /// When the token is rejected, the bgm.tv token page is opened so the user can
 /// regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
-    use etlp_sync::{BangumiApi, SubjectCache, SyncError, new_bgm_read_cache, sync_episodes};
+    use etlp_sync::{
+        BangumiApi, SubjectCache, SyncError, new_bgm_read_cache, sync_episodes,
+    };
 
     if entries.is_empty() {
         return;
@@ -1648,15 +1650,14 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                     );
                     // Stage 7: auto-upgrade subject to Watched when all main
                     // episodes are done, if the user has opted in.
-                    if auto_mark_subject_watched {
-                        if let Err(e) =
+                    if auto_mark_subject_watched
+                        && let Err(e) =
                             api.maybe_mark_subject_watched(subject_id).await
-                        {
-                            warn!(
-                                "bangumi: Stage7 check failed for \
-                                 subject {subject_id}: {e}"
-                            );
-                        }
+                    {
+                        warn!(
+                            "bangumi: Stage7 check failed for \
+                             subject {subject_id}: {e}"
+                        );
                     }
                 }
                 Err(e) => {

@@ -10,10 +10,8 @@
 //!    b. Resolve the season-premiere date (S×E1 air date) via TMDB (LRU cached).
 //!    c. Search the BGM JSON API with the series name + `season_premiere_date − 2 days`.
 //!    d. Walk the 前传/续集 relation chain to expand the candidate pool (BFS).
-//!    e. Select the subject whose episode list contains an episode matching
-//!       the target air date (±2 days); break ties by title similarity.
-//!    f. Call `GET /v0/episodes?subject_id={id}&type=0` and match the episode
-//!       whose `airdate` is closest to the watched episode's air date.
+//!    e. Pick the subject with an episode within ±2 days of target air date.
+//!    f. Match the specific episode by `airdate` via `GET /v0/episodes`.
 //!
 //! `provider_ids["Bangumi"]` is intentionally ignored: users frequently
 //! fill it with incorrect values, making it an unreliable signal.
@@ -360,8 +358,7 @@ impl BangumiApi {
 
     /// Fetch subject metadata by ID (Moka-cached).
     pub async fn get_subject(&self, subject_id: u64) -> Result<BangumiSubject> {
-        let cache_key: Arc<str> =
-            format!("subject:{subject_id}").into();
+        let cache_key: Arc<str> = format!("subject:{subject_id}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
             debug!(subject_id, "bangumi: subject cache hit");
             return serde_json::from_value(cached).map_err(SyncError::Json);
@@ -416,10 +413,7 @@ impl BangumiApi {
             let page: serde_json::Value =
                 crate::curl::json_logged(DOMAIN, resp).await?;
             if total == 0 {
-                total = page
-                    .get("total")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
+                total = page.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
             }
             let items = page
                 .get("data")
@@ -452,9 +446,9 @@ impl BangumiApi {
         let resp = crate::curl::send_logged(
             DOMAIN,
             self.http
-                .get(self.url(&format!(
-                    "{PATH_SUBJECTS}/{subject_id}/subjects"
-                )))
+                .get(
+                    self.url(&format!("{PATH_SUBJECTS}/{subject_id}/subjects")),
+                )
                 .headers(self.auth_headers()),
         )
         .await?;
@@ -485,7 +479,10 @@ impl BangumiApi {
         let ep_list = match self.get_episodes(subject_id).await {
             Ok(l) => l,
             Err(e) => {
-                debug!(subject_id, "bangumi: detail fetch episodes failed: {e}");
+                debug!(
+                    subject_id,
+                    "bangumi: detail fetch episodes failed: {e}"
+                );
                 return None;
             }
         };
@@ -671,8 +668,7 @@ impl BangumiApi {
                     .json(&body),
             )
             .await?;
-            let (status, text) =
-                crate::curl::read_logged(DOMAIN, resp).await?;
+            let (status, text) = crate::curl::read_logged(DOMAIN, resp).await?;
             if !status.is_success() {
                 return Err(SyncError::Api {
                     status: status.as_u16(),
@@ -756,10 +752,7 @@ impl BangumiApi {
         let ep_list = self.get_episodes(subject_id).await?;
         let total_main = ep_list.data.len();
         if total_main == 0 {
-            debug!(
-                subject_id,
-                "bangumi: Stage7 — no main episodes, skip"
-            );
+            debug!(subject_id, "bangumi: Stage7 — no main episodes, skip");
             return Ok(());
         }
 
@@ -768,9 +761,7 @@ impl BangumiApi {
 
         debug!(
             subject_id,
-            total_main,
-            watched_count,
-            "bangumi: Stage7 — checking completion"
+            total_main, watched_count, "bangumi: Stage7 — checking completion"
         );
 
         if watched_count < total_main {
@@ -818,12 +809,9 @@ impl BangumiApi {
             base_match_score,
         };
 
-        let cache_key: Arc<str> = format!(
-            "search:{}:{}",
-            keyword,
-            air_date_from.unwrap_or("none")
-        )
-        .into();
+        let cache_key: Arc<str> =
+            format!("search:{}:{}", keyword, air_date_from.unwrap_or("none"))
+                .into();
 
         #[derive(serde::Deserialize)]
         struct Entry {
@@ -833,58 +821,59 @@ impl BangumiApi {
             name_cn: String,
         }
 
-        let page_val: serde_json::Value =
-            if let Some(cached) = self.cache.get(&cache_key).await {
-                debug!(keyword, "bangumi: search cache hit");
-                cached
+        let page_val: serde_json::Value = if let Some(cached) =
+            self.cache.get(&cache_key).await
+        {
+            debug!(keyword, "bangumi: search cache hit");
+            cached
+        } else {
+            // V0 search path — url() already includes the /v0 prefix.
+            let url = format!(
+                "{}/{PATH_SEARCH_SUBJECTS}?limit={limit}&offset=0",
+                self.base_url.trim_end_matches('/')
+            );
+            // Deliberately omit `sort` — BGM defaults to match ranking.
+            let body = if let Some(from) = air_date_from {
+                serde_json::json!({
+                    "keyword": keyword,
+                    "filter": {
+                        "type": [2],
+                        "nsfw": true,
+                        "air_date": [format!(">={from}")]
+                    }
+                })
             } else {
-                // V0 search path — url() already includes the /v0 prefix.
-                let url = format!(
-                    "{}/{PATH_SEARCH_SUBJECTS}?limit={limit}&offset=0",
-                    self.base_url.trim_end_matches('/')
-                );
-                // Deliberately omit `sort` — BGM defaults to match ranking.
-                let body = if let Some(from) = air_date_from {
-                    serde_json::json!({
-                        "keyword": keyword,
-                        "filter": {
-                            "type": [2],
-                            "nsfw": true,
-                            "air_date": [format!(">={from}")]
-                        }
-                    })
-                } else {
-                    serde_json::json!({
-                        "keyword": keyword,
-                        "filter": { "type": [2], "nsfw": true }
-                    })
-                };
-
-                // No auth header: v0 search rejects tokens with 400.
-                let resp = match self
-                    .http
-                    .post(&url)
-                    .headers(self.anon_headers())
-                    .json(&body)
-                    .send()
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(e) => {
-                        debug!(keyword, "bangumi: api_search failed: {e}");
-                        return Vec::new();
-                    }
-                };
-                let val: serde_json::Value = match resp.json().await {
-                    Ok(v) => v,
-                    Err(e) => {
-                        debug!(keyword, "bangumi: api_search parse failed: {e}");
-                        return Vec::new();
-                    }
-                };
-                self.cache.insert(cache_key, val.clone()).await;
-                val
+                serde_json::json!({
+                    "keyword": keyword,
+                    "filter": { "type": [2], "nsfw": true }
+                })
             };
+
+            // No auth header: v0 search rejects tokens with 400.
+            let resp = match self
+                .http
+                .post(&url)
+                .headers(self.anon_headers())
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    debug!(keyword, "bangumi: api_search failed: {e}");
+                    return Vec::new();
+                }
+            };
+            let val: serde_json::Value = match resp.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    debug!(keyword, "bangumi: api_search parse failed: {e}");
+                    return Vec::new();
+                }
+            };
+            self.cache.insert(cache_key, val.clone()).await;
+            val
+        };
 
         let entries: Vec<Entry> = page_val
             .get("data")
@@ -943,8 +932,7 @@ impl BangumiApi {
         &self,
         keyword: &str,
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
-        let cache_key: Arc<str> =
-            format!("legacy_search:{keyword}").into();
+        let cache_key: Arc<str> = format!("legacy_search:{keyword}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
             debug!(keyword, "bangumi: legacy_search cache hit");
             return Self::parse_legacy_candidates(cached, keyword);
@@ -998,11 +986,7 @@ impl BangumiApi {
         self.cache.insert(cache_key, val.clone()).await;
 
         let candidates = Self::parse_legacy_candidates(val, keyword);
-        debug!(
-            keyword,
-            hits = candidates.len(),
-            "bangumi: legacy_search"
-        );
+        debug!(keyword, hits = candidates.len(), "bangumi: legacy_search");
         candidates
     }
 
@@ -1070,7 +1054,10 @@ impl BangumiApi {
                 b'A'..=b'Z'
                 | b'a'..=b'z'
                 | b'0'..=b'9'
-                | b'-' | b'_' | b'.' | b'~' => {
+                | b'-'
+                | b'_'
+                | b'.'
+                | b'~' => {
                     out.push(byte as char);
                 }
                 b => {
@@ -2070,8 +2057,14 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn make_api(server: &MockServer) -> BangumiApi {
-        BangumiApi::new("testuser", "tok123", true, server.uri(), new_bgm_read_cache())
-            .unwrap()
+        BangumiApi::new(
+            "testuser",
+            "tok123",
+            true,
+            server.uri(),
+            new_bgm_read_cache(),
+        )
+        .unwrap()
     }
 
     // ── get_subject ───────────────────────────────────────────────────────────
@@ -2963,5 +2956,384 @@ mod tests {
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, None);
+    }
+
+    // ── v0 search: no Authorization header ───────────────────────────────────
+
+    /// Custom wiremock matcher: request must NOT contain an Authorization header.
+    struct NoAuthHeader;
+    impl wiremock::Match for NoAuthHeader {
+        fn matches(&self, req: &wiremock::Request) -> bool {
+            !req.headers.contains_key("authorization")
+        }
+    }
+
+    #[tokio::test]
+    async fn search_subjects_api_omits_auth_header() {
+        // The v0 search endpoint must not carry an Authorization header.
+        // The mock only fires when the custom NoAuthHeader matcher passes.
+        // .expect(1) verifies it was called exactly once without that header.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(NoAuthHeader)
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let results = api.search_subjects_api("AnimeA", 10, None).await;
+        assert!(results.is_empty());
+    }
+
+    // ── legacy search fallback (Stage 2.3) ───────────────────────────────────
+
+    #[tokio::test]
+    async fn legacy_search_fallback_fires_when_v0_empty() {
+        let server = MockServer::start().await;
+
+        // v0 returns nothing.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .mount(&server)
+            .await;
+
+        // Legacy API returns one hit.
+        Mock::given(method("GET"))
+            .and(path("/search/subject/AnimeA"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "results": 1,
+                    "list": [{ "id": 999, "name": "AnimeA", "name_cn": "" }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // Subject / episode details needed by collect_details.
+        mount_api_subject(&server, 999, "AnimeA", Some("2024-04-07")).await;
+        mount_api_episodes(&server, 999, (1..=12).collect()).await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            keywords: kws,
+            alt_titles: &[],
+            season_premiere_date: Some("2024-04-07"),
+            episode_air_date: None,
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        // Legacy fallback should deliver subject 999.
+        assert_eq!(id, Some(999));
+    }
+
+    // ── fuzzy date retry (Stage 2.4) ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn fuzzy_retry_fires_when_both_v0_and_legacy_empty() {
+        let server = MockServer::start().await;
+
+        // First v0 call (normal window): returns nothing.
+        // Second v0 call (fuzzy window, 15 days): returns the subject.
+        // Wiremock can't distinguish by request body easily in sequence, so
+        // we accept any POST to /search/subjects — the first returns empty,
+        // the rest return the subject. Using `up_to` to allow both calls.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "filter": { "air_date": [">=2024-03-23"] }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{ "id": 777, "name": "RareFuzzyAnime",
+                               "name_cn": "" }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // The first call (premiere − 2 days = 2024-04-05) returns nothing.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "filter": { "air_date": [">=2024-04-05"] }
+            })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .mount(&server)
+            .await;
+        // Legacy search also returns nothing.
+        Mock::given(method("GET"))
+            .and(path("/search/subject/RareFuzzyAnime"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "results": 0, "list": [] }),
+                ),
+            )
+            .mount(&server)
+            .await;
+        // Subject/episode details for the fuzzy-found subject.
+        mock_subject_and_episodes(&server, 777, "RareFuzzyAnime", "2024-04-07")
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["RareFuzzyAnime"];
+        let req = WebScrapeReq {
+            series: "RareFuzzyAnime",
+            keywords: kws,
+            alt_titles: &[],
+            season_premiere_date: Some("2024-04-07"),
+            episode_air_date: None,
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(777));
+    }
+
+    // ── BFS: 不同演绎 queued when no 续集 ────────────────────────────────────
+
+    #[tokio::test]
+    async fn bfs_queues_alt_adaptations_when_no_sequels() {
+        let server = MockServer::start().await;
+
+        // Search returns root subject 500.
+        mount_api_search(&server, vec![(500, "FateAnime")]).await;
+        // Root subject starts in 2006, episode aired 2024-10-07.
+        mount_api_subject(&server, 500, "FateAnime", Some("2006-01-01")).await;
+        mount_api_episodes_with_dates(&server, 500, vec![(1, "2006-01-07")])
+            .await;
+
+        // Root has no 続集 but one 不同演绎: subject 501.
+        Mock::given(method("GET"))
+            .and(path("/subjects/500/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 501, "name": "FateAnime UBW",
+                      "name_cn": "", "relation": "不同演绎" }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Subject 501 started 2024-10-01, episode aired 2024-10-07 → match.
+        mount_api_subject(&server, 501, "FateAnime UBW", Some("2024-10-01"))
+            .await;
+        mount_api_episodes_with_dates(&server, 501, vec![(1, "2024-10-07")])
+            .await;
+        // Subject 501 has no further relations.
+        Mock::given(method("GET"))
+            .and(path("/subjects/501/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["FateAnime"];
+        let req = WebScrapeReq {
+            series: "FateAnime",
+            keywords: kws,
+            alt_titles: &[],
+            season_premiere_date: Some("2024-10-01"),
+            episode_air_date: Some("2024-10-07"),
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        // The 不同演绎 subject 501 should be found via BFS.
+        assert_eq!(id, Some(501));
+    }
+
+    // ── mark_episodes_watched PATCH chunking ──────────────────────────────────
+
+    #[tokio::test]
+    async fn mark_episodes_watched_chunks_to_100() {
+        let server = MockServer::start().await;
+        // The endpoint is called twice for 150 episode IDs (100 + 50).
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/42/episodes"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(2)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let ep_ids: Vec<u64> = (1..=150).collect();
+        api.mark_episodes_watched(42, &ep_ids).await.unwrap();
+    }
+
+    // ── maybe_mark_subject_watched (Stage 7) ─────────────────────────────────
+
+    /// Mount subject + episodes + user collection on a single server.
+    async fn mock_subject_and_episodes(
+        server: &MockServer,
+        id: u64,
+        name: &str,
+        start_date: &str,
+    ) {
+        mock_subject_only(server, id, name, start_date).await;
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .and(wiremock::matchers::query_param(
+                "subject_id",
+                id.to_string().as_str(),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{ "sort": 1.0, "name": "", "name_cn": "" }]
+                }),
+            ))
+            .mount(server)
+            .await;
+    }
+
+    async fn mock_subject_only(
+        server: &MockServer,
+        id: u64,
+        name: &str,
+        start_date: &str,
+    ) {
+        Mock::given(method("GET"))
+            .and(path(format!("/subjects/{id}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "id": id, "name": name, "name_cn": "",
+                    "date": start_date,
+                }),
+            ))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn maybe_mark_subject_watched_upgrades_when_all_done() {
+        let server = MockServer::start().await;
+
+        // Episode list: 1 main episode.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{ "sort": 1.0, "ep": 1.0, "id": 101 }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        // User collection: episode 1 is watched.
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/10/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "data": [
+                        {
+                            "episode": {
+                                "id": 101, "sort": 1.0, "ep": 1.0
+                            },
+                            "type": 2
+                        }
+                    ]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        // The function should POST Watched (2) for the subject.
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/10"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.maybe_mark_subject_watched(10).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn maybe_mark_subject_watched_skips_when_incomplete() {
+        let server = MockServer::start().await;
+
+        // Episode list: 2 main episodes.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "sort": 1.0, "ep": 1.0, "id": 101 },
+                        { "sort": 2.0, "ep": 2.0, "id": 102 }
+                    ]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        // User collection: only episode 1 is watched; episode 2 is not.
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/10/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "data": [
+                        {
+                            "episode": { "id": 101, "sort": 1.0, "ep": 1.0 },
+                            "type": 2
+                        },
+                        {
+                            "episode": { "id": 102, "sort": 2.0, "ep": 2.0 },
+                            "type": 1
+                        }
+                    ]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        // POST must NOT be called.
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/10"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        api.maybe_mark_subject_watched(10).await.unwrap();
+        // Verification: if the mock's .expect(0) fires a POST, it panics at drop.
+    }
+
+    // ── percent_encode_path ───────────────────────────────────────────────────
+
+    #[test]
+    fn percent_encode_path_encodes_spaces_and_special_chars() {
+        assert_eq!(
+            BangumiApi::percent_encode_path("進撃の巨人"),
+            "%E9%80%B2%E6%92%83%E3%81%AE%E5%B7%A8%E4%BA%BA"
+        );
+        assert_eq!(BangumiApi::percent_encode_path("Re:Zero"), "Re%3AZero");
+        assert_eq!(
+            BangumiApi::percent_encode_path("unreserved-_.~"),
+            "unreserved-_.~"
+        );
+        assert_eq!(
+            BangumiApi::percent_encode_path("hello world"),
+            "hello%20world"
+        );
     }
 }
