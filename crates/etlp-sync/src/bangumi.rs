@@ -1154,11 +1154,35 @@ async fn enrich_with_chain(
             }
         };
 
-        for rel in related {
-            if !matches!(rel.relation.as_str(), "前传" | "续集") {
-                continue;
+        // Primary BFS candidates: direct sequels (续集).
+        // If none exist for this node, demote to alternate adaptations
+        // (不同演绎) so Fate/TYPE-MOON style multi-branch IPs are covered
+        // without blindly flooding the queue with every related subject.
+        let sequels: Vec<u64> = related
+            .iter()
+            .filter(|r| r.relation == "续集")
+            .map(|r| r.id)
+            .collect();
+
+        let candidates: Vec<u64> = if sequels.is_empty() {
+            let alt: Vec<u64> = related
+                .iter()
+                .filter(|r| r.relation == "不同演绎")
+                .map(|r| r.id)
+                .collect();
+            if !alt.is_empty() {
+                debug!(
+                    subject_id = id,
+                    count = alt.len(),
+                    "bangumi: no 续集, queuing 不同演绎 as secondary"
+                );
             }
-            let rid = rel.id;
+            alt
+        } else {
+            sequels
+        };
+
+        for rid in candidates {
             if !in_result.insert(rid) {
                 if !scrape_cache.chain_walked.contains(&rid) {
                     queue.push_back(rid);
