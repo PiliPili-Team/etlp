@@ -7,6 +7,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::extract::State;
+use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
 use axum::response::Json;
 use serde_json::{Value, json};
@@ -40,8 +41,18 @@ static SESSION_COUNTER: AtomicUsize = AtomicUsize::new(0);
 /// task so the browser is not left waiting.
 pub async fn emby_to_local_player(
     State(state): State<SharedState>,
-    Json(received): Json<ReceivedData>,
+    payload: Result<Json<ReceivedData>, JsonRejection>,
 ) -> (StatusCode, Json<Value>) {
+    let Json(received) = match payload {
+        Ok(j) => j,
+        Err(e) => {
+            warn!("POST /embyToLocalPlayer: JSON parse failed — {e}");
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"error": e.to_string()})),
+            );
+        }
+    };
     info!("POST /embyToLocalPlayer received");
     if received.show_task_manager {
         info!("show_task_manager requested (GUI not available)");

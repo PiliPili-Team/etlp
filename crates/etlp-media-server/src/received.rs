@@ -58,7 +58,11 @@ impl ReceivedData {
 pub struct ExtraData {
     #[serde(rename = "mainEpInfo", default)]
     pub main_ep_info: Item,
-    #[serde(rename = "episodesInfo", default)]
+    #[serde(
+        rename = "episodesInfo",
+        default,
+        deserialize_with = "null_as_default"
+    )]
     pub episodes_info: Vec<Item>,
     #[serde(
         rename = "playlistInfo",
@@ -171,5 +175,22 @@ mod tests {
             serde_json::from_str(json).expect("parse null fields");
         assert!(!data.mount_disk_mode());
         assert!(data.extra_data.playlist_info.is_empty());
+    }
+
+    #[test]
+    fn movie_episodes_info_null_uses_default() {
+        // For movies, dealWithPlaybackInfo sends episodesInfo: null because
+        // there is no season episode list. Without null_as_default this
+        // produces a 422, silently preventing movie playback.
+        let json = r#"{
+            "extraData": {
+                "mainEpInfo": {"Id": "3546", "Type": "Movie"},
+                "episodesInfo": null,
+                "playlistInfo": null
+            }
+        }"#;
+        let data: ReceivedData =
+            serde_json::from_str(json).expect("movie null episodesInfo");
+        assert!(data.extra_data.episodes_info.is_empty());
     }
 }
