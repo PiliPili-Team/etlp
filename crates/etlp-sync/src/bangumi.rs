@@ -659,8 +659,24 @@ impl BangumiApi {
         Ok(map)
     }
 
-    /// Search subjects via the BGM JSON API.
+    /// Build headers without the Authorization token.
     ///
+    /// Required for the v0 search endpoint which rejects authenticated requests
+    /// with 400 / empty results on some server-side paths.
+    fn anon_headers(&self) -> reqwest::header::HeaderMap {
+        use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
+        let mut map = HeaderMap::new();
+        let _ =
+            map.insert(ACCEPT, HeaderValue::from_static("application/json"));
+        let _ = map
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        map
+    }
+
+    /// Search subjects via the BGM JSON v0 API.
+    ///
+    /// Authorization header is intentionally omitted — the v0 search endpoint
+    /// can return 400 or empty results when a user token is present.
     /// When `air_date_from` is provided, the search adds an `air_date >=`
     /// filter so that obviously irrelevant older subjects are excluded up front.
     pub(crate) async fn search_subjects_api(
@@ -687,14 +703,17 @@ impl BangumiApi {
             name_cn: String,
         }
 
+        // V0 search path — no /v0 prefix since url() already includes it.
         let url = format!(
             "{}/search/subjects?limit={limit}&offset=0",
             self.base_url.trim_end_matches('/')
         );
+        // Deliberately omit `sort` — BGM defaults to `match` (综合匹配度),
+        // which ranks exact-name matches first, making it safe to blindly
+        // trust `data[0]` for well-formed queries.
         let body = if let Some(from) = air_date_from {
             serde_json::json!({
                 "keyword": keyword,
-                "sort": "match",
                 "filter": {
                     "type": [2],
                     "nsfw": true,
@@ -704,15 +723,15 @@ impl BangumiApi {
         } else {
             serde_json::json!({
                 "keyword": keyword,
-                "sort": "match",
                 "filter": { "type": [2], "nsfw": true }
             })
         };
 
+        // No auth header: the v0 search endpoint rejects tokens with 400.
         let resp = match self
             .http
             .post(&url)
-            .headers(self.auth_headers())
+            .headers(self.anon_headers())
             .json(&body)
             .send()
             .await
