@@ -246,15 +246,41 @@ fn pick_episode_id(
                 .or_else(|| group.clone().next());
 
             if let Some(ep) = chosen {
+                // Log only when sort tiebreak chose a different episode than
+                // expected — a silent success is not actionable.
+                if ep.sort as u32 != target_sort {
+                    debug!(
+                        target_sort,
+                        target_air_date = date,
+                        ep_id = ep.id,
+                        ep_sort = ep.sort,
+                        ep_air_date = ep.date.as_deref().unwrap_or(""),
+                        date_diff_days = min_diff,
+                        "bangumi: episode resolved by air_date \
+                         (sort mismatch — nearest date used)"
+                    );
+                }
                 return Some(ep.id);
             }
+        } else {
+            debug!(
+                target_sort,
+                target_air_date = date,
+                fuzzy_days,
+                "bangumi: no episodes within air_date window, \
+                 fallback to sort"
+            );
         }
     }
     // No air-date match: fall back to exact sort lookup.
-    episodes
-        .iter()
-        .find(|ep| ep.sort as u32 == target_sort)
-        .map(|ep| ep.id)
+    let ep = episodes.iter().find(|ep| ep.sort as u32 == target_sort);
+    match ep {
+        Some(_) => {}
+        None => {
+            debug!(target_sort, "bangumi: episode not found");
+        }
+    }
+    ep.map(|ep| ep.id)
 }
 
 /// Find the episode ID in a scraped page list whose air date is closest to
@@ -385,7 +411,6 @@ impl BangumiApi {
     pub async fn get_subject(&self, subject_id: u64) -> Result<BangumiSubject> {
         let cache_key: Arc<str> = format!("subject:{subject_id}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            debug!(subject_id, "bangumi: subject cache hit");
             return serde_json::from_value(cached).map_err(SyncError::Json);
         }
         let resp = crate::curl::send_logged(
@@ -411,7 +436,6 @@ impl BangumiApi {
     ) -> Result<BangumiEpisodeList> {
         let cache_key: Arc<str> = format!("episodes:{subject_id}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            debug!(subject_id, "bangumi: episodes cache hit");
             return serde_json::from_value(cached).map_err(SyncError::Json);
         }
 
@@ -465,7 +489,6 @@ impl BangumiApi {
     ) -> Result<Vec<BangumiRelated>> {
         let cache_key: Arc<str> = format!("related:{subject_id}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            debug!(subject_id, "bangumi: related cache hit");
             return serde_json::from_value(cached).map_err(SyncError::Json);
         }
         let resp = crate::curl::send_logged(
@@ -863,7 +886,6 @@ impl BangumiApi {
         let page_val: serde_json::Value = if let Some(cached) =
             self.cache.get(&cache_key).await
         {
-            debug!(keyword, "bangumi: search cache hit");
             cached
         } else {
             // V0 search path — url() already includes the /v0 prefix.
@@ -1012,7 +1034,6 @@ impl BangumiApi {
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         let cache_key: Arc<str> = format!("legacy_search:{keyword}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            debug!(keyword, "bangumi: legacy_search cache hit");
             return Self::parse_legacy_candidates(cached, keyword);
         }
 
@@ -1801,16 +1822,11 @@ pub async fn resolve_by_web_scrape_with_chain(
             if matched {
                 hits.push(sid);
             } else {
-                let bgm_dates: Vec<&str> = d
-                    .episodes
-                    .iter()
-                    .filter_map(|ep| ep.airdate.as_deref())
-                    .collect();
                 debug!(
                     subject_id = sid,
                     name = %d.name,
                     target_air_date = ep_date,
-                    bgm_episode_dates = ?bgm_dates,
+                    ep_count = d.episodes.len(),
                     "bangumi: subject skipped — no episode matches air_date"
                 );
             }
@@ -2086,6 +2102,25 @@ pub async fn sync_episodes(
         Some(_) => {}
     }
 
+    // Log which episode sort numbers the user has already watched on BGM.
+    if let Ok(user_eps) = api.get_user_eps_collection(subject_id).await {
+        let mut watched: Vec<u64> = user_eps
+            .iter()
+            .filter(|(_, s)| s.watched)
+            .map(|(sort, _)| *sort)
+            .collect();
+        watched.sort_unstable();
+        if !watched.is_empty() {
+            let sorts: Vec<u32> = eps.iter().map(|(s, _)| *s).collect();
+            debug!(
+                subject_id,
+                already_watched = ?watched,
+                syncing = ?sorts,
+                "bangumi: already watched on BGM"
+            );
+        }
+    }
+
     // Fetch the episode list from the BGM JSON API.
     // `GET /v0/episodes?subject_id={id}` returns each episode's `id` and
     // `airdate`, so we match by air-date proximity (≤ 2 days) and fall back to
@@ -2119,9 +2154,23 @@ pub async fn sync_episodes(
     }
 
     api.mark_episodes_watched(subject_id, &ep_ids).await?;
+    let ep_ids_display = if let [single] = ep_ids.as_slice() {
+        single.to_string()
+    } else {
+        format!(
+            "[{}]",
+            ep_ids
+                .iter()
+                .map(|id| id.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
     info!(
-        "bangumi: marked {} episodes watched in subject {subject_id}",
-        ep_ids.len()
+        subject_id,
+        ep_ids = ep_ids_display,
+        count = ep_ids.len(),
+        "bangumi: marked episodes watched"
     );
     Ok(ep_ids)
 }

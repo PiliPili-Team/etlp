@@ -93,17 +93,6 @@ pub fn assemble_episodes(
         ctx.playlist
     );
 
-    for (i, item) in fetched.iter().enumerate() {
-        debug!(
-            "  raw[{}]: id={:?} S{:?}E{:?} path={:?}",
-            i,
-            item.id,
-            item.parent_index_number,
-            item.index_number,
-            item.path.as_deref().unwrap_or("<none>")
-        );
-    }
-
     let errors = scan_errors(fetched);
     if errors.any {
         if errors.index_missing {
@@ -262,14 +251,6 @@ pub(crate) fn finalize_playlist(
         "finalize_playlist: final playlist has {} entries",
         result.len()
     );
-    for (i, ep) in result.iter().enumerate() {
-        debug!(
-            "  playlist[{}]: item_id={:?} E{:?} order={:?} \
-             media_title={:?} media_path={:?}",
-            i, ep.item_id, ep.index, ep.order, ep.media_title, ep.media_path
-        );
-    }
-
     result
 }
 

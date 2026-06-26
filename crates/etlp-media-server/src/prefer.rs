@@ -120,12 +120,10 @@ pub fn version_prefer_for_playlist(
     );
     let mut result = Vec::with_capacity(groups.len());
     for (key, sources) in groups {
-        debug!("  group key={:?}: {} version(s)", key, sources.len());
         let Some(first) = sources.first() else {
             continue;
         };
         if sources.len() == 1 {
-            debug!("    -> single: {:?}", first.path.as_deref().unwrap_or("?"));
             result.push((*first).clone());
             continue;
         }
