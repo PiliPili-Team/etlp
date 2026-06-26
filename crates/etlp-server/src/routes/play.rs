@@ -1320,7 +1320,7 @@ const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
 /// When the token is rejected, the bgm.tv token page is opened so the user can
 /// regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
-    use etlp_sync::{BangumiApi, SubjectCache, SyncError, sync_episodes};
+    use etlp_sync::{BangumiApi, SubjectCache, SyncError, new_bgm_read_cache, sync_episodes};
 
     if entries.is_empty() {
         return;
@@ -1385,6 +1385,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         &access_token,
         private,
         BangumiApi::DEFAULT_BASE_URL,
+        new_bgm_read_cache(),
     ) else {
         return;
     };
