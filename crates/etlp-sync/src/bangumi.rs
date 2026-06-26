@@ -741,6 +741,52 @@ impl BangumiApi {
         Ok(map)
     }
 
+    /// Stage 7: if `auto_mark_subject_watched` is enabled, check whether every
+    /// main episode (type=0) for `subject_id` is now marked Watched, and if so
+    /// upgrade the subject's collection state from Watching (3) to Watched (2).
+    ///
+    /// Silently returns `Ok(())` when not all episodes are watched yet; only
+    /// errors on actual API failures so transient mismatches never abort the
+    /// surrounding sync.  Must be called **after** all PATCH requests for the
+    /// current sync cycle have completed.
+    pub async fn maybe_mark_subject_watched(
+        &self,
+        subject_id: u64,
+    ) -> Result<()> {
+        let ep_list = self.get_episodes(subject_id).await?;
+        let total_main = ep_list.data.len();
+        if total_main == 0 {
+            debug!(
+                subject_id,
+                "bangumi: Stage7 — no main episodes, skip"
+            );
+            return Ok(());
+        }
+
+        let user_eps = self.get_user_eps_collection(subject_id).await?;
+        let watched_count = user_eps.values().filter(|e| e.watched).count();
+
+        debug!(
+            subject_id,
+            total_main,
+            watched_count,
+            "bangumi: Stage7 — checking completion"
+        );
+
+        if watched_count < total_main {
+            return Ok(());
+        }
+
+        info!(
+            subject_id,
+            total_main,
+            "bangumi: all main episodes watched — \
+             upgrading subject to Watched (2)"
+        );
+        self.add_collection_subject(subject_id, CollectionState::Watched)
+            .await
+    }
+
     /// Build headers without the Authorization token.
     ///
     /// Required for the v0 search endpoint which rejects authenticated requests

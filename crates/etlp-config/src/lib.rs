@@ -409,6 +409,13 @@ pub struct BangumiSection {
     /// is only collected once an episode crosses the 80 % watched threshold.
     #[serde(default = "default_true")]
     pub mark_watching: bool,
+    /// When enabled, automatically upgrade a subject's collection state from
+    /// Watching (3) to Watched (2) once every main episode (type=0) has been
+    /// marked.  Only fires after a successful episode sync; never fires mid-series
+    /// because unreleased episodes occupy the slot.  Defaults to `false` so users
+    /// who prefer to manage their completion status manually are not surprised.
+    #[serde(default)]
+    pub auto_mark_subject_watched: bool,
     /// Allow re-marking the same episode/movie on every completion instead of
     /// throttling repeats. When `true`, the just-watched item bypasses the
     /// throttle window so finishing it again immediately adds another mark.
@@ -440,6 +447,7 @@ impl Default for BangumiSection {
             title_search_fallback: true,
             subject_map: Vec::new(),
             mark_watching: true,
+            auto_mark_subject_watched: false,
             allow_duplicate: false,
             duplicate_throttle_secs: DEFAULT_BANGUMI_THROTTLE_SECS,
         }

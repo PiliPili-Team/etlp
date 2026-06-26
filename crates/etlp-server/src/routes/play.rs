@@ -1352,6 +1352,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         title_fallback,
         subject_map,
         mark_watching,
+        auto_mark_subject_watched,
         bangumi_allow_dup,
         bangumi_throttle,
         tmdb_api_key,
@@ -1371,6 +1372,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.title_search_fallback,
             cfg.bangumi.subject_map.clone(),
             cfg.bangumi.mark_watching,
+            cfg.bangumi.auto_mark_subject_watched,
             cfg.bangumi.allow_duplicate,
             cfg.bangumi.duplicate_throttle(),
             cfg.tmdb.effective_api_key().to_owned(),
@@ -1638,10 +1640,25 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             eps.dedup_by_key(|(s, _)| *s);
             debug!(subject_id, count = eps.len(), "bangumi: syncing entry");
             match sync_episodes(&api, subject_id, &eps).await {
-                Ok(ids) => info!(
-                    "bangumi: marked {} episode(s) for subject {subject_id}",
-                    ids.len()
-                ),
+                Ok(ids) => {
+                    info!(
+                        "bangumi: marked {} episode(s) for subject \
+                         {subject_id}",
+                        ids.len()
+                    );
+                    // Stage 7: auto-upgrade subject to Watched when all main
+                    // episodes are done, if the user has opted in.
+                    if auto_mark_subject_watched {
+                        if let Err(e) =
+                            api.maybe_mark_subject_watched(subject_id).await
+                        {
+                            warn!(
+                                "bangumi: Stage7 check failed for \
+                                 subject {subject_id}: {e}"
+                            );
+                        }
+                    }
+                }
                 Err(e) => {
                     warn!("bangumi sync error for subject {subject_id}: {e}")
                 }
