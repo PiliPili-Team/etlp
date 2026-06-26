@@ -916,6 +916,7 @@ fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
         &config.bangumi.access_token,
         config.bangumi.private,
         etlp_sync::BangumiApi::DEFAULT_BASE_URL,
+        etlp_sync::new_bgm_read_cache(),
     )
     .map_err(|e| format!("init bangumi client: {e}"))?;
     Ok(Some(api))
