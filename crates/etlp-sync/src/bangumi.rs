@@ -230,11 +230,8 @@ fn pick_episode_id(
             .collect();
 
         if !candidates.is_empty() {
-            let min_diff = candidates
-                .iter()
-                .map(|(d, _)| *d)
-                .min()
-                .unwrap_or(i64::MAX);
+            let min_diff =
+                candidates.iter().map(|(d, _)| *d).min().unwrap_or(i64::MAX);
 
             let group = candidates
                 .iter()
@@ -2676,8 +2673,7 @@ mod tests {
         let api = make_api(&server).await;
         // Emby reports S1E2; UTC premiere "2023-09-28T16:00:00Z" = 2023-09-29 JST.
         // target_sort=2, diff to "2023-09-29" = 1 day (within fuzzy_days=2).
-        let eps =
-            vec![(2u32, Some("2023-09-28T16:00:00.0000000Z".to_owned()))];
+        let eps = vec![(2u32, Some("2023-09-28T16:00:00.0000000Z".to_owned()))];
         let marked = sync_episodes(&api, 400602, &eps).await.unwrap();
         assert_eq!(marked, vec![1227088]);
     }
