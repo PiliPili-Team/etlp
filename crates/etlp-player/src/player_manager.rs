@@ -941,6 +941,7 @@ mod tests {
             series_id: String::new(),
             series_name: String::new(),
             original_title: String::new(),
+            item_name: String::new(),
             season_number: None,
             premiere_date: None,
             genres: Vec::new(),

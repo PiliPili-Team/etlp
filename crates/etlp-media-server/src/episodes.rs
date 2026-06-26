@@ -278,6 +278,7 @@ pub fn parse_episode_item(
         series_id: item.series_id.clone().unwrap_or_default(),
         series_name: item.series_name.clone().unwrap_or_default(),
         original_title: item.original_title.clone().unwrap_or_default(),
+        item_name: item.name.clone().unwrap_or_default(),
         season_number: item.parent_index_number,
         premiere_date: item.premiere_date.clone(),
         genres: item.genres.clone(),
@@ -502,6 +503,7 @@ mod tests {
         let base = PlaybackData::default();
         let mut item =
             ep_with_source("210", 2, "/m/s04e02.mkv", 12_000_000_000);
+        item.name = Some("Episode Title".to_owned());
         item.series_name = Some("Re:Zero".to_owned());
         item.original_title = Some("Re:ゼロから始める異世界生活".to_owned());
         item.parent_index_number = Some(4);
@@ -512,6 +514,9 @@ mod tests {
 
         assert_eq!(data.series_name, "Re:Zero");
         assert_eq!(data.original_title, "Re:ゼロから始める異世界生活");
+        // The clean episode `Name` flows into `item_name`, distinct from the
+        // series name and the player-facing `media_title`.
+        assert_eq!(data.item_name, "Episode Title");
         assert_eq!(data.season_number, Some(4));
         assert_eq!(
             data.premiere_date.as_deref(),

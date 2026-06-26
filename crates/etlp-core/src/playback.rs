@@ -113,6 +113,12 @@ pub struct PlaybackData {
     /// search keyword when present, as it matches bgm's primary `name` field.
     #[serde(default)]
     pub original_title: String,
+    /// Clean item display name (`Name`) reported by the media server. For a
+    /// movie this is the localised film title; for an episode it is the single
+    /// episode's title. Bangumi movie resolution uses it instead of the
+    /// player-facing `media_title`, which carries year/quality/filename noise.
+    #[serde(default)]
+    pub item_name: String,
     /// Season number (`ParentIndexNumber`); drives walking bgm's sequel chain
     /// to the subject that represents this season.
     #[serde(default)]

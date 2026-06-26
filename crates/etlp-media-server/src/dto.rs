@@ -100,8 +100,10 @@ pub struct Item {
     pub season_id: Option<String>,
     #[serde(rename = "SeriesName", default)]
     pub series_name: Option<String>,
-    /// Native-language title (e.g. the Japanese title for anime). Preferred
-    /// search keyword for Bangumi subject resolution.
+    /// Native-language title (e.g. the Japanese title for anime). For a movie
+    /// this is the film's native title; for an episode it is the single
+    /// episode's native title (not the series name). Used as a Bangumi search
+    /// keyword on the movie path only.
     #[serde(rename = "OriginalTitle", default)]
     pub original_title: Option<String>,
     /// Genre tags reported by the server; used to gate Bangumi title search to

@@ -1949,12 +1949,12 @@ async fn resolve_bangumi_subject(
             date
         };
 
+        // Use the media server's clean metadata: the localised `Name` and the
+        // native `OriginalTitle`. The player-facing `media_title` is avoided
+        // because it carries year/quality/filename noise that pollutes the
+        // BGM keyword search.
         let mut movie_keywords: Vec<&str> = Vec::new();
-        for s in [
-            data.original_title.as_str(),
-            data.media_title.as_str(),
-            data.series_name.as_str(),
-        ] {
+        for s in [data.original_title.as_str(), data.item_name.as_str()] {
             if !s.trim().is_empty() && !movie_keywords.contains(&s) {
                 movie_keywords.push(s);
             }
@@ -1964,9 +1964,11 @@ async fn resolve_bangumi_subject(
             return None;
         }
 
+        // TMDB alternate titles are best-effort: added to the name group when
+        // available, simply omitted otherwise.
         let alt_titles = tmdb.movie_alternative_titles(tmdb_movie_id).await;
         let req = etlp_sync::WebScrapeReq {
-            series: &data.media_title,
+            series: &data.item_name,
             keywords: &movie_keywords,
             alt_titles: &alt_titles,
             // Movies have no S01E01; the release date is the only anchor.
@@ -1998,11 +2000,14 @@ async fn resolve_bangumi_subject(
         return Some(BangumiTarget::auto(id));
     }
 
-    let keywords: Vec<&str> =
-        [data.original_title.as_str(), data.series_name.as_str()]
-            .into_iter()
-            .filter(|s| !s.trim().is_empty())
-            .collect();
+    // Keyword base is the media server's series name only. The episode item's
+    // `original_title` is the single episode's native title (not the series
+    // name), so it is intentionally excluded; the series' native names come
+    // from the best-effort TMDB alternate titles below instead.
+    let keywords: Vec<&str> = [data.series_name.as_str()]
+        .into_iter()
+        .filter(|s| !s.trim().is_empty())
+        .collect();
     if keywords.is_empty() {
         debug!("bangumi: no title keywords for fallback, skip");
         return None;
@@ -2086,8 +2091,9 @@ async fn resolve_bangumi_subject(
             season_premiere_date.clone()
         };
 
-    // TMDB alternate titles for tie-breaking when multiple subjects share the
-    // same start_date distance.
+    // TMDB alternate titles supply the series' native (e.g. Japanese) names and
+    // break ties when subjects share the same start_date distance. Best-effort:
+    // an empty result simply leaves the series name as the only keyword.
     let alt_titles: Vec<String> = if let Some(tid) = tmdb_series_id {
         tmdb.series_alternative_titles(tid).await
     } else {
