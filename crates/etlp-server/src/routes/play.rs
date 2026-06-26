@@ -1356,6 +1356,7 @@ const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
 async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{
         BangumiApi, SubjectCache, SyncError, new_bgm_read_cache, sync_episodes,
+        sync_movie_subject,
     };
 
     if entries.is_empty() {
@@ -1484,14 +1485,25 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         if !host_enabled(&data.netloc, &enable_host) {
             continue;
         }
-        // The episode index is required by both paths to address an episode.
-        let Some(ep_index) = data.index else {
-            debug!(item = %data.media_title, "bangumi: no episode index, skip");
-            continue;
+
+        let is_movie = data.item_type.eq_ignore_ascii_case("movie");
+
+        // TV path requires an episode index to address individual episodes.
+        // Movies carry no episode index, so the check is gated on item type.
+        // For movies, ep_index is set to 0 as a dummy value; it is never
+        // read by the movie branch (which continues before any TV code runs).
+        let ep_index: i64 = if is_movie {
+            0
+        } else {
+            let Some(idx) = data.index else {
+                debug!(item = %data.media_title, "bangumi: no episode index, skip");
+                continue;
+            };
+            if u32::try_from(idx).is_err() {
+                continue;
+            }
+            idx
         };
-        if u32::try_from(ep_index).is_err() {
-            continue;
-        }
 
         // Throttle only once the episode is finished; while it is still in
         // progress, keep reporting so newer progress always reaches Bangumi.
@@ -1550,6 +1562,57 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             );
         }
 
+        // ── Movie path ─────────────────────────────────────────────────────
+        // Movies have no season/episode structure on BGM: resolve the subject,
+        // mark it Watching (首屏活跃度唤醒), then mark all main episodes
+        // Watched in one batch. No backfill needed — a movie is a single unit.
+        if is_movie {
+            if !current_watched {
+                continue;
+            }
+            let subject = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                ep_index, // 0 dummy — not used in the movie branch
+                data.premiere_date.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await;
+            let Some(t) = subject else { continue; };
+            match sync_movie_subject(&api, t.subject_id).await {
+                Ok(ids) => {
+                    info!(
+                        "bangumi: movie marked {} episode(s) for subject {}",
+                        ids.len(),
+                        t.subject_id
+                    );
+                    if auto_mark_subject_watched
+                        && let Err(e) =
+                            api.maybe_mark_subject_watched(t.subject_id).await
+                    {
+                        warn!(
+                            "bangumi: Stage7 check failed for \
+                             movie subject {}: {e}",
+                            t.subject_id
+                        );
+                    }
+                }
+                Err(e) => warn!(
+                    "bangumi movie sync error for subject {}: {e}",
+                    t.subject_id
+                ),
+            }
+            continue;
+        }
+
+        // ── TV episode path ────────────────────────────────────────────────
         // Collect all episodes the user has already finished in Emby/Jellyfin.
         let backfill = emby_played_backfill(state, data).await;
 
