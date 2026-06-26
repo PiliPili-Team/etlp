@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "./i18n";
 import { I18nProvider } from "./i18n/provider";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { type DisplaySettings, loadDisplay, applyDisplay } from "./display";
 import Overview from "./pages/Overview";
 import Settings, { type SectionTab } from "./pages/Settings";
@@ -130,7 +131,7 @@ function IconLogs() {
 }
 
 function IconConfig() {
-    // Sliders/adjustment glyph (from 配置管理.svg). Uses `fill="currentColor"`
+    // Sliders/adjustment glyph (config management icon). Uses `fill="currentColor"`
     // — like the Bangumi/Trakt brand icons — so it inherits the nav item color
     // and adapts to theme and active state instead of the source's fixed white.
     return (
@@ -628,7 +629,9 @@ export default function App() {
 
     return (
         <I18nProvider lang={display.lang}>
-            <AppInner display={display} onDisplayChange={updateDisplay} />
+            <ErrorBoundary>
+                <AppInner display={display} onDisplayChange={updateDisplay} />
+            </ErrorBoundary>
         </I18nProvider>
     );
 }

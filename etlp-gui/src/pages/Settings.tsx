@@ -396,6 +396,11 @@ function SelectRow({
 type ProxyScheme = "http" | "https";
 
 function parseProxyUrl(full: string, def: ProxyScheme): [ProxyScheme, string] {
+    // A cleared proxy round-trips back as null/"" (proxy_http is Option<String>
+    // on the backend), so guard against non-string input before calling match().
+    if (typeof full !== "string" || full.length === 0) {
+        return [def, ""];
+    }
     const m = full.match(/^(https?):\/\/(.+)$/i);
     if (m) {
         const s = m[1].toLowerCase() as ProxyScheme;
@@ -473,7 +478,15 @@ function ProxyRow({
                         value={hostPort}
                         placeholder="127.0.0.1:6152"
                         onChange={(e) => handleInput(e.target.value)}
-                        onBlur={() => commit(hostPort, scheme)}
+                        onBlur={() => {
+                            // Only write when the canonical URL actually changed,
+                            // mirroring the other rows. Blurring an untouched
+                            // (empty) field must not round-trip a null back into
+                            // the config and re-render with a non-string value.
+                            const trimmed = hostPort.trim();
+                            const next = trimmed ? `${scheme}://${trimmed}` : "";
+                            if (next !== (value ?? "")) commit(hostPort, scheme);
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                         }}
