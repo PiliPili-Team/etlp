@@ -16,7 +16,7 @@ playlist construction, progress write-back, and optional watch-history sync.
 
 - Supports **mpv · iina · vlc · mpc-hc · potplayer · dandanplay**
 - Playlist management with version/subtitle preference filtering
-- Progress write-back to Emby (Jellyfin / Plex: **experimental, untested**)
+- Progress write-back to Emby (Jellyfin: **experimental, untested**)
 - Trakt.tv and Bangumi.tv watch-history sync
 - Concurrent download manager with pause / resume and rate limiting
 - Native GUI for macOS and Windows (Tauri, vibrancy on macOS)
@@ -191,7 +191,7 @@ cargo test --workspace --frozen
 | `etlp-logging`     | `tracing` setup, secret masking, 10 MB rotating file output  |
 | `etlp-metrics`     | Lightweight timing (`Span`) and per-session play-chain telemetry (`PlayMetrics`) |
 | `etlp-net`         | `reqwest`/`rustls` HTTP client, redirect cache, progress write-back |
-| `etlp-media-server`| Emby/Jellyfin/Plex API clients, payload parsing, version selection |
+| `etlp-media-server`| Emby/Jellyfin API clients, payload parsing, version selection |
 | `etlp-player`      | mpv JSON IPC, VLC/MPC/PotPlayer/DandanPlay launchers, playlist management |
 | `etlp-download`    | Concurrent download manager with file locking and resume     |
 | `etlp-sync`        | Trakt OAuth (device flow + auth code) and Bangumi API        |
