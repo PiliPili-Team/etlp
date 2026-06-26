@@ -68,6 +68,10 @@ pub struct ScrapeCache {
     pub subject_details: HashMap<u64, SubjectDetail>,
     /// Subject IDs whose prequel/sequel relations have been fetched this pass.
     pub chain_walked: HashSet<u64>,
+    /// Subject IDs whose "resolved from cache" line has already been logged
+    /// this pass, so a multi-episode backfill logs each subject once instead
+    /// of once per episode.
+    pub cache_hit_logged: HashSet<u64>,
 }
 
 // ── Scoring helpers ────────────────────────────────────────────────────────────

@@ -1996,7 +1996,11 @@ async fn resolve_bangumi_subject(
     if !data.series_id.is_empty()
         && let Some(id) = cache.get(&data.series_id, season, ep_index)
     {
-        debug!(id, "bangumi: subject from cache");
+        // Log once per subject per pass: a many-episode backfill would
+        // otherwise repeat this line for every episode and flood the log.
+        if scrape_cache.cache_hit_logged.insert(id) {
+            debug!(id, "bangumi: subject from cache");
+        }
         return Some(BangumiTarget::auto(id));
     }
 
