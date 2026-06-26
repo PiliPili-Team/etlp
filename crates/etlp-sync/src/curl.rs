@@ -19,6 +19,10 @@ use crate::error::{Result, SyncError};
 /// Longest non-JSON error body to log (an HTML gateway page can be huge).
 const NON_JSON_LOG_LIMIT: usize = 500;
 
+/// JSON bodies longer than this are logged as status-code only to avoid
+/// flooding the log with large collection / search payloads.
+const JSON_BODY_LOG_LIMIT: usize = 1200;
+
 /// A response paired with the request method that produced it.
 ///
 /// `reqwest::Response` does not carry the request method, but the logging
@@ -59,7 +63,11 @@ fn classify(method: &Method, body: &str) -> ResponseLog {
     if !logs_full_body(method) || body.trim().is_empty() {
         ResponseLog::StatusOnly
     } else if serde_json::from_str::<serde_json::Value>(body).is_ok() {
-        ResponseLog::JsonBody
+        if body.len() > JSON_BODY_LOG_LIMIT {
+            ResponseLog::StatusOnly
+        } else {
+            ResponseLog::JsonBody
+        }
     } else {
         ResponseLog::NonJson
     }
@@ -309,6 +317,13 @@ mod tests {
         // An empty body is status-only even for GET/POST: nothing to dump.
         assert_eq!(classify(&Method::POST, ""), ResponseLog::StatusOnly);
         assert_eq!(classify(&Method::GET, "   "), ResponseLog::StatusOnly);
+
+        // JSON bodies exceeding the limit are status-only to avoid log flood.
+        let short_json = r#"{"a":1}"#;
+        assert_eq!(classify(&Method::GET, short_json), ResponseLog::JsonBody);
+        let long_json =
+            format!("{{\"data\":\"{}\"}}", "x".repeat(JSON_BODY_LOG_LIMIT + 1));
+        assert_eq!(classify(&Method::GET, &long_json), ResponseLog::StatusOnly);
     }
 
     #[tokio::test]
