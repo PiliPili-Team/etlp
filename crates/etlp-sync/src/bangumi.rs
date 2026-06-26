@@ -2082,13 +2082,8 @@ pub async fn sync_movie_subject(
 
     // Stage 5.1: if already Watched (2), skip to avoid redundant marking.
     match api.get_subject_collection(subject_id).await? {
-        Some(ref c)
-            if c.get("type").and_then(|t| t.as_u64()) == Some(2) =>
-        {
-            info!(
-                subject_id,
-                "bangumi: movie subject already Watched, skip"
-            );
+        Some(ref c) if c.get("type").and_then(|t| t.as_u64()) == Some(2) => {
+            info!(subject_id, "bangumi: movie subject already Watched, skip");
             return Ok(Vec::new());
         }
         _ => {}
@@ -2780,9 +2775,11 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/episodes"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({ "total": 0, "data": [] }),
-            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
             .mount(&server)
             .await;
 

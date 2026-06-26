@@ -1585,7 +1585,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 &mut scrape_cache,
             )
             .await;
-            let Some(t) = subject else { continue; };
+            let Some(t) = subject else {
+                continue;
+            };
             match sync_movie_subject(&api, t.subject_id).await {
                 Ok(ids) => {
                     info!(
