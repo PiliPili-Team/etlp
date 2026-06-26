@@ -43,6 +43,9 @@ const DOMAIN: &str = "bangumi";
 const PATH_SUBJECTS: &str = "subjects";
 const PATH_EPISODES: &str = "episodes";
 const PATH_SEARCH_SUBJECTS: &str = "search/subjects";
+/// Legacy (non-v0) search path: `GET /search/subject/{keyword}`.
+/// Not under `/v0/` — must be joined against the root host.
+const PATH_LEGACY_SEARCH: &str = "search/subject";
 const PATH_ME: &str = "me";
 
 // ── Shared read cache ─────────────────────────────────────────────────────────
@@ -874,6 +877,168 @@ impl BangumiApi {
         );
         candidates
     }
+
+    /// Fallback keyword search using the legacy (non-v0) BGM API.
+    ///
+    /// Called when the v0 `POST /v0/search/subjects` returns zero candidates.
+    /// The legacy endpoint lives at `GET /search/subject/{keyword}` — **outside**
+    /// the `/v0/` namespace — so the base URL must be stripped of its `/v0` suffix
+    /// before constructing the request.  `responseGroup=large` ensures the
+    /// response includes `air_date` and rank/score fields needed for filtering.
+    ///
+    /// Results are cached under `"legacy_search:{keyword}"` in the shared Moka
+    /// cache to avoid hammering the API on repeated calls for the same keyword.
+    pub(crate) async fn search_subjects_legacy_api(
+        &self,
+        keyword: &str,
+    ) -> Vec<crate::bangumi_web::SubjectCandidate> {
+        let cache_key: Arc<str> =
+            format!("legacy_search:{keyword}").into();
+        if let Some(cached) = self.cache.get(&cache_key).await {
+            debug!(keyword, "bangumi: legacy_search cache hit");
+            return Self::parse_legacy_candidates(cached, keyword);
+        }
+
+        // Strip the `/v0` suffix: legacy API is at the host root.
+        let root = self
+            .base_url
+            .trim_end_matches('/')
+            .strip_suffix("/v0")
+            .unwrap_or_else(|| self.base_url.trim_end_matches('/'));
+
+        // Percent-encode the keyword for safe embedding in a URL path segment.
+        let encoded = Self::percent_encode_path(keyword);
+        let url = format!("{root}/{PATH_LEGACY_SEARCH}/{encoded}");
+
+        debug!(keyword, url, "bangumi: legacy_search GET");
+
+        let resp = match self
+            .http
+            .get(&url)
+            .headers(self.auth_headers())
+            .query(&[("type", "2"), ("responseGroup", "large")])
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(keyword, "bangumi: legacy_search failed: {e}");
+                return Vec::new();
+            }
+        };
+
+        if !resp.status().is_success() {
+            debug!(
+                keyword,
+                status = resp.status().as_u16(),
+                "bangumi: legacy_search non-200"
+            );
+            return Vec::new();
+        }
+
+        let val: serde_json::Value = match resp.json().await {
+            Ok(v) => v,
+            Err(e) => {
+                debug!(keyword, "bangumi: legacy_search parse failed: {e}");
+                return Vec::new();
+            }
+        };
+
+        self.cache.insert(cache_key, val.clone()).await;
+
+        let candidates = Self::parse_legacy_candidates(val, keyword);
+        debug!(
+            keyword,
+            hits = candidates.len(),
+            "bangumi: legacy_search"
+        );
+        candidates
+    }
+
+    /// Parse the legacy `{ "list": [...] }` response into `SubjectCandidate`s.
+    fn parse_legacy_candidates(
+        val: serde_json::Value,
+        keyword: &str,
+    ) -> Vec<crate::bangumi_web::SubjectCandidate> {
+        use crate::bangumi_web::{
+            BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
+            base_match_score,
+        };
+
+        #[derive(serde::Deserialize)]
+        struct LegacyEntry {
+            id: u64,
+            name: String,
+            #[serde(default)]
+            name_cn: String,
+        }
+
+        let items: Vec<LegacyEntry> = val
+            .get("list")
+            .and_then(|l| serde_json::from_value(l.clone()).ok())
+            .unwrap_or_default();
+
+        items
+            .into_iter()
+            .filter_map(|e| {
+                let (name, name_jp) = if e.name_cn.is_empty() {
+                    (e.name.clone(), None)
+                } else {
+                    (e.name_cn.clone(), Some(e.name.clone()))
+                };
+                let score = base_match_score(
+                    keyword,
+                    &name,
+                    name_jp.as_deref().unwrap_or(""),
+                );
+                let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
+                debug!(
+                    subject_id = e.id,
+                    name = %name,
+                    score,
+                    result = if pass { "pass" } else { "skip" },
+                    "bangumi: legacy_candidate_prescreen"
+                );
+                pass.then_some(SubjectCandidate {
+                    subject_id: e.id,
+                    name,
+                    name_jp,
+                })
+            })
+            .collect()
+    }
+
+    /// Percent-encode a string for safe use in a URL path segment.
+    ///
+    /// Unreserved characters (`A-Z a-z 0-9 - _ . ~`) pass through unchanged;
+    /// everything else (including spaces and non-ASCII) is encoded as `%XX`.
+    fn percent_encode_path(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() * 2);
+        for byte in s.bytes() {
+            match byte {
+                b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b'-' | b'_' | b'.' | b'~' => {
+                    out.push(byte as char);
+                }
+                b => {
+                    out.push('%');
+                    out.push(
+                        char::from_digit(u32::from(b >> 4), 16)
+                            .unwrap_or('0')
+                            .to_ascii_uppercase(),
+                    );
+                    out.push(
+                        char::from_digit(u32::from(b & 0x0f), 16)
+                            .unwrap_or('0')
+                            .to_ascii_uppercase(),
+                    );
+                }
+            }
+        }
+        out
+    }
 }
 
 // ── Web-scrape resolution algorithm ────────────────────────────────────────────
@@ -920,8 +1085,18 @@ async fn collect_details(
         let key = (*keyword).to_owned();
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
-            let results =
+            let mut results =
                 api.search_subjects_api(keyword, 50, air_date_from).await;
+            // Stage 2.3: if v0 search returns nothing, fall back to the
+            // legacy (non-v0) keyword search endpoint as it handles titles
+            // that contain special characters or are not yet indexed by v0.
+            if results.is_empty() {
+                debug!(
+                    keyword,
+                    "bangumi: v0 search empty, trying legacy API fallback"
+                );
+                results = api.search_subjects_legacy_api(keyword).await;
+            }
             e.insert(results);
         }
         let candidates = scrape_cache
@@ -1252,11 +1427,133 @@ fn select_by_title(
     }
 }
 
+/// Fuzzy variant of [`select_subject_by_start_date`] used in Stage 2.4.
+///
+/// Identical logic, but enforces a **0.9 title-similarity minimum** on the
+/// final winner to compensate for the wider ±15-day premiere-date window that
+/// produces the candidate pool.  A low-similarity winner from a tight date
+/// window is usually correct; from a 15-day window it is more likely a false
+/// positive, so the stricter gate is justified.
+fn select_subject_by_start_date_fuzzy(
+    series: &str,
+    keywords: &[&str],
+    alt_titles: &[String],
+    anchor_date: &str,
+    details: &[crate::bangumi_web::SubjectDetail],
+) -> Option<u64> {
+    const FUZZY_TITLE_MIN_SCORE: f64 = 0.9;
+
+    let with_dates: Vec<(&crate::bangumi_web::SubjectDetail, i64)> = details
+        .iter()
+        .filter_map(|d| {
+            let diff = date_diff_days(d.start_date.as_deref()?, anchor_date)?;
+            Some((d, diff))
+        })
+        .collect();
+
+    if with_dates.is_empty() {
+        warn!(
+            series,
+            "bangumi: fuzzy retry — candidates have no start_date, \
+             add an ID mapping in Settings → Bangumi"
+        );
+        return None;
+    }
+
+    let min_diff = with_dates.iter().map(|(_, d)| *d).min()?;
+    let closest: Vec<&crate::bangumi_web::SubjectDetail> = with_dates
+        .iter()
+        .filter(|(_, d)| *d == min_diff)
+        .map(|(s, _)| *s)
+        .collect();
+
+    let all_kws: Vec<&str> = keywords
+        .iter()
+        .copied()
+        .chain(alt_titles.iter().map(|s| s.as_str()))
+        .collect();
+
+    let mut scored: Vec<(f64, u64)> = closest
+        .iter()
+        .map(|d| {
+            let score = all_kws
+                .iter()
+                .map(|k| {
+                    crate::bangumi_web::base_match_score(
+                        k,
+                        &d.name,
+                        d.name_jp.as_deref().unwrap_or(""),
+                    )
+                })
+                .fold(0.0_f64, f64::max);
+            debug!(
+                subject_id = d.subject_id,
+                name = %d.name,
+                score,
+                date_diff_days = min_diff,
+                "bangumi: fuzzy_retry_score"
+            );
+            (score, d.subject_id)
+        })
+        .collect();
+
+    scored.sort_by(|(a, _), (b, _)| {
+        b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let &(best, best_id) = scored.first()?;
+    if best < FUZZY_TITLE_MIN_SCORE {
+        warn!(
+            series,
+            best_score = best,
+            min_required = FUZZY_TITLE_MIN_SCORE,
+            "bangumi: fuzzy retry — title similarity below 0.9 threshold, \
+             add an ID mapping in Settings → Bangumi"
+        );
+        return None;
+    }
+
+    let top: Vec<u64> = scored
+        .iter()
+        .filter(|(s, _)| (s - best).abs() < 1e-9)
+        .map(|(_, id)| *id)
+        .collect();
+
+    match top.as_slice() {
+        [id] => {
+            let name = details
+                .iter()
+                .find(|d| d.subject_id == *id)
+                .map(|d| d.name.as_str())
+                .unwrap_or("");
+            info!(
+                subject_id = best_id,
+                name,
+                score = best,
+                date_diff_days = min_diff,
+                "bangumi: subject selected via fuzzy retry"
+            );
+            Some(*id)
+        }
+        _ => {
+            warn!(
+                series,
+                tied = ?top,
+                "bangumi: fuzzy retry — subjects still tied after title \
+                 scoring — add an ID mapping in Settings → Bangumi"
+            );
+            None
+        }
+    }
+}
+
 /// Resolve a Bangumi subject ID for the given [`WebScrapeReq`].
 ///
 /// Steps:
 /// 1. Compute search lower bound: `season_premiere_date − 2 days`.
-/// 2. Search the BGM JSON API with that filter.
+/// 2. Search the BGM JSON API with that filter; fallback to legacy API
+///    when v0 returns nothing (Stage 2.3); retry with ±15 day window when
+///    both return nothing (Stage 2.4).
 /// 3. Enrich results via 前传/续集 relation chain.
 /// 4. Select the subject with `start_date` closest to `season_premiere_date`;
 ///    break ties by TMDB alternative-title similarity.
@@ -1297,7 +1594,39 @@ pub async fn resolve_by_web_scrape_with_chain(
         "bangumi: candidate pool after chain enrichment"
     );
 
+    // Stage 2.4: fuzzy date retry — if v0 + legacy search both returned
+    // nothing, widen the premiere lower-bound from −2 days to −15 days and
+    // repeat with a fresh per-call cache (the existing cache would serve the
+    // previous empty v0 result and bypass the retry).  The title similarity
+    // threshold is raised to 0.9 to compensate for the wider date window.
     if details.is_empty() {
+        if let Some(premiere) = req.season_premiere_date
+            && let Some(fuzzy_from) = date_subtract_days(premiere, 15)
+        {
+            warn!(
+                series = req.series,
+                fuzzy_from,
+                "bangumi: no subjects found with normal window; \
+                 retrying with ±15 day fuzzy window"
+            );
+            let mut fuzzy_cache = crate::bangumi_web::ScrapeCache::default();
+            let fuzzy_details = collect_details(
+                req.keywords,
+                &mut fuzzy_cache,
+                api,
+                Some(&fuzzy_from),
+            )
+            .await;
+            if !fuzzy_details.is_empty() {
+                return select_subject_by_start_date_fuzzy(
+                    req.series,
+                    req.keywords,
+                    req.alt_titles,
+                    premiere,
+                    &fuzzy_details,
+                );
+            }
+        }
         warn!(
             series = req.series,
             "bangumi: no subjects found — \
