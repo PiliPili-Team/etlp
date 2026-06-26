@@ -1564,7 +1564,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 
         // ── Movie path ─────────────────────────────────────────────────────
         // Movies have no season/episode structure on BGM: resolve the subject,
-        // mark it Watching (首屏活跃度唤醒), then mark all main episodes
+        // mark it Watching (first-screen activity wake-up), then mark all main episodes
         // Watched in one batch. No backfill needed — a movie is a single unit.
         if is_movie {
             if !current_watched {

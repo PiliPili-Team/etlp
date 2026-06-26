@@ -66,7 +66,7 @@ pub struct SubjectDetail {
 pub struct ScrapeCache {
     pub search_results: HashMap<String, Vec<SubjectCandidate>>,
     pub subject_details: HashMap<u64, SubjectDetail>,
-    /// Subject IDs whose 前传/续集 relations have been fetched this pass.
+    /// Subject IDs whose prequel/sequel relations have been fetched this pass.
     pub chain_walked: HashSet<u64>,
 }
 
