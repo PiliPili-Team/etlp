@@ -1321,17 +1321,19 @@ async fn enrich_with_chain(
             }
         };
 
-        // Primary BFS candidates: direct sequels.
-        // If none exist for this node, demote to alternate adaptations
-        // so Fate/TYPE-MOON style multi-branch IPs are covered
-        // without blindly flooding the queue with every related subject.
-        let sequels: Vec<u64> = related
+        // BFS candidates: prequels (前传) and sequels (续集) are always
+        // followed so the whole linear franchise is reachable from any seed
+        // node. Alternate adaptations (不同演绎) are only added when this node
+        // has no sequel, covering Fate/TYPE-MOON style multi-branch IPs without
+        // blindly flooding the queue with every related subject.
+        let has_sequel = related.iter().any(|r| r.relation == "续集");
+        let mut candidates: Vec<u64> = related
             .iter()
-            .filter(|r| r.relation == "续集")
+            .filter(|r| r.relation == "前传" || r.relation == "续集")
             .map(|r| r.id)
             .collect();
 
-        let candidates: Vec<u64> = if sequels.is_empty() {
+        if !has_sequel {
             let alt: Vec<u64> = related
                 .iter()
                 .filter(|r| r.relation == "不同演绎")
@@ -1344,10 +1346,8 @@ async fn enrich_with_chain(
                     "bangumi: no sequel, queuing alternate adaptation as secondary"
                 );
             }
-            alt
-        } else {
-            sequels
-        };
+            candidates.extend(alt);
+        }
 
         for rid in candidates {
             if !in_result.insert(rid) {
@@ -3652,6 +3652,57 @@ mod tests {
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         // The alternate-adaptation subject 501 should be found via BFS.
         assert_eq!(id, Some(501));
+    }
+
+    // ── BFS: prequel relation is followed ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn bfs_follows_prequel_relation() {
+        let server = MockServer::start().await;
+
+        // Keyword search only finds the later season (seed 600, premiere 2020).
+        mount_api_search(&server, vec![(600, "ShowS2")]).await;
+        mount_api_subject(&server, 600, "ShowS2", Some("2020-01-01")).await;
+        mount_api_episodes_with_dates(&server, 600, vec![(1, "2020-01-07")])
+            .await;
+
+        // Seed 600 has a prequel (前传): the earlier season, subject 601.
+        Mock::given(method("GET"))
+            .and(path("/subjects/600/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 601, "name": "ShowS1",
+                      "name_cn": "", "relation": "前传" }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+        mount_api_subject(&server, 601, "ShowS1", Some("2019-01-01")).await;
+        mount_api_episodes_with_dates(&server, 601, vec![(1, "2019-01-07")])
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/601/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["ShowS2"];
+        let req = WebScrapeReq {
+            series: "ShowS2",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: None,
+            season_premiere_date: Some("2020-01-01"),
+            // The episode aired during the prequel season → only subject 601
+            // contains a matching episode, so the prequel must be walked.
+            episode_air_date: Some("2019-01-07"),
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(601));
     }
 
     // ── mark_episodes_watched PATCH chunking ──────────────────────────────────
