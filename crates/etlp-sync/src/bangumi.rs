@@ -814,11 +814,25 @@ impl BangumiApi {
                 .into();
 
         #[derive(serde::Deserialize)]
+        struct Rating {
+            #[serde(default)]
+            score: f64,
+        }
+
+        #[derive(serde::Deserialize)]
         struct Entry {
             id: u64,
             name: String,
             #[serde(default)]
             name_cn: String,
+            /// Subject rank — absent (`null`) on unreleased / unrated entries.
+            rank: Option<u32>,
+            /// BGM rating object — absent on unreleased entries.
+            rating: Option<Rating>,
+            /// Air date string (YYYY-MM-DD) used for the "rare new anime"
+            /// exception when rank/score are both missing.
+            #[serde(rename = "date")]
+            air_date: Option<String>,
         }
 
         let page_val: serde_json::Value = if let Some(cached) =
@@ -875,6 +889,16 @@ impl BangumiApi {
             val
         };
 
+        // Today as UNIX-days converted to a YYYY-MM-DD string; used to pass
+        // the "rare new anime" exception for entries without rank or score.
+        let today: Option<String> = (|| {
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_secs() as i64;
+            days_to_date(secs / 86_400)
+        })();
+
         let entries: Vec<Entry> = page_val
             .get("data")
             .and_then(|d| serde_json::from_value(d.clone()).ok())
@@ -888,16 +912,45 @@ impl BangumiApi {
                 } else {
                     (e.name_cn.clone(), Some(e.name.clone()))
                 };
-                let score = base_match_score(
+                let sim = base_match_score(
                     keyword,
                     &name,
                     name_jp.as_deref().unwrap_or(""),
                 );
-                let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
+                // Stage 2.2: filter out unreleased "satellite projects" —
+                // entries with neither a rank nor a non-zero score indicate
+                // content that has not yet aired and should not intercept a
+                // genuine search result.
+                // Exception: when the air_date is today-or-earlier AND the
+                // title similarity is very high (≥ 0.9), the entry is a rare
+                // or newly-aired title that simply hasn't accumulated ratings
+                // yet — allow it through.
+                let has_rank = e.rank.is_some();
+                let has_score =
+                    e.rating.as_ref().is_some_and(|r| r.score > 0.0);
+                if !has_rank && !has_score {
+                    let is_aired = e
+                        .air_date
+                        .as_deref()
+                        .zip(today.as_deref())
+                        .is_some_and(|(ad, td)| ad <= td);
+                    const HIGH_SIM: f64 = 0.9;
+                    if !(is_aired && sim >= HIGH_SIM) {
+                        debug!(
+                            subject_id = e.id,
+                            name = %name,
+                            air_date = ?e.air_date,
+                            sim,
+                            "bangumi: api_candidate_dropped (no rank/score)"
+                        );
+                        return None;
+                    }
+                }
+                let pass = sim >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
                 debug!(
                     subject_id = e.id,
                     name = %name,
-                    score,
+                    score = sim,
                     result = if pass { "pass" } else { "skip" },
                     "bangumi: api_candidate_prescreen"
                 );
@@ -2686,7 +2739,13 @@ mod tests {
         let data: Vec<serde_json::Value> = candidates
             .iter()
             .map(|(id, name)| {
-                serde_json::json!({ "id": id, "name": name, "name_cn": "" })
+                // Include rank and rating so the Stage 2.2 rank/score filter
+                // does not drop test candidates.
+                serde_json::json!({
+                    "id": id, "name": name, "name_cn": "",
+                    "rank": 100,
+                    "rating": { "score": 7.0 }
+                })
             })
             .collect();
         Mock::given(method("POST"))
@@ -3058,7 +3117,9 @@ mod tests {
                 serde_json::json!({
                     "total": 1,
                     "data": [{ "id": 777, "name": "RareFuzzyAnime",
-                               "name_cn": "" }]
+                               "name_cn": "",
+                               "rank": 500,
+                               "rating": { "score": 7.5 } }]
                 }),
             ))
             .mount(&server)
