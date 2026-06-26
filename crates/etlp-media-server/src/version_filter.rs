@@ -534,13 +534,7 @@ pub fn version_filter(
         .iter()
         .filter(|i| {
             let path = i.path.as_deref().unwrap_or("");
-            let count = inner.find_iter(path).count();
-            let matched = count == token_count;
-            debug!(
-                "version_filter: ini-regex {:?} tokens={} got={} matched={} path={:?}",
-                ini_tokens, token_count, count, matched, path
-            );
-            matched
+            inner.find_iter(path).count() == token_count
         })
         .cloned()
         .collect();
