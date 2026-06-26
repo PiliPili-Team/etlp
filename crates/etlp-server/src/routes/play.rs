@@ -1728,14 +1728,27 @@ async fn resolve_bangumi_subject(
         );
     }
 
-    if let Some(id_str) = data.provider_ids.get("Bangumi") {
-        match id_str.parse::<u64>() {
-            Ok(id) => return Some(BangumiTarget::auto(id)),
-            Err(_) => {
-                warn!("bangumi: invalid subject id {id_str:?}, skipping");
-                return None;
-            }
-        }
+    // Gate 2 pre-check: require a TMDB id for all auto-resolution paths.
+    // `provider_ids["Bangumi"]` is intentionally not used here — users fill it
+    // with incorrect values too often to be a reliable signal.
+    let tmdb_id_for_gate: Option<u64> = if is_movie {
+        data.provider_ids
+            .get("Tmdb")
+            .filter(|v| !v.is_empty())
+            .and_then(|v| v.parse().ok())
+    } else {
+        series_provider_ids
+            .get("Tmdb")
+            .filter(|v| !v.is_empty())
+            .and_then(|v| v.parse().ok())
+    };
+    if tmdb_id_for_gate.is_none() {
+        warn!(
+            item = %data.media_title,
+            "bangumi: no TMDB id — cannot auto-resolve, \
+             add a manual ID mapping in Settings → Bangumi"
+        );
+        return None;
     }
 
     if !title_fallback {
@@ -1753,7 +1766,7 @@ async fn resolve_bangumi_subject(
     // Season 0 in TMDB means "Specials / Extras". These do not map reliably
     // to any Bangumi subject via title search or the sequel chain.
     if season == 0 {
-        warn!(
+        info!(
             item = %data.media_title,
             series = %data.series_name,
             "bangumi: S0 specials cannot be auto-resolved — \
@@ -1761,6 +1774,77 @@ async fn resolve_bangumi_subject(
         );
         return None;
     }
+
+    // Episode 0 is typically a special/recap that doesn't align with any BGM
+    // episode entry.
+    if !is_movie && ep_index == 0 {
+        info!(
+            item = %data.media_title,
+            series = %data.series_name,
+            "bangumi: episode 0 cannot be auto-resolved — \
+             add an explicit ID mapping in Settings → Bangumi to sync this item"
+        );
+        return None;
+    }
+
+    // ── Movie resolution ───────────────────────────────────────────────────────
+    // Movies have no series/season concept. Resolution is anchored on the
+    // release date (Emby → TMDB) and scored by TMDB alternate title similarity.
+    if is_movie {
+        let tmdb_movie_id = tmdb_id_for_gate.unwrap_or(0);
+        let release_date: Option<String> = if ep_premiere_date.is_some() {
+            ep_premiere_date
+        } else {
+            let date = tmdb.movie_release_date(tmdb_movie_id).await;
+            if date.is_none() {
+                info!(
+                    title = %data.media_title,
+                    "bangumi: no release date from Emby or TMDB, \
+                     searching without date filter"
+                );
+            }
+            date
+        };
+
+        let mut movie_keywords: Vec<&str> = Vec::new();
+        for s in [
+            data.original_title.as_str(),
+            data.media_title.as_str(),
+            data.series_name.as_str(),
+        ] {
+            if !s.trim().is_empty() && !movie_keywords.contains(&s) {
+                movie_keywords.push(s);
+            }
+        }
+        if movie_keywords.is_empty() {
+            debug!("bangumi: no title keywords for movie, skip");
+            return None;
+        }
+
+        let alt_titles = tmdb.movie_alternative_titles(tmdb_movie_id).await;
+        let req = etlp_sync::WebScrapeReq {
+            series: &data.media_title,
+            keywords: &movie_keywords,
+            alt_titles: &alt_titles,
+            season_premiere_date: release_date.as_deref(),
+            // For movies the release date IS the episode air_date.
+            episode_air_date: release_date.as_deref(),
+        };
+        let id = etlp_sync::resolve_by_web_scrape_with_chain(
+            &req,
+            scrape_cache,
+            api,
+        )
+        .await?;
+        info!(
+            subject_id = id,
+            title = %data.media_title,
+            "bangumi: movie subject resolved"
+        );
+        return Some(BangumiTarget::auto(id));
+    }
+
+    // ── TV episode resolution ──────────────────────────────────────────────────
 
     if !data.series_id.is_empty()
         && let Some(id) = cache.get(&data.series_id, season, ep_index)
@@ -1778,7 +1862,6 @@ async fn resolve_bangumi_subject(
         debug!("bangumi: no title keywords for fallback, skip");
         return None;
     }
-    let target_season = u32::try_from(season).unwrap_or(1);
 
     let tmdb_series_id: Option<u64> = series_provider_ids
         .get("Tmdb")
@@ -1787,43 +1870,52 @@ async fn resolve_bangumi_subject(
 
     let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
 
-    // Episode-level premiere date: used for date_window_ok and
-    // airdate_matches_premiere inside the matching pipeline.
-    // Source: Emby (ep_premiere_date) → TMDB specific episode → None.
-    let premiere_date: Option<String> = if ep_premiere_date.is_some() {
-        ep_premiere_date
+    // Episode-level premiere date: fallback anchor when S×E1 cannot be
+    // resolved. Source: Emby → TMDB specific episode → None.
+    let premiere_date: Option<String> = if let Some(d) = ep_premiere_date {
+        debug!(
+            series = %data.series_name,
+            season,
+            episode = ep_index,
+            air_date = %d,
+            "bangumi: episode air_date from media server"
+        );
+        Some(d)
     } else {
         let ep_u32 = u32::try_from(ep_index).ok();
         if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
         {
             let date = tmdb.episode_air_date(tid, s, ep).await;
-            if date.is_none() {
-                warn!(
+            match &date {
+                Some(d) => debug!(
+                    series = %data.series_name,
+                    season,
+                    episode = ep_index,
+                    air_date = %d,
+                    "bangumi: episode air_date from TMDB"
+                ),
+                None => warn!(
                     series = %data.series_name,
                     season,
                     episode = ep_index,
                     "bangumi: no air date from Emby or TMDB; \
                      falling back to title-only resolution"
-                );
+                ),
             }
             date
         } else {
-            if !is_movie {
-                warn!(
-                    series = %data.series_name,
-                    season,
-                    episode = ep_index,
-                    "bangumi: no TMDB series id or episode number available; \
-                     falling back to title-only resolution"
-                );
-            }
+            warn!(
+                series = %data.series_name,
+                season,
+                episode = ep_index,
+                "bangumi: no TMDB series id or episode number available; \
+                 falling back to title-only resolution"
+            );
             None
         }
     };
 
-    // Season premiere date: air date of S×E1, used as the lower-bound filter
-    // on the BGM search API (YYYY-MM-01).  Anchors the search to when the arc
-    // *started* rather than an arbitrary mid-season episode.
+    // Season premiere date: air date of S×E1, anchors the BGM search filter.
     // Source: TMDB S×E1 → episode premiere date → None.
     let season_premiere_date: Option<String> =
         if let (Some(tid), Some(s)) = (tmdb_series_id, s_u32) {
@@ -1833,44 +1925,22 @@ async fn resolve_bangumi_subject(
             premiere_date.clone()
         };
 
-    // Fetch TMDB alternate titles for Round 1 exact matching.
+    // TMDB alternate titles for tie-breaking when multiple subjects share the
+    // same start_date distance.
     let alt_titles: Vec<String> = if let Some(tid) = tmdb_series_id {
         tmdb.series_alternative_titles(tid).await
     } else {
         Vec::new()
     };
 
-    // Use the Emby episode title only for the current (directly triggered)
-    // episode. For backfill episodes the title is unknown, so we leave it None
-    // and let Round 2 fall back to subject-title similarity.
-    let episode_title = if is_movie
-        || data.media_title.trim().is_empty()
-        || ep_index != data.index.unwrap_or(ep_index)
-    {
-        None
-    } else {
-        Some(data.media_title.as_str())
-    };
-
-    let target = if is_movie {
-        etlp_sync::WebResolveTarget::Movie {
-            premiere_date: premiere_date.as_deref(),
-        }
-    } else {
-        etlp_sync::WebResolveTarget::Episode {
-            episode: u32::try_from(ep_index).unwrap_or(0),
-            premiere_date: premiere_date.as_deref(),
-            episode_title,
-        }
-    };
-
     let req = etlp_sync::WebScrapeReq {
         series: &data.series_name,
-        season: target_season,
         keywords: &keywords,
         alt_titles: &alt_titles,
-        target,
         season_premiere_date: season_premiere_date.as_deref(),
+        // The current episode's own air_date is used to validate that the
+        // resolved subject actually contains this episode.
+        episode_air_date: premiere_date.as_deref(),
     };
 
     let id =
@@ -1881,7 +1951,8 @@ async fn resolve_bangumi_subject(
         subject_id = id,
         series = %data.series_name,
         season,
-        "bangumi: resolved subject via web scrape"
+        episode = ep_index,
+        "bangumi: TV subject resolved"
     );
     if !data.series_id.is_empty()
         && let Err(e) =

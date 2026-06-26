@@ -1,19 +1,19 @@
 //! Bangumi subject-resolution types and scoring helpers.
 //!
-//! The HTML scraping layer has been removed; all network operations now use
-//! the authenticated BGM JSON API (see [`super::bangumi::BangumiApi`]).
+//! Subject search and episode metadata are retrieved via the BGM JSON API v0.
+//! See [`super::bangumi::BangumiApi`] for the HTTP client.
 
 use std::collections::{HashMap, HashSet};
 
 // ── Tunable constants ──────────────────────────────────────────────────────────
 
-/// Minimum Levenshtein title similarity to accept a subject in Round 2.
-/// Scores below this threshold yield no match (warn + suggest manual mapping).
+/// Minimum Levenshtein title similarity to accept a subject in title-only
+/// fallback matching. Scores below this threshold yield no match.
 pub const BANGUMI_TITLE_MIN_SCORE: f64 = 0.6;
 
-/// Episode / movie premiere date must be no earlier than the subject's
-/// broadcast-start minus this many days. Upper bound is unconstrained
-/// (covered by ep-range check).
+/// Maximum day-difference between a subject's `start_date` and the season's
+/// first-episode premiere date for the subject to be considered a candidate.
+/// Candidates beyond this window still remain visible but are deprioritised.
 pub const BANGUMI_DATE_WINDOW_DAYS: i64 = 5;
 
 /// Minimum base-match score for a search candidate to pass pre-screening.
@@ -72,7 +72,7 @@ pub struct ScrapeCache {
 
 // ── Scoring helpers ────────────────────────────────────────────────────────────
 
-fn levenshtein(a: &[char], b: &[char]) -> usize {
+pub(crate) fn levenshtein(a: &[char], b: &[char]) -> usize {
     let mut prev: Vec<usize> = (0..=b.len()).collect();
     for (i, ca) in a.iter().enumerate() {
         let mut curr = Vec::with_capacity(b.len() + 1);
@@ -125,25 +125,6 @@ pub(crate) fn base_match_score(
     best
 }
 
-/// `true` when any episode in `episodes` has an `airdate` within
-/// `window_days` of `premiere_date`.
-pub(crate) fn airdate_matches_premiere(
-    premiere_date: &str,
-    episodes: &[EpEntry],
-    window_days: i64,
-) -> bool {
-    let target_days = crate::bangumi::date_to_days_pub(premiere_date);
-    let Some(t) = target_days else {
-        return false;
-    };
-    episodes.iter().any(|e| {
-        e.airdate
-            .as_deref()
-            .and_then(crate::bangumi::date_to_days_pub)
-            .is_some_and(|ep_d| (ep_d - t).abs() <= window_days)
-    })
-}
-
 /// Compute `(min, max)` sort number across a non-empty episode list.
 pub(crate) fn ep_range(episodes: &[EpEntry]) -> Option<(u32, u32)> {
     let min = episodes.iter().map(|e| e.sort).min()?;
@@ -163,19 +144,6 @@ mod tests {
             title: String::new(),
             airdate: airdate.map(str::to_owned),
         }
-    }
-
-    #[test]
-    fn airdate_matches_premiere_returns_true_within_window() {
-        let eps = vec![
-            make_ep(1, Some("2024-08-04")),
-            make_ep(2, Some("2024-08-11")),
-            make_ep(135, Some("2027-03-19")),
-        ];
-        assert!(airdate_matches_premiere("2024-08-04", &eps, 5));
-        assert!(airdate_matches_premiere("2024-08-08", &eps, 5));
-        // 2025-01-01 is far from all three episode airdates
-        assert!(!airdate_matches_premiere("2025-01-01", &eps, 5));
     }
 
     #[test]

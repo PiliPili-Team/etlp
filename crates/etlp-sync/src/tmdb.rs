@@ -54,6 +54,12 @@ struct TmdbAltTitlesResponse {
     results: Vec<TmdbAltTitle>,
 }
 
+/// Movie alternative titles use `"titles"` instead of `"results"`.
+#[derive(Debug, Deserialize)]
+struct TmdbMovieAltTitlesResponse {
+    titles: Vec<TmdbAltTitle>,
+}
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 /// TMDB REST API client for air-date lookups, backed by an LRU cache.
@@ -145,7 +151,58 @@ impl TmdbClient {
     /// Fetch all alternate titles for a TV series.
     ///
     /// Japanese (`iso_3166_1 == "JP"`) entries come first — BGM's search
-    /// index is optimised for the original Japanese title. Returns an empty
+    /// Return alternative titles for a movie, JP first, then others.
+    ///
+    /// Used for tie-breaking BGM subject candidates when multiple subjects
+    /// share the same release-date distance. Returns an empty vec on error.
+    pub async fn movie_alternative_titles(&self, tmdb_id: u64) -> Vec<String> {
+        let url = self.url(&format!("movie/{tmdb_id}/alternative_titles"));
+        let builder = self
+            .http
+            .get(&url)
+            .query(&[("api_key", self.api_key.as_str())]);
+        let logged = match curl::send_logged(DOMAIN, builder).await {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("tmdb: movie alt titles {tmdb_id} request failed: {e}");
+                return Vec::new();
+            }
+        };
+        match curl::json_logged::<TmdbMovieAltTitlesResponse>(DOMAIN, logged)
+            .await
+        {
+            Ok(resp) => {
+                let mut jp: Vec<String> = resp
+                    .titles
+                    .iter()
+                    .filter(|t| t.country == "JP" && !t.title.is_empty())
+                    .map(|t| t.title.clone())
+                    .collect();
+                let others: Vec<String> = resp
+                    .titles
+                    .iter()
+                    .filter(|t| t.country != "JP" && !t.title.is_empty())
+                    .map(|t| t.title.clone())
+                    .collect();
+                jp.extend(others);
+                jp.dedup();
+                debug!(
+                    tmdb_id,
+                    count = jp.len(),
+                    "tmdb: fetched movie alternate titles"
+                );
+                jp
+            }
+            Err(e) => {
+                warn!("tmdb: movie alt titles {tmdb_id} parse failed: {e}");
+                Vec::new()
+            }
+        }
+    }
+
+    /// Return alternative titles for a TV series, JP first, then others.
+    ///
+    /// The BGM search index is optimised for the original Japanese title. Returns an empty
     /// vec on any network or parse error so callers degrade gracefully.
     pub async fn series_alternative_titles(&self, tmdb_id: u64) -> Vec<String> {
         let url = self.url(&format!("tv/{tmdb_id}/alternative_titles"));
