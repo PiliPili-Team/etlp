@@ -199,6 +199,11 @@ pub(crate) fn date_subtract_days(date_str: &str, days: i64) -> Option<String> {
     days_to_date(date_to_days(date_str)? - days)
 }
 
+/// Add `days` to a `"YYYY-MM-DD"` string and return the new date.
+pub(crate) fn date_add_days(date_str: &str, days: i64) -> Option<String> {
+    days_to_date(date_to_days(date_str)? + days)
+}
+
 /// Absolute day difference between two date strings, if both parse.
 fn date_diff_days(a: &str, b: &str) -> Option<i64> {
     Some((date_to_days(a)? - date_to_days(b)?).abs())
@@ -846,22 +851,28 @@ impl BangumiApi {
     ///
     /// Authorization header is intentionally omitted — the v0 search endpoint
     /// can return 400 or empty results when a user token is present.
-    /// When `air_date_from` is provided, the search adds an `air_date >=`
-    /// filter so that obviously irrelevant older subjects are excluded up front.
+    /// `air_date_from` / `air_date_to` bound the subject air date to a closed
+    /// window (`air_date >= from` and `air_date <= to`) so subjects outside the
+    /// premiere window are excluded up front. Either bound may be `None`.
     pub(crate) async fn search_subjects_api(
         &self,
         keyword: &str,
         limit: u32,
         air_date_from: Option<&str>,
+        air_date_to: Option<&str>,
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         use crate::bangumi_web::{
             BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
             base_match_score,
         };
 
-        let cache_key: Arc<str> =
-            format!("search:{}:{}", keyword, air_date_from.unwrap_or("none"))
-                .into();
+        let cache_key: Arc<str> = format!(
+            "search:{}:{}:{}",
+            keyword,
+            air_date_from.unwrap_or("none"),
+            air_date_to.unwrap_or("none")
+        )
+        .into();
 
         #[derive(serde::Deserialize)]
         struct Rating {
@@ -896,19 +907,26 @@ impl BangumiApi {
                 self.base_url.trim_end_matches('/')
             );
             // Deliberately omit `sort` — BGM defaults to match ranking.
-            let body = if let Some(from) = air_date_from {
+            let mut air_date: Vec<String> = Vec::new();
+            if let Some(from) = air_date_from {
+                air_date.push(format!(">={from}"));
+            }
+            if let Some(to) = air_date_to {
+                air_date.push(format!("<={to}"));
+            }
+            let body = if air_date.is_empty() {
+                serde_json::json!({
+                    "keyword": keyword,
+                    "filter": { "type": [2], "nsfw": true }
+                })
+            } else {
                 serde_json::json!({
                     "keyword": keyword,
                     "filter": {
                         "type": [2],
                         "nsfw": true,
-                        "air_date": [format!(">={from}")]
+                        "air_date": air_date
                     }
-                })
-            } else {
-                serde_json::json!({
-                    "keyword": keyword,
-                    "filter": { "type": [2], "nsfw": true }
                 })
             };
 
@@ -1192,11 +1210,11 @@ pub struct WebScrapeReq<'a> {
     pub alt_titles: &'a [String],
     /// The series' first air date (`"YYYY-MM-DD"` or ISO timestamp).
     ///
-    /// Used **only** as the search lower-bound floor (`−2 days`, widened to
-    /// `−15 days` on the fuzzy retry). Anchoring the filter on the franchise's
+    /// Used **only** as the centre of the search window (`± 2 days`, widened to
+    /// `± 15 days` on the fuzzy retry). Anchoring the filter on the franchise's
     /// premiere — rather than the current season's premiere — keeps the
-    /// franchise's earlier subjects in the candidate pool, so later seasons do
-    /// not resolve against an over-narrow result set. Falls back to
+    /// franchise's earliest subject in the candidate pool, from which the
+    /// relation chain expands to the other seasons. Falls back to
     /// `season_premiere_date` when `None`.
     pub search_floor_date: Option<&'a str>,
     /// Air date of the first episode of this season (`"YYYY-MM-DD"`).
@@ -1214,13 +1232,14 @@ pub struct WebScrapeReq<'a> {
 
 /// Collect [`SubjectDetail`]s for all candidates found by `keywords`.
 ///
-/// `air_date_from` is a pre-computed `"YYYY-MM-DD"` lower bound passed
-/// directly to the BGM search API filter. Pass `None` for an unbounded search.
+/// `air_date_from` / `air_date_to` are pre-computed `"YYYY-MM-DD"` bounds passed
+/// directly to the BGM search API filter. Pass `None` for an unbounded edge.
 async fn collect_details(
     keywords: &[&str],
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: &BangumiApi,
     air_date_from: Option<&str>,
+    air_date_to: Option<&str>,
 ) -> Vec<crate::bangumi_web::SubjectDetail> {
     use std::collections::hash_map::Entry;
 
@@ -1232,8 +1251,9 @@ async fn collect_details(
         let key = (*keyword).to_owned();
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
-            let mut results =
-                api.search_subjects_api(keyword, 50, air_date_from).await;
+            let mut results = api
+                .search_subjects_api(keyword, 50, air_date_from, air_date_to)
+                .await;
             // Stage 2.3: if v0 search returns nothing, fall back to the
             // legacy (non-v0) keyword search endpoint as it handles titles
             // that contain special characters or are not yet indexed by v0.
@@ -1721,7 +1741,7 @@ fn select_subject_by_start_date_fuzzy(
 /// Resolve a Bangumi subject ID for the given [`WebScrapeReq`].
 ///
 /// Steps:
-/// 1. Compute search lower bound: `search_floor_date − 2 days` (the series'
+/// 1. Compute the search window: `search_floor_date ± 2 days` (the series'
 ///    first air date; falls back to `season_premiere_date`).
 /// 2. Search the BGM JSON API with that filter; fallback to legacy API
 ///    when v0 returns nothing (Stage 2.3); retry with ±15 day window when
@@ -1736,18 +1756,20 @@ pub async fn resolve_by_web_scrape_with_chain(
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: &BangumiApi,
 ) -> Option<u64> {
-    // Search floor: the series' first air date when available, else the current
-    // season's premiere. Subjects are filtered to `air_date >= floor − 2 days`
-    // so the franchise's earlier subjects stay in the candidate pool (a
-    // later-season premiere would over-narrow the search and miss them).
+    // Search window: the series' first air date when available, else the
+    // current season's premiere, widened to `floor ± 2 days`. Anchoring on the
+    // franchise premiere keeps the franchise's earliest subject in the pool;
+    // the relation chain then expands to later/earlier seasons.
     let floor = req.search_floor_date.or(req.season_premiere_date);
     let air_date_from: Option<String> =
         floor.and_then(|d| date_subtract_days(d, 2));
+    let air_date_to: Option<String> = floor.and_then(|d| date_add_days(d, 2));
 
     info!(
         series = req.series,
         keywords = ?req.keywords,
         search_from = air_date_from.as_deref().unwrap_or("none"),
+        search_to = air_date_to.as_deref().unwrap_or("none"),
         episode_air_date = req.episode_air_date.unwrap_or("none"),
         "bangumi: searching subjects"
     );
@@ -1757,6 +1779,7 @@ pub async fn resolve_by_web_scrape_with_chain(
         scrape_cache,
         api,
         air_date_from.as_deref(),
+        air_date_to.as_deref(),
     )
     .await;
 
@@ -1777,11 +1800,14 @@ pub async fn resolve_by_web_scrape_with_chain(
         // Selection anchor stays the current season's premiere (falling back to
         // the floor); only the search window is widened, floor − 15 days.
         let anchor = req.season_premiere_date.or(req.search_floor_date);
-        if let Some(fuzzy_from) = floor.and_then(|d| date_subtract_days(d, 15))
-        {
+        let fuzzy_window = floor.and_then(|d| {
+            Some((date_subtract_days(d, 15)?, date_add_days(d, 15)?))
+        });
+        if let Some((fuzzy_from, fuzzy_to)) = fuzzy_window {
             warn!(
                 series = req.series,
                 fuzzy_from,
+                fuzzy_to,
                 "bangumi: no subjects found with normal window; \
                  retrying with ±15 day fuzzy window"
             );
@@ -1791,6 +1817,7 @@ pub async fn resolve_by_web_scrape_with_chain(
                 &mut fuzzy_cache,
                 api,
                 Some(&fuzzy_from),
+                Some(&fuzzy_to),
             )
             .await;
             if let Some(anchor) = anchor
@@ -2359,7 +2386,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", 50, None).await;
+        let results = api.search_subjects_api("AnimeA", 50, None, None).await;
         assert!(results.is_empty());
     }
 
@@ -2384,10 +2411,42 @@ mod tests {
 
         let api = make_api(&server).await;
         let results = api
-            .search_subjects_api("AnimeA", 50, Some("2025-01-01"))
+            .search_subjects_api("AnimeA", 50, Some("2025-01-01"), None)
             .await;
         assert_eq!(results.len(), 1);
         assert_eq!(results.first().map(|c| c.subject_id), Some(516416));
+    }
+
+    #[tokio::test]
+    async fn search_subjects_api_sends_closed_air_date_window() {
+        use wiremock::matchers::body_string_contains;
+
+        // A bounded ± window must serialise to BOTH a `>=` lower bound and a
+        // `<=` upper bound in the `air_date` filter array.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(body_string_contains(">=2020-07-01"))
+            .and(body_string_contains("<=2020-07-05"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let results = api
+            .search_subjects_api(
+                "AnimeA",
+                50,
+                Some("2020-07-01"),
+                Some("2020-07-05"),
+            )
+            .await;
+        assert!(results.is_empty());
     }
 
     // ── fetch_subject_detail_api ──────────────────────────────────────────────
@@ -2965,6 +3024,24 @@ mod tests {
     }
 
     #[test]
+    fn date_add_days_basic_and_boundaries() {
+        assert_eq!(
+            date_add_days("2020-07-03", 2),
+            Some("2020-07-05".to_owned())
+        );
+        // Crosses month boundary.
+        assert_eq!(
+            date_add_days("2024-02-28", 2),
+            Some("2024-03-01".to_owned())
+        );
+        // Crosses year boundary.
+        assert_eq!(
+            date_add_days("2023-12-30", 2),
+            Some("2024-01-01".to_owned())
+        );
+    }
+
+    #[test]
     fn days_to_date_roundtrips() {
         for date in ["2024-04-07", "2023-12-31", "2000-02-29", "1999-01-01"] {
             let d = date_to_days(date).expect("parse");
@@ -3401,7 +3478,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", 10, None).await;
+        let results = api.search_subjects_api("AnimeA", 10, None, None).await;
         assert!(results.is_empty());
     }
 
