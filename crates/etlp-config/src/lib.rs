@@ -189,16 +189,11 @@ impl Default for DevSection {
     }
 }
 
-/// Upper bound for `[playlist] item_limit`; mirrors the GUI's maximum. `0` means
-/// "use default 100 episodes" at runtime. Enforced at load time so a hand-edited
-/// config cannot exceed the supported cap.
-pub const ITEM_LIMIT_MAX: u32 = 100;
-
 /// `[playlist]` section — playlist assembly options.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct PlaylistSection {
-    /// Maximum episodes in the player playlist (`0` = default 100).
+    /// Maximum episodes in the player playlist (`0` = no limit).
     pub item_limit: u32,
     /// Regex that selects one version per episode (empty = no filter).
     pub version_filter: String,
@@ -621,11 +616,7 @@ impl Config {
             .log_max_files
             .clamp(LOG_MAX_FILES_MIN, LOG_MAX_FILES_MAX);
 
-        let mut playlist = raw.playlist;
-        // `0` means "default 100 episodes" at runtime; cap non-zero values.
-        if playlist.item_limit > 0 {
-            playlist.item_limit = playlist.item_limit.min(ITEM_LIMIT_MAX);
-        }
+        let playlist = raw.playlist;
 
         let mut trakt = raw.trakt;
         trakt.duplicate_throttle_secs = trakt
@@ -795,10 +786,10 @@ speed_dummy = 1.5
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg.dev.log_max_size_mb, LOG_MAX_SIZE_MB_MAX);
         assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
-        assert_eq!(cfg.playlist.item_limit, ITEM_LIMIT_MAX);
+        // item_limit has no upper cap; value is stored as-is.
+        assert_eq!(cfg.playlist.item_limit, 5000);
 
-        // `item_limit = 0` means "use default 100 at runtime"; the stored value
-        // stays 0 (it is not raised to ITEM_LIMIT_MAX at load time).
+        // `item_limit = 0` means no limit; stored value stays 0.
         write_config(dir.path(), "config.toml", "[playlist]\nitem_limit = 0\n");
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg.playlist.item_limit, 0);

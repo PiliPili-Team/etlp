@@ -31,7 +31,7 @@ interface ConfigDto {
     version_prefer_for_playlist: boolean;
     proxy_http: string;
     proxy_https: string;
-    proxy_socks5: string;
+
     proxy_enabled: boolean;
     redirect_check_host: string[];
     skip_certificate_verify: boolean;
@@ -393,19 +393,16 @@ function SelectRow({
 
 // ── Proxy row ─────────────────────────────────────────────────────────────────
 
-type ProxyScheme = "http" | "https" | "socks5";
+type ProxyScheme = "http" | "https";
 
 function parseProxyUrl(full: string, def: ProxyScheme): [ProxyScheme, string] {
-    const m = full.match(/^(https?|socks[45]):\/\/(.+)$/i);
+    const m = full.match(/^(https?):\/\/(.+)$/i);
     if (m) {
-        const s = m[1].toLowerCase();
-        const scheme: ProxyScheme = s.startsWith("socks") ? "socks5" : (s as ProxyScheme);
-        return [scheme, m[2]];
+        const s = m[1].toLowerCase() as ProxyScheme;
+        return [s, m[2]];
     }
     return [def, full];
 }
-
-const PROXY_SCHEMES: ProxyScheme[] = ["http", "https", "socks5"];
 
 function ProxyRow({
     label,
@@ -436,10 +433,9 @@ function ProxyRow({
     }
 
     const handleInput = (raw: string) => {
-        const m = raw.match(/^(https?|socks[45]):\/\/(.+)$/i);
+        const m = raw.match(/^(https?):\/\/(.+)$/i);
         if (m) {
-            const s = m[1].toLowerCase();
-            setScheme(s.startsWith("socks") ? "socks5" : (s as ProxyScheme));
+            setScheme(m[1].toLowerCase() as ProxyScheme);
             setHostPort(m[2]);
         } else {
             setHostPort(raw);
@@ -459,21 +455,19 @@ function ProxyRow({
             </div>
             <div className="row-control">
                 <div className="proxy-input">
-                    <div className="proxy-scheme-tabs">
-                        {PROXY_SCHEMES.map((s) => (
-                            <button
-                                key={s}
-                                type="button"
-                                className={`proxy-scheme-tab${scheme === s ? " active" : ""}`}
-                                onClick={() => {
-                                    setScheme(s);
-                                    if (hostPort.trim()) commit(hostPort, s);
-                                }}
-                            >
-                                {s}://
-                            </button>
-                        ))}
-                    </div>
+                    <select
+                        className="select"
+                        style={{ width: 96, flexShrink: 0 }}
+                        value={scheme}
+                        onChange={(e) => {
+                            const s = e.target.value as ProxyScheme;
+                            setScheme(s);
+                            if (hostPort.trim()) commit(hostPort, s);
+                        }}
+                    >
+                        <option value="http">http://</option>
+                        <option value="https">https://</option>
+                    </select>
                     <input
                         className="input code"
                         value={hostPort}
@@ -1280,7 +1274,6 @@ function VersionPreferSection({
                     desc={t("vp_max_eps_desc")}
                     value={cfg.item_limit}
                     min={0}
-                    max={100}
                     onCommit={(v) => update("playlist", "item_limit", v)}
                 />
                 <ToggleRow
@@ -1343,13 +1336,6 @@ function NetworkSection({
                     value={cfg.proxy_https}
                     defaultScheme="https"
                     onCommit={(v) => update("dev", "proxy_https", v)}
-                />
-                <ProxyRow
-                    label={t("net_proxy_socks5")}
-                    desc={t("net_proxy_socks5_desc")}
-                    value={cfg.proxy_socks5}
-                    defaultScheme="socks5"
-                    onCommit={(v) => update("dev", "proxy_socks5", v)}
                 />
                 <ToggleRow
                     label={t("net_proxy_enabled")}

@@ -93,7 +93,7 @@ pub async fn trakt_auth(
     };
     info!("trakt_auth: exchanging code");
 
-    let (client_id, client_secret, redirect_uri, token_path) = {
+    let (client_id, client_secret, redirect_uri, token_path, trakt_proxy) = {
         let cfg = match state.config.read() {
             Ok(c) => c,
             Err(e) => {
@@ -108,7 +108,12 @@ pub async fn trakt_auth(
         let secret = cfg.trakt.client_secret.clone();
         let uri = cfg.trakt.redirect_uri.clone();
         let path = state.working_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
-        (id, secret, uri, path)
+        let proxy = etlp_sync::SyncProxy::new(
+            cfg.dev.proxy_http.clone(),
+            cfg.dev.proxy_https.clone(),
+            cfg.dev.proxy_enabled,
+        );
+        (id, secret, uri, path, proxy)
     };
 
     if client_id.is_empty() || client_secret.is_empty() {
@@ -127,6 +132,7 @@ pub async fn trakt_auth(
         "",
         &token_path,
         etlp_sync::TraktApi::DEFAULT_BASE_URL,
+        trakt_proxy,
     ) {
         Ok(mut api) => match api.exchange_code(&code, &redirect_uri).await {
             Ok(_) => {

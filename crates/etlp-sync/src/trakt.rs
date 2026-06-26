@@ -205,11 +205,9 @@ impl TraktApi {
         user_id: impl Into<String>,
         token_path: impl AsRef<Path>,
         base_url: impl Into<String>,
+        proxy: crate::SyncProxy,
     ) -> Result<Self> {
-        let http = reqwest::Client::builder()
-            .user_agent(etlp_core::UA_ETLP)
-            .timeout(Duration::from_secs(30))
-            .build()
+        let http = crate::build_http_client(Duration::from_secs(30), &proxy)
             .map_err(SyncError::Http)?;
         Ok(Self {
             client_id: client_id.into(),
@@ -908,7 +906,15 @@ mod tests {
 
     async fn make_api(server: &MockServer) -> TraktApi {
         let tmp = NamedTempFile::new().unwrap();
-        TraktApi::new("cid", "csec", "user1", tmp.path(), server.uri()).unwrap()
+        TraktApi::new(
+            "cid",
+            "csec",
+            "user1",
+            tmp.path(),
+            server.uri(),
+            crate::SyncProxy::default(),
+        )
+        .unwrap()
     }
 
     // ── TraktToken::is_valid ──────────────────────────────────────────────────
@@ -955,8 +961,15 @@ mod tests {
     #[test]
     fn save_and_load_token_roundtrip() {
         let tmp = NamedTempFile::new().unwrap();
-        let mut api =
-            TraktApi::new("c", "s", "u", tmp.path(), "http://x").unwrap();
+        let mut api = TraktApi::new(
+            "c",
+            "s",
+            "u",
+            tmp.path(),
+            "http://x",
+            crate::SyncProxy::default(),
+        )
+        .unwrap();
         let tok = test_token();
         api.save_token(&tok).unwrap();
         assert!(api.load_token().unwrap());
@@ -969,7 +982,15 @@ mod tests {
     fn load_token_returns_false_when_missing() {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path().with_extension("nonexistent");
-        let mut api = TraktApi::new("c", "s", "u", &path, "http://x").unwrap();
+        let mut api = TraktApi::new(
+            "c",
+            "s",
+            "u",
+            &path,
+            "http://x",
+            crate::SyncProxy::default(),
+        )
+        .unwrap();
         assert!(!api.load_token().unwrap());
     }
 

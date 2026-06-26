@@ -134,9 +134,8 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         port: cfg.dandan.port,
         api_key: cfg.dandan.api_key.clone(),
     };
-    // `item_limit == 0` means "default 100 episodes".
     let playlist_limit = match cfg.playlist.item_limit {
-        0 => 100,
+        0 => usize::MAX,
         n => n as usize,
     };
     let disable_progress_report = cfg.dev.disable_progress_report;
@@ -1154,6 +1153,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         enable_host,
         allow_duplicate,
         trakt_throttle,
+        trakt_proxy,
     ) = {
         let Ok(cfg) = state.config.read() else {
             warn!("trakt: config lock poisoned, skip");
@@ -1171,6 +1171,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.trakt.enable_host.clone(),
             cfg.trakt.allow_duplicate,
             cfg.trakt.duplicate_throttle(),
+            etlp_sync::SyncProxy::new(
+                cfg.dev.proxy_http.clone(),
+                cfg.dev.proxy_https.clone(),
+                cfg.dev.proxy_enabled,
+            ),
         )
     };
 
@@ -1197,6 +1202,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         &user_name,
         &token_path,
         TraktApi::DEFAULT_BASE_URL,
+        trakt_proxy,
     ) else {
         return;
     };
@@ -1369,6 +1375,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         bangumi_allow_dup,
         bangumi_throttle,
         tmdb_api_key,
+        sync_proxy,
     ) = {
         let Ok(cfg) = state.config.read() else {
             return;
@@ -1389,6 +1396,11 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.allow_duplicate,
             cfg.bangumi.duplicate_throttle(),
             cfg.tmdb.effective_api_key().to_owned(),
+            etlp_sync::SyncProxy::new(
+                cfg.dev.proxy_http.clone(),
+                cfg.dev.proxy_https.clone(),
+                cfg.dev.proxy_enabled,
+            ),
         )
     };
     // User-pinned subject mappings take priority over auto-resolution.
@@ -1418,6 +1430,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         private,
         BangumiApi::DEFAULT_BASE_URL,
         new_bgm_read_cache(),
+        sync_proxy.clone(),
     ) else {
         return;
     };
@@ -1445,6 +1458,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     let Ok(tmdb) = etlp_sync::TmdbClient::new(
         &tmdb_api_key,
         etlp_sync::TmdbClient::DEFAULT_BASE_URL,
+        sync_proxy,
     ) else {
         warn!("bangumi: failed to build TMDB client, air-date lookup disabled");
         return;
@@ -1775,7 +1789,7 @@ async fn resolve_bangumi_subject(
         );
     }
 
-    // Gate 2 pre-check: require a TMDB id for all auto-resolution paths.
+    // TMDB id extracted from provider data; used for movie lookups downstream.
     // `provider_ids["Bangumi"]` is intentionally not used here — users fill it
     // with incorrect values too often to be a reliable signal.
     let tmdb_id_for_gate: Option<u64> = if is_movie {
@@ -1789,15 +1803,6 @@ async fn resolve_bangumi_subject(
             .filter(|v| !v.is_empty())
             .and_then(|v| v.parse().ok())
     };
-    if tmdb_id_for_gate.is_none() {
-        warn!(
-            item = %data.media_title,
-            "bangumi: no TMDB id — cannot auto-resolve, \
-             add a manual ID mapping in Settings → Bangumi"
-        );
-        return None;
-    }
-
     if !title_fallback {
         debug!(item = %data.media_title, "bangumi: no provider id, fallback off");
         return None;

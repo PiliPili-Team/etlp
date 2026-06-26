@@ -347,12 +347,13 @@ impl BangumiApi {
         private: bool,
         base_url: impl Into<String>,
         cache: BgmReadCache,
+        proxy: crate::SyncProxy,
     ) -> Result<Self> {
-        let http = reqwest::Client::builder()
-            .user_agent(etlp_core::UA_ETLP)
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(SyncError::Http)?;
+        let http = crate::build_http_client(
+            std::time::Duration::from_secs(30),
+            &proxy,
+        )
+        .map_err(SyncError::Http)?;
         Ok(Self {
             username: username.into(),
             access_token: access_token.into(),
@@ -2190,6 +2191,7 @@ mod tests {
             true,
             server.uri(),
             new_bgm_read_cache(),
+            crate::SyncProxy::default(),
         )
         .unwrap()
     }
