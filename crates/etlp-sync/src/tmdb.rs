@@ -88,12 +88,13 @@ impl TmdbClient {
     pub fn new(
         api_key: impl Into<String>,
         base_url: impl Into<String>,
+        proxy: crate::SyncProxy,
     ) -> Result<Self> {
-        let http = reqwest::Client::builder()
-            .user_agent(etlp_core::UA_ETLP)
-            .timeout(std::time::Duration::from_secs(15))
-            .build()
-            .map_err(SyncError::Http)?;
+        let http = crate::build_http_client(
+            std::time::Duration::from_secs(15),
+            &proxy,
+        )
+        .map_err(SyncError::Http)?;
         let capacity = NonZeroUsize::new(Self::CACHE_CAPACITY)
             .unwrap_or(NonZeroUsize::MIN);
         Ok(Self {
@@ -350,7 +351,8 @@ mod tests {
     use super::*;
 
     async fn make_client(server: &MockServer) -> TmdbClient {
-        TmdbClient::new("test-key", server.uri()).unwrap()
+        TmdbClient::new("test-key", server.uri(), crate::SyncProxy::default())
+            .unwrap()
     }
 
     #[tokio::test]

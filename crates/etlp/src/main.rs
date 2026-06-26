@@ -256,6 +256,7 @@ async fn run_trakt_auth(
         "",
         &token_path,
         TraktApi::DEFAULT_BASE_URL,
+        etlp_sync::SyncProxy::default(),
     )?;
 
     let code_resp = api.request_device_code().await?;
@@ -308,6 +309,7 @@ async fn run_bgm_mark_played(
         private,
         BangumiApi::DEFAULT_BASE_URL,
         new_bgm_read_cache(),
+        etlp_sync::SyncProxy::default(),
     )?;
     sync_episode_by_bangumi_id(&api, subject_id, &[ep]).await?;
     println!("bgm.tv: episode {ep} of subject {subject_id} marked as watched.");

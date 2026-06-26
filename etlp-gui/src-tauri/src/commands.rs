@@ -897,6 +897,11 @@ fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
         &config.trakt.user_name,
         &token_path,
         etlp_sync::TraktApi::DEFAULT_BASE_URL,
+        etlp_sync::SyncProxy::new(
+            config.dev.proxy_http.clone(),
+            config.dev.proxy_https.clone(),
+            config.dev.proxy_enabled,
+        ),
     )
     .map_err(|e| format!("init trakt client: {e}"))?;
     Ok(Some(api))
@@ -917,6 +922,11 @@ fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
         config.bangumi.private,
         etlp_sync::BangumiApi::DEFAULT_BASE_URL,
         etlp_sync::new_bgm_read_cache(),
+        etlp_sync::SyncProxy::new(
+            config.dev.proxy_http.clone(),
+            config.dev.proxy_https.clone(),
+            config.dev.proxy_enabled,
+        ),
     )
     .map_err(|e| format!("init bangumi client: {e}"))?;
     Ok(Some(api))

@@ -36,3 +36,68 @@ pub use trakt::{
     TraktHistoryItem, TraktIds, TraktItemKind, TraktToken, sync_history,
     trakt_authorize_url,
 };
+
+/// Proxy configuration forwarded from the app config to sync HTTP clients.
+///
+/// Construct via [`SyncProxy::new`] or [`SyncProxy::default`] (no proxy).
+#[derive(Debug, Clone, Default)]
+pub struct SyncProxy {
+    /// HTTP proxy URL (e.g. `"http://127.0.0.1:6152"`).
+    pub http: Option<String>,
+    /// HTTPS proxy URL (e.g. `"http://127.0.0.1:6152"`).
+    pub https: Option<String>,
+    /// When `false`, all proxy settings are ignored and connections are direct.
+    pub enabled: bool,
+}
+
+impl SyncProxy {
+    /// Create a proxy config from the three config fields.
+    #[must_use]
+    pub fn new(
+        http: Option<String>,
+        https: Option<String>,
+        enabled: bool,
+    ) -> Self {
+        Self {
+            http,
+            https,
+            enabled,
+        }
+    }
+}
+
+/// Build a `reqwest::Client` with the given `timeout` and optional proxy.
+///
+/// When `proxy.enabled` is `false` or no proxy URLs are configured, a direct
+/// client is returned. HTTPS traffic is routed via `proxy.https`; HTTP via
+/// `proxy.http`; if only one is set, it covers both schemes.
+pub(crate) fn build_http_client(
+    timeout: std::time::Duration,
+    proxy: &SyncProxy,
+) -> reqwest::Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder()
+        .user_agent(etlp_core::UA_ETLP)
+        .timeout(timeout);
+
+    if proxy.enabled {
+        let ph = proxy.http.clone();
+        let ps = proxy.https.clone();
+        if ph.is_some() || ps.is_some() {
+            tracing::debug!(
+                http = ?ph.as_deref(),
+                https = ?ps.as_deref(),
+                "sync: proxy configured"
+            );
+            let custom = reqwest::Proxy::custom(move |url| {
+                let candidate: Option<&str> = match url.scheme() {
+                    "http" => ph.as_deref(),
+                    _ => ps.as_deref().or(ph.as_deref()),
+                };
+                candidate.and_then(|u| url::Url::parse(u).ok())
+            });
+            builder = builder.proxy(custom);
+        }
+    }
+
+    builder.build()
+}
