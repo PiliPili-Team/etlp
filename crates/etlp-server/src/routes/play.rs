@@ -1476,6 +1476,15 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         std::collections::BTreeMap<String, String>,
     > = std::collections::HashMap::new();
 
+    // Cache for the series-level `PremiereDate` read from the Emby/Jellyfin
+    // series item (keyed by series_id). This is the show's first air date, used
+    // as the Bangumi search floor; reading it from the series item is robust
+    // even when season 1 is not in the library. Cached once per series.
+    let mut series_premiere_cache: std::collections::HashMap<
+        String,
+        Option<String>,
+    > = std::collections::HashMap::new();
+
     // In-pass scrape cache: search results and subject details are reused
     // across all entries in this sync call to avoid redundant HTTP requests.
     let mut scrape_cache = etlp_sync::bangumi_web::ScrapeCache::default();
@@ -1521,32 +1530,44 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // items in Emby carry episode-specific provider ids, not the series id.
         // Also needed when title_fallback is on: the TMDB series id drives
         // air-date lookups and alternate-title fetches used by the web fallback.
-        let series_provider_ids = if (!mappings.is_empty() || title_fallback)
-            && !data.series_id.is_empty()
-            && data.server.is_emby_like()
-        {
-            if let Some(ids) = series_provider_cache.get(&data.series_id) {
-                ids.clone()
+        // `media_server_series_premiere` is the series' first air date read from
+        // the Emby/Jellyfin series item (same request as the provider ids).
+        // Non-Emby servers leave it `None` and fall back to TMDB downstream.
+        let (series_provider_ids, media_server_series_premiere) =
+            if (!mappings.is_empty() || title_fallback)
+                && !data.series_id.is_empty()
+                && data.server.is_emby_like()
+            {
+                if let (Some(ids), Some(prem)) = (
+                    series_provider_cache.get(&data.series_id),
+                    series_premiere_cache.get(&data.series_id),
+                ) {
+                    (ids.clone(), prem.clone())
+                } else {
+                    let base_url = format!("{}://{}", data.scheme, data.netloc);
+                    let emby = EmbyClient::new(
+                        state.http_client.clone(),
+                        &base_url,
+                        &data.api_key,
+                        &data.user_id,
+                    );
+                    let item = emby.item(&data.series_id).await.ok();
+                    let ids = item
+                        .as_ref()
+                        .map(|i| i.provider_ids.clone())
+                        .unwrap_or_default();
+                    let prem = item
+                        .and_then(|i| i.premiere_date)
+                        .filter(|d| !d.is_empty());
+                    series_provider_cache
+                        .insert(data.series_id.clone(), ids.clone());
+                    series_premiere_cache
+                        .insert(data.series_id.clone(), prem.clone());
+                    (ids, prem)
+                }
             } else {
-                let base_url = format!("{}://{}", data.scheme, data.netloc);
-                let emby = EmbyClient::new(
-                    state.http_client.clone(),
-                    &base_url,
-                    &data.api_key,
-                    &data.user_id,
-                );
-                let ids = emby
-                    .item(&data.series_id)
-                    .await
-                    .map(|item| item.provider_ids)
-                    .unwrap_or_default();
-                series_provider_cache
-                    .insert(data.series_id.clone(), ids.clone());
-                ids
-            }
-        } else {
-            std::collections::BTreeMap::new()
-        };
+                (std::collections::BTreeMap::new(), None)
+            };
 
         // Bangumi has no per-episode progress, so it cannot represent a partial
         // view of an episode: the current episode is marked watched only once
@@ -1576,6 +1597,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data,
                 ep_index, // 0 dummy — not used in the movie branch
                 data.premiere_date.clone(),
+                None, // movie path has no S01E01 floor
                 title_fallback,
                 &genres,
                 &mappings,
@@ -1636,6 +1658,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data,
                 played_ep.index,
                 played_ep.premiere_date.clone(),
+                media_server_series_premiere.clone(),
                 title_fallback,
                 &genres,
                 &mappings,
@@ -1666,6 +1689,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data,
                 ep_index,
                 data.premiere_date.clone(),
+                media_server_series_premiere.clone(),
                 title_fallback,
                 &genres,
                 &mappings,
@@ -1694,6 +1718,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data,
                 ep_index,
                 data.premiere_date.clone(),
+                media_server_series_premiere.clone(),
                 title_fallback,
                 &genres,
                 &mappings,
@@ -1793,6 +1818,7 @@ async fn resolve_bangumi_subject(
     data: &PlaybackData,
     ep_index: i64,
     ep_premiere_date: Option<String>,
+    media_server_series_premiere: Option<String>,
     title_fallback: bool,
     genres: &str,
     mappings: &[etlp_sync::SubjectMapping],
@@ -1943,6 +1969,8 @@ async fn resolve_bangumi_subject(
             series: &data.media_title,
             keywords: &movie_keywords,
             alt_titles: &alt_titles,
+            // Movies have no S01E01; the release date is the only anchor.
+            search_floor_date: None,
             season_premiere_date: release_date.as_deref(),
             // For movies the release date IS the episode air_date.
             episode_air_date: release_date.as_deref(),
@@ -2032,7 +2060,7 @@ async fn resolve_bangumi_subject(
         }
     };
 
-    // Season premiere date: air date of S×E1, anchors the BGM search filter.
+    // Season premiere date: air date of S×E1, used as the BGM ranking anchor.
     // Source: TMDB S×E1 → episode premiere date → None.
     let season_premiere_date: Option<String> =
         if let (Some(tid), Some(s)) = (tmdb_series_id, s_u32) {
@@ -2040,6 +2068,22 @@ async fn resolve_bangumi_subject(
             date.or_else(|| premiere_date.clone())
         } else {
             premiere_date.clone()
+        };
+
+    // Search floor: the series' first air date, which widens the BGM search
+    // window so later seasons still include the franchise's earlier subjects.
+    // Emby/Jellyfin read it from the series item (passed in, robust even when
+    // season 1 is not in the library); other servers fall back to TMDB's
+    // first_air_date, then to the current season's premiere.
+    let search_floor_date: Option<String> =
+        if media_server_series_premiere.is_some() {
+            media_server_series_premiere
+        } else if let Some(tid) = tmdb_series_id {
+            tmdb.series_first_air_date(tid)
+                .await
+                .or_else(|| season_premiere_date.clone())
+        } else {
+            season_premiere_date.clone()
         };
 
     // TMDB alternate titles for tie-breaking when multiple subjects share the
@@ -2054,6 +2098,7 @@ async fn resolve_bangumi_subject(
         series: &data.series_name,
         keywords: &keywords,
         alt_titles: &alt_titles,
+        search_floor_date: search_floor_date.as_deref(),
         season_premiere_date: season_premiere_date.as_deref(),
         // The current episode's own air_date is used to validate that the
         // resolved subject actually contains this episode.

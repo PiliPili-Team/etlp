@@ -23,6 +23,9 @@ pub enum TmdbCacheKey {
     Movie {
         tmdb_id: u64,
     },
+    Series {
+        tmdb_id: u64,
+    },
     Episode {
         tmdb_id: u64,
         season: u32,
@@ -35,6 +38,11 @@ pub enum TmdbCacheKey {
 #[derive(Debug, Deserialize)]
 struct TmdbMovieDetail {
     release_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TmdbSeriesDetail {
+    first_air_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,6 +130,26 @@ impl TmdbClient {
             return cached;
         }
         let result = self.fetch_movie_date(tmdb_id).await;
+        self.cache.lock().await.put(key, result.clone());
+        result
+    }
+
+    /// Return the first air date of a TV series as `"YYYY-MM-DD"`, or `None`.
+    ///
+    /// This is the whole show's premiere (TMDB `first_air_date`), used as the
+    /// search floor for non-Emby servers (Emby/Jellyfin read it from the series
+    /// item instead). Anchoring on the franchise premiere keeps earlier
+    /// subjects in the Bangumi candidate pool for later seasons.
+    ///
+    /// `tmdb_id` must be the **series-level** TMDB id. Results (including a
+    /// `None` miss) are cached.
+    pub async fn series_first_air_date(&self, tmdb_id: u64) -> Option<String> {
+        let key = TmdbCacheKey::Series { tmdb_id };
+        if let Some(cached) = self.cache.lock().await.get(&key).cloned() {
+            debug!(tmdb_id, "tmdb: series date cache hit");
+            return cached;
+        }
+        let result = self.fetch_series_date(tmdb_id).await;
         self.cache.lock().await.put(key, result.clone());
         result
     }
@@ -285,6 +313,37 @@ impl TmdbClient {
         }
     }
 
+    async fn fetch_series_date(&self, tmdb_id: u64) -> Option<String> {
+        let url = self.url(&format!("tv/{tmdb_id}"));
+        let builder = self.http.get(&url).query(&self.params());
+        let logged = match curl::send_logged(DOMAIN, builder).await {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("tmdb: series {tmdb_id} request failed: {e}");
+                return None;
+            }
+        };
+        match curl::json_logged::<TmdbSeriesDetail>(DOMAIN, logged).await {
+            Ok(detail) => {
+                let date = detail.first_air_date.filter(|d| !d.is_empty());
+                if date.is_none() {
+                    warn!(tmdb_id, "tmdb: series has no first_air_date");
+                } else {
+                    debug!(tmdb_id, date = ?date, "tmdb: series date resolved");
+                }
+                date
+            }
+            Err(SyncError::Api { status, .. }) => {
+                warn!("tmdb: series {tmdb_id} returned HTTP {status}");
+                None
+            }
+            Err(e) => {
+                warn!("tmdb: series {tmdb_id} parse failed: {e}");
+                None
+            }
+        }
+    }
+
     async fn fetch_episode_date(
         &self,
         tmdb_id: u64,
@@ -416,6 +475,38 @@ mod tests {
 
         let client = make_client(&server).await;
         assert!(client.movie_release_date(1).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn series_first_air_date_returns_date() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/72517"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "first_air_date": "2017-07-12" }),
+            ))
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let date = client.series_first_air_date(72517).await;
+        assert_eq!(date.as_deref(), Some("2017-07-12"));
+    }
+
+    #[tokio::test]
+    async fn series_first_air_date_returns_none_for_empty_field() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/2"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "first_air_date": "" })),
+            )
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        assert!(client.series_first_air_date(2).await.is_none());
     }
 
     #[tokio::test]

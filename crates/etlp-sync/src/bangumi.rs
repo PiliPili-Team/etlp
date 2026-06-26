@@ -8,7 +8,7 @@
 //! 2. **Title search** (gated behind `title_search_fallback` and genre check):
 //!    a. Require a TMDB id; warn and bail if absent.
 //!    b. Resolve the season-premiere date (S×E1 air date) via TMDB (LRU cached).
-//!    c. Search the BGM JSON API with the series name + `season_premiere_date − 2 days`.
+//!    c. Search the BGM JSON API with the series name + `series_premiere − 2 days`.
 //!    d. Walk the prequel/sequel relation chain to expand the candidate pool (BFS).
 //!    e. Pick the subject with an episode within ±2 days of target air date.
 //!    f. Match the specific episode by `airdate` via `GET /v0/episodes`.
@@ -1190,11 +1190,19 @@ pub struct WebScrapeReq<'a> {
     /// TMDB alternative titles — used for tie-breaking when multiple subjects
     /// share the same `start_date` distance.
     pub alt_titles: &'a [String],
+    /// The series' first air date (`"YYYY-MM-DD"` or ISO timestamp).
+    ///
+    /// Used **only** as the search lower-bound floor (`−2 days`, widened to
+    /// `−15 days` on the fuzzy retry). Anchoring the filter on the franchise's
+    /// premiere — rather than the current season's premiere — keeps the
+    /// franchise's earlier subjects in the candidate pool, so later seasons do
+    /// not resolve against an over-narrow result set. Falls back to
+    /// `season_premiere_date` when `None`.
+    pub search_floor_date: Option<&'a str>,
     /// Air date of the first episode of this season (`"YYYY-MM-DD"`).
     ///
-    /// Used as the search lower-bound anchor (`−2 days`) and as the reference
-    /// point for ranking BGM subjects by start_date proximity. When `None` the
-    /// search is issued without a date filter.
+    /// Used as the reference point for ranking BGM subjects by start_date
+    /// proximity, and as the search floor when `search_floor_date` is `None`.
     pub season_premiere_date: Option<&'a str>,
     /// Air date of the specific episode being marked (`"YYYY-MM-DD"` or ISO
     /// timestamp). When present, subject selection validates that the chosen
@@ -1713,7 +1721,8 @@ fn select_subject_by_start_date_fuzzy(
 /// Resolve a Bangumi subject ID for the given [`WebScrapeReq`].
 ///
 /// Steps:
-/// 1. Compute search lower bound: `season_premiere_date − 2 days`.
+/// 1. Compute search lower bound: `search_floor_date − 2 days` (the series'
+///    first air date; falls back to `season_premiere_date`).
 /// 2. Search the BGM JSON API with that filter; fallback to legacy API
 ///    when v0 returns nothing (Stage 2.3); retry with ±15 day window when
 ///    both return nothing (Stage 2.4).
@@ -1727,11 +1736,13 @@ pub async fn resolve_by_web_scrape_with_chain(
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: &BangumiApi,
 ) -> Option<u64> {
-    // Lower bound: premiere date minus 2 days so subjects that started just
-    // before the queried premiere are still included.
-    let air_date_from: Option<String> = req
-        .season_premiere_date
-        .and_then(|d| date_subtract_days(d, 2));
+    // Search floor: the series' first air date when available, else the current
+    // season's premiere. Subjects are filtered to `air_date >= floor − 2 days`
+    // so the franchise's earlier subjects stay in the candidate pool (a
+    // later-season premiere would over-narrow the search and miss them).
+    let floor = req.search_floor_date.or(req.season_premiere_date);
+    let air_date_from: Option<String> =
+        floor.and_then(|d| date_subtract_days(d, 2));
 
     info!(
         series = req.series,
@@ -1763,8 +1774,10 @@ pub async fn resolve_by_web_scrape_with_chain(
     // previous empty v0 result and bypass the retry).  The title similarity
     // threshold is raised to 0.9 to compensate for the wider date window.
     if details.is_empty() {
-        if let Some(premiere) = req.season_premiere_date
-            && let Some(fuzzy_from) = date_subtract_days(premiere, 15)
+        // Selection anchor stays the current season's premiere (falling back to
+        // the floor); only the search window is widened, floor − 15 days.
+        let anchor = req.season_premiere_date.or(req.search_floor_date);
+        if let Some(fuzzy_from) = floor.and_then(|d| date_subtract_days(d, 15))
         {
             warn!(
                 series = req.series,
@@ -1780,12 +1793,14 @@ pub async fn resolve_by_web_scrape_with_chain(
                 Some(&fuzzy_from),
             )
             .await;
-            if !fuzzy_details.is_empty() {
+            if let Some(anchor) = anchor
+                && !fuzzy_details.is_empty()
+            {
                 return select_subject_by_start_date_fuzzy(
                     req.series,
                     req.keywords,
                     req.alt_titles,
-                    premiere,
+                    anchor,
                     &fuzzy_details,
                 );
             }
@@ -3112,11 +3127,52 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(200));
+    }
+
+    #[tokio::test]
+    async fn search_floor_date_overrides_season_premiere_for_filter() {
+        let server = MockServer::start().await;
+        // The search filter must use search_floor_date − 2 days (2019-12-30),
+        // NOT season_premiere_date − 2 days (2024-04-05). The body matcher
+        // fails the mock (→ no candidates → None) if the wrong floor is used.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "filter": { "air_date": [">=2019-12-30"] }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{
+                        "id": 300, "name": "AnimeA", "name_cn": "",
+                        "rank": 100, "rating": { "score": 7.0 }
+                    }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+        mount_api_subject(&server, 300, "AnimeA", Some("2020-01-01")).await;
+        mount_api_episodes(&server, 300, (1..=12).collect()).await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["AnimeA"];
+        let req = WebScrapeReq {
+            series: "AnimeA",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2020-01-01"),
+            season_premiere_date: Some("2024-04-07"),
+            episode_air_date: None,
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(300));
     }
 
     #[tokio::test]
@@ -3137,6 +3193,7 @@ mod tests {
             series: "AnimeABC",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
@@ -3162,6 +3219,7 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
@@ -3187,6 +3245,7 @@ mod tests {
             series: "AnimeABC",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: None,
             episode_air_date: None,
         };
@@ -3220,6 +3279,7 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
@@ -3281,6 +3341,7 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-10-01"),
             episode_air_date: Some("2024-10-09"),
         };
@@ -3303,6 +3364,7 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-10-01"),
             episode_air_date: Some("2024-12-25"),
         };
@@ -3382,6 +3444,7 @@ mod tests {
             series: "AnimeA",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
@@ -3451,6 +3514,7 @@ mod tests {
             series: "RareFuzzyAnime",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-04-07"),
             episode_air_date: None,
         };
@@ -3504,6 +3568,7 @@ mod tests {
             series: "FateAnime",
             keywords: kws,
             alt_titles: &[],
+            search_floor_date: None,
             season_premiere_date: Some("2024-10-01"),
             episode_air_date: Some("2024-10-07"),
         };

@@ -106,17 +106,20 @@ impl EmbyClient {
 
     /// `Users/{user_id}/Items/{item_id}` — fetch a single item's metadata.
     ///
-    /// Requests only the `ProviderIds` field; used to read a series' external
-    /// ids so an episode can be reported to Trakt by show ids + season/episode
-    /// number (the match Trakt resolves most reliably). The returned [`Item`]
-    /// carries empty provider ids when the server supplies none.
+    /// Requests the `ProviderIds` and `PremiereDate` fields. Provider ids let an
+    /// episode be reported to Trakt by show ids + season/episode number (the
+    /// match Trakt resolves most reliably); a series item's `PremiereDate` is
+    /// the show's first air date, used as the Bangumi search floor. Reading it
+    /// from the series item (rather than an S01E01 episode) is robust even when
+    /// season 1 is not in the library. The returned [`Item`] carries
+    /// empty/None values when the server supplies none.
     pub async fn item(&self, item_id: &str) -> Result<Item, NetError> {
         let url = self.url(&format!("Users/{}/Items/{item_id}", self.user_id));
         self.http
             .get_json(
                 &url,
                 &[
-                    ("Fields", "ProviderIds"),
+                    ("Fields", "ProviderIds,PremiereDate"),
                     ("X-Emby-Token", self.api_key.as_str()),
                 ],
             )
@@ -232,6 +235,7 @@ mod tests {
                 serde_json::json!({
                     "Id": "900",
                     "Type": "Series",
+                    "PremiereDate": "2011-04-17T00:00:00.0000000Z",
                     "ProviderIds": { "Tvdb": "121361", "Tmdb": "1399" }
                 }),
             ))
@@ -248,6 +252,10 @@ mod tests {
         assert_eq!(
             item.provider_ids.get("Tmdb").map(String::as_str),
             Some("1399")
+        );
+        assert_eq!(
+            item.premiere_date.as_deref(),
+            Some("2011-04-17T00:00:00.0000000Z")
         );
     }
 
