@@ -1975,8 +1975,10 @@ async fn resolve_bangumi_subject(
             // Movies have no S01E01; the release date is the only anchor.
             search_floor_date: None,
             season_premiere_date: release_date.as_deref(),
-            // For movies the release date IS the episode air_date.
-            episode_air_date: release_date.as_deref(),
+            // Movies do not require episode-level date matching; the subject's
+            // release date (season_premiere_date) is sufficient. Passing None
+            // prevents failures when BGM movie episodes lack air dates.
+            episode_air_date: None,
         };
         let id = etlp_sync::resolve_by_web_scrape_with_chain(
             &req,
