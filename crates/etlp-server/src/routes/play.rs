@@ -558,7 +558,7 @@ async fn run_player_chain(
         }
     });
 
-    let http = state.http_client.clone();
+    let http = state.http_client();
     mgr.start_loops(http.clone(), Some(cancel_tx));
     mgr.collect_stop_times().await;
     mgr.write_progress(&http).await;
@@ -600,10 +600,11 @@ async fn start_emby_play(state: SharedState, received: ReceivedData) {
     };
 
     let parse_span = Span::new("emby_parse").with_session(session_id);
+    let http_client = state.http_client();
     let mut data = match parse_received_data_emby(
         &received,
         &parse_cfg,
-        &state.http_client,
+        &http_client,
         &redirect_cache,
     )
     .await
@@ -674,7 +675,7 @@ async fn build_emby_playlist(
     let season_id = main.season_id.as_deref();
     let base_url = format!("{}://{}", data.scheme, data.netloc);
     let emby = EmbyClient::new(
-        state.http_client.clone(),
+        state.http_client(),
         &base_url,
         &data.api_key,
         &data.user_id,
@@ -817,7 +818,7 @@ async fn emby_played_backfill(
     let cur_index = data.index.unwrap_or_default();
     let base_url = format!("{}://{}", data.scheme, data.netloc);
     let emby = EmbyClient::new(
-        state.http_client.clone(),
+        state.http_client(),
         &base_url,
         &data.api_key,
         &data.user_id,
@@ -1014,7 +1015,7 @@ async fn fetch_series_trakt_ids(
 ) -> Option<etlp_sync::TraktIds> {
     let base_url = format!("{}://{}", data.scheme, data.netloc);
     let emby = EmbyClient::new(
-        state.http_client.clone(),
+        state.http_client(),
         &base_url,
         &data.api_key,
         &data.user_id,
@@ -1546,7 +1547,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 } else {
                     let base_url = format!("{}://{}", data.scheme, data.netloc);
                     let emby = EmbyClient::new(
-                        state.http_client.clone(),
+                        state.http_client(),
                         &base_url,
                         &data.api_key,
                         &data.user_id,

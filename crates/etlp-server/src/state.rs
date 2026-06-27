@@ -26,8 +26,9 @@ pub struct AppState {
     pub miss_runtime: RwLock<HashMap<String, i64>>,
     /// Download manager shared across all routes.
     pub dl_manager: Mutex<DownloadManager>,
-    /// HTTP client for upstream media-server calls.
-    pub http_client: HttpClient,
+    /// HTTP client for upstream media-server calls. Behind an `RwLock` so a
+    /// proxy-config reload can swap it without restarting the server.
+    pub http_client: RwLock<HttpClient>,
     /// Live configuration; reloaded on each incoming request.
     pub config: RwLock<Config>,
     /// Platform data directory — runtime files (logs, device_id, cache) live here.
@@ -58,12 +59,25 @@ impl AppState {
             redirect_cache: RedirectCache::new(),
             miss_runtime: RwLock::new(HashMap::new()),
             dl_manager: Mutex::new(dl_manager),
-            http_client,
+            http_client: RwLock::new(http_client),
             config: RwLock::new(config),
             working_dir,
             device_id: crate::platform::device_id::load_or_create(),
             recent_syncs: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Clone the current upstream HTTP client.
+    ///
+    /// Held behind an `RwLock` so a proxy-config reload can swap it; readers
+    /// take a cheap clone (the inner reqwest clients are `Arc`-backed). A
+    /// poisoned lock is recovered rather than panicking.
+    #[must_use]
+    pub fn http_client(&self) -> HttpClient {
+        self.http_client
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Whether syncing `key` should be skipped because it was already synced
