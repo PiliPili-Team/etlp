@@ -8,7 +8,9 @@ pub mod progress;
 mod redirect;
 pub mod url_tools;
 
-pub use client::{HttpClient, HttpClientBuilder, NetError};
+pub use client::{
+    HttpClient, HttpClientBuilder, NetError, build_media_download_client,
+};
 pub use progress::{
     PlaybackEvent, mark_as_played, realtime_progress, update_progress,
 };

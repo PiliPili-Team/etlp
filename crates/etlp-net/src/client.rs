@@ -249,38 +249,78 @@ fn build_inner(
         } else {
             tracing::debug!("http_client: no proxy configured");
         }
-        let ph = ph.clone();
-        let ps = ps.clone();
-        let p5 = p5.clone();
-        let custom = Proxy::custom(move |url| {
-            let host = url.host_str().unwrap_or("");
-            if is_bypass_host(host, url.as_str()) {
-                tracing::debug!(
-                    target_host = %host,
-                    "http_client: proxy bypassed (local/private/plex)"
-                );
-                return None;
-            }
-            // Route by request scheme; SOCKS5 acts as catch-all.
-            let candidate: Option<&str> = match url.scheme() {
-                "http" => ph.as_deref().or(p5.as_deref()),
-                "https" => ps.as_deref().or(p5.as_deref()),
-                _ => p5.as_deref(),
-            };
-            if let Some(proxy_url) = candidate {
-                tracing::debug!(
-                    target_url = %url,
-                    proxy = %proxy_url,
-                    "http_client: routing via proxy"
-                );
-                Url::parse(proxy_url).ok()
-            } else {
-                None
-            }
-        });
-        builder = builder.proxy(custom);
+        if let Some(custom) = custom_proxy(ph, ps, p5) {
+            builder = builder.proxy(custom);
+        }
     } else {
         tracing::debug!("http_client: no proxy configured");
+    }
+    builder.build().map_err(|e| NetError::Build(e.to_string()))
+}
+
+/// Build the bypass-aware custom proxy, or `None` when no proxy URL is set.
+///
+/// The returned [`Proxy`] routes by request scheme (SOCKS5 acts as a catch-all)
+/// and skips local/private/`plex.direct` hosts via [`is_bypass_host`].
+fn custom_proxy(
+    proxy_http: &Option<String>,
+    proxy_https: &Option<String>,
+    proxy_socks5: &Option<String>,
+) -> Option<Proxy> {
+    if proxy_http.is_none() && proxy_https.is_none() && proxy_socks5.is_none() {
+        return None;
+    }
+    let ph = proxy_http.clone();
+    let ps = proxy_https.clone();
+    let p5 = proxy_socks5.clone();
+    Some(Proxy::custom(move |url| {
+        let host = url.host_str().unwrap_or("");
+        if is_bypass_host(host, url.as_str()) {
+            tracing::debug!(
+                target_host = %host,
+                "http_client: proxy bypassed (local/private/plex)"
+            );
+            return None;
+        }
+        // Route by request scheme; SOCKS5 acts as catch-all.
+        let candidate: Option<&str> = match url.scheme() {
+            "http" => ph.as_deref().or(p5.as_deref()),
+            "https" => ps.as_deref().or(p5.as_deref()),
+            _ => p5.as_deref(),
+        };
+        candidate.and_then(|proxy_url| {
+            tracing::debug!(
+                target_url = %url,
+                proxy = %proxy_url,
+                "http_client: routing via proxy"
+            );
+            Url::parse(proxy_url).ok()
+        })
+    }))
+}
+
+/// Build a single proxied [`reqwest::Client`] for streaming media downloads.
+///
+/// Applies the same local/private-host bypass as [`HttpClient`] and the
+/// `UA_DOWNLOAD` user agent. No total request timeout is set so large transfers
+/// are not cut off. When `proxy_enabled` is `false` the client connects
+/// directly regardless of the configured proxy URLs.
+pub fn build_media_download_client(
+    proxy_http: Option<String>,
+    proxy_https: Option<String>,
+    proxy_socks5: Option<String>,
+    proxy_enabled: bool,
+    cert_verify: bool,
+) -> Result<Client> {
+    let mut builder = Client::builder().user_agent(crate::UA_DOWNLOAD);
+    if !cert_verify {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    if proxy_enabled
+        && let Some(proxy) =
+            custom_proxy(&proxy_http, &proxy_https, &proxy_socks5)
+    {
+        builder = builder.proxy(proxy);
     }
     builder.build().map_err(|e| NetError::Build(e.to_string()))
 }
@@ -499,6 +539,36 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+
+    #[test]
+    fn media_download_client_builds_with_and_without_proxy() {
+        // Proxy disabled: direct client builds even with URLs present.
+        assert!(
+            build_media_download_client(
+                Some("http://127.0.0.1:7890".to_owned()),
+                None,
+                None,
+                false,
+                true,
+            )
+            .is_ok()
+        );
+        // Proxy enabled with valid URLs builds successfully.
+        assert!(
+            build_media_download_client(
+                Some("http://127.0.0.1:7890".to_owned()),
+                Some("http://127.0.0.1:7890".to_owned()),
+                Some("socks5://127.0.0.1:1080".to_owned()),
+                true,
+                true,
+            )
+            .is_ok()
+        );
+        // Enabled but no URLs is a direct client (no proxy attached).
+        assert!(
+            build_media_download_client(None, None, None, true, true).is_ok()
+        );
+    }
 
     #[derive(Debug, Deserialize, PartialEq, Eq)]
     struct Payload {
