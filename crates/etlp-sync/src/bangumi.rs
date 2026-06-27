@@ -857,6 +857,7 @@ impl BangumiApi {
     pub(crate) async fn search_subjects_api(
         &self,
         keyword: &str,
+        all_keywords: &[&str],
         limit: u32,
         air_date_from: Option<&str>,
         air_date_to: Option<&str>,
@@ -979,11 +980,16 @@ impl BangumiApi {
                 } else {
                     (e.name_cn.clone(), Some(e.name.clone()))
                 };
-                let sim = base_match_score(
-                    keyword,
-                    &name,
-                    name_jp.as_deref().unwrap_or(""),
-                );
+                let sim = all_keywords
+                    .iter()
+                    .map(|k| {
+                        base_match_score(
+                            k,
+                            &name,
+                            name_jp.as_deref().unwrap_or(""),
+                        )
+                    })
+                    .fold(0.0_f64, f64::max);
                 // Stage 2.2: filter out unreleased "satellite projects" —
                 // entries with neither a rank nor a non-zero score indicate
                 // content that has not yet aired and should not intercept a
@@ -1051,10 +1057,11 @@ impl BangumiApi {
     pub(crate) async fn search_subjects_legacy_api(
         &self,
         keyword: &str,
+        all_keywords: &[&str],
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         let cache_key: Arc<str> = format!("legacy_search:{keyword}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            return Self::parse_legacy_candidates(cached, keyword);
+            return Self::parse_legacy_candidates(cached, keyword, all_keywords);
         }
 
         // Strip the `/v0` suffix: legacy API is at the host root.
@@ -1104,7 +1111,7 @@ impl BangumiApi {
 
         self.cache.insert(cache_key, val.clone()).await;
 
-        let candidates = Self::parse_legacy_candidates(val, keyword);
+        let candidates = Self::parse_legacy_candidates(val, keyword, all_keywords);
         debug!(keyword, hits = candidates.len(), "bangumi: legacy_search");
         candidates
     }
@@ -1113,6 +1120,7 @@ impl BangumiApi {
     fn parse_legacy_candidates(
         val: serde_json::Value,
         keyword: &str,
+        all_keywords: &[&str],
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         use crate::bangumi_web::{
             BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
@@ -1140,11 +1148,16 @@ impl BangumiApi {
                 } else {
                     (e.name_cn.clone(), Some(e.name.clone()))
                 };
-                let score = base_match_score(
-                    keyword,
-                    &name,
-                    name_jp.as_deref().unwrap_or(""),
-                );
+                let score = all_keywords
+                    .iter()
+                    .map(|k| {
+                        base_match_score(
+                            k,
+                            &name,
+                            name_jp.as_deref().unwrap_or(""),
+                        )
+                    })
+                    .fold(0.0_f64, f64::max);
                 let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
                 debug!(
                     subject_id = e.id,
@@ -1252,7 +1265,7 @@ async fn collect_details(
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
             let mut results = api
-                .search_subjects_api(keyword, 50, air_date_from, air_date_to)
+                .search_subjects_api(keyword, keywords, 50, air_date_from, air_date_to)
                 .await;
             // Stage 2.3: if v0 search returns nothing, fall back to the
             // legacy (non-v0) keyword search endpoint as it handles titles
@@ -1262,7 +1275,7 @@ async fn collect_details(
                     keyword,
                     "bangumi: v0 search empty, trying legacy API fallback"
                 );
-                results = api.search_subjects_legacy_api(keyword).await;
+                results = api.search_subjects_legacy_api(keyword, keywords).await;
             }
             e.insert(results);
         }
@@ -2386,7 +2399,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", 50, None, None).await;
+        let results = api.search_subjects_api("AnimeA", &["AnimeA"], 50, None, None).await;
         assert!(results.is_empty());
     }
 
@@ -2411,7 +2424,7 @@ mod tests {
 
         let api = make_api(&server).await;
         let results = api
-            .search_subjects_api("AnimeA", 50, Some("2025-01-01"), None)
+            .search_subjects_api("AnimeA", &["AnimeA"], 50, Some("2025-01-01"), None)
             .await;
         assert_eq!(results.len(), 1);
         assert_eq!(results.first().map(|c| c.subject_id), Some(516416));
@@ -2441,6 +2454,7 @@ mod tests {
         let results = api
             .search_subjects_api(
                 "AnimeA",
+                &["AnimeA"],
                 50,
                 Some("2020-07-01"),
                 Some("2020-07-05"),
@@ -3478,7 +3492,7 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", 10, None, None).await;
+        let results = api.search_subjects_api("AnimeA", &["AnimeA"], 10, None, None).await;
         assert!(results.is_empty());
     }
 
