@@ -682,11 +682,8 @@ pub async fn import_bangumi_map_url(
     url: String,
     prefer_imported: bool,
 ) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .user_agent(etlp_core::UA_ETLP)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    let client =
+        build_proxied_http_client(Some(std::time::Duration::from_secs(30)))?;
 
     let resp = client
         .get(&url)
@@ -1649,14 +1646,23 @@ fn apply_configured_proxy(
     Ok(builder)
 }
 
-/// Build a reqwest client for update check/download that honours the saved
-/// proxy settings, so update traffic traverses the same proxy as the rest of
-/// the app instead of connecting directly.
-fn build_update_http_client() -> Result<reqwest::Client, String> {
+/// Build a reqwest client for outbound GUI requests that honours the saved
+/// proxy settings.
+///
+/// The config is read on every call, so toggling the proxy switch takes effect
+/// immediately without restarting the app. The standard [`etlp_core::UA_ETLP`]
+/// user agent is always used — callers must not hand-craft one. Pass a
+/// `timeout` for short requests; pass `None` for unbounded transfers such as
+/// downloading a large update asset.
+fn build_proxied_http_client(
+    timeout: Option<std::time::Duration>,
+) -> Result<reqwest::Client, String> {
     let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
-    let builder = reqwest::Client::builder()
-        .user_agent(format!("etlp/{}", env!("CARGO_PKG_VERSION")));
+    let mut builder = reqwest::Client::builder().user_agent(etlp_core::UA_ETLP);
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
     apply_configured_proxy(
         builder,
         config.dev.proxy_enabled,
@@ -1665,7 +1671,7 @@ fn build_update_http_client() -> Result<reqwest::Client, String> {
         config.dev.proxy_socks5.as_deref().unwrap_or_default(),
     )?
     .build()
-    .map_err(|e| format!("build update http client: {e}"))
+    .map_err(|e| format!("build http client: {e}"))
 }
 
 /// Check GitHub for the latest release and compare it to the running version.
@@ -1681,7 +1687,7 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
     let fallback_url =
         format!("https://github.com/{GITHUB_REPO}/releases/latest");
 
-    let client = build_update_http_client()?;
+    let client = build_proxied_http_client(None)?;
     let resp = client
         .get(&api)
         .header("Accept", "application/vnd.github+json")
@@ -1761,7 +1767,7 @@ async fn download_file(
     url: &str,
     dest: &std::path::Path,
 ) -> Result<(), String> {
-    let client = build_update_http_client()?;
+    let client = build_proxied_http_client(None)?;
 
     let resp = client
         .get(url)
