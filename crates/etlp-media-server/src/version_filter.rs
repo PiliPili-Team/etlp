@@ -12,8 +12,8 @@
 //!   episode by that rule, stopping at the first episode that is not a clean
 //!   derivation.
 //!
-//! The full `version_filter` orchestration (official-rule / clean-path / ini
-//! regex passes) is ported separately.
+//! The full `version_filter` orchestration (official-rule / clean-path /
+//! filter-regex passes) is ported separately.
 
 use regex::RegexBuilder;
 use tracing::debug;
@@ -102,7 +102,7 @@ pub struct VersionFilterInput<'a> {
     pub file_path: &'a str,
     /// Whether this is a shuffle playlist (`playlist_info`); skips filtering.
     pub playlist: bool,
-    /// The `[playlist] version_filter` regex (already read from ini).
+    /// The `[playlist] version_filter` regex (already read from config).
     pub version_filter_re: &'a str,
     /// The played item's media source id (fallback to locate the current ep).
     pub media_source_id: &'a str,
@@ -230,7 +230,7 @@ fn name_rules(file_path: &str) -> (Option<&str>, Option<String>) {
 ///
 /// Returns `Ok(full_match)` when a rule selects exactly one file per key (the
 /// Python early `return`), or `Err(seq_match)` carrying the best sequence
-/// match found (possibly empty) for the caller to weigh against the ini pass.
+/// match found (possibly empty) for the caller to weigh against the filter pass.
 fn builtin_pass(
     episodes: &[Item],
     eps_after: &[Item],
@@ -338,14 +338,13 @@ pub fn version_filter(
 
     debug!(
         "version_filter: {} raw episodes / {} unique episode keys \
-         (multi-version present); ver_re={:?}, file_path={:?}",
+         (multi-version present); file_path={:?}",
         episodes.len(),
         ep_num,
-        ver_re,
         input.file_path
     );
 
-    // When no regex is configured, applying the ini pass would produce garbage
+    // When no regex is configured, applying the filter pass would produce garbage
     // (an empty pattern matches everywhere).  Try version_prefer directly as
     // the sole version selector; if that's also disabled, return all.
     if ver_re.is_empty() {
@@ -497,11 +496,12 @@ pub fn version_filter(
     };
 
     debug!(
-        "version_filter: builtin partial sequence len={}, proceeding to ini-regex pass",
+        "version_filter: builtin partial sequence len={}, \
+         proceeding to filter-regex pass",
         builtin_res.len()
     );
 
-    // ini regex pass: derive tokens from the played path, keep episodes whose
+    // filter-regex pass: derive tokens from the played path, keep episodes whose
     // path yields the same number of token matches.
     let single_line: String = ver_re.split('\n').collect();
     let Ok(outer) = RegexBuilder::new(&single_line)
@@ -509,25 +509,25 @@ pub fn version_filter(
         .build()
     else {
         debug!(
-            "version_filter: invalid ini regex {:?}, falling back",
+            "version_filter: invalid filter regex {:?}, falling back",
             ver_re
         );
         return fallback(builtin_res, ep_current);
     };
-    let ini_tokens: Vec<String> = outer
+    let filter_tokens: Vec<String> = outer
         .find_iter(input.file_path)
         .map(|m| m.as_str().to_owned())
         .collect();
     debug!(
-        "version_filter: ini-regex {:?} extracted tokens {:?} from {:?}",
-        ver_re, ini_tokens, input.file_path
+        "version_filter: filter-regex extracted tokens {:?} from {:?}",
+        filter_tokens, input.file_path
     );
-    let combined = ini_tokens.join("|");
+    let combined = filter_tokens.join("|");
     let Ok(inner) = RegexBuilder::new(&combined).case_insensitive(true).build()
     else {
         return fallback(builtin_res, ep_current);
     };
-    let token_count = ini_tokens.len();
+    let token_count = filter_tokens.len();
     let ep_data: Vec<Item> = episodes
         .iter()
         .filter(|i| {
@@ -537,7 +537,7 @@ pub fn version_filter(
         .cloned()
         .collect();
     debug!(
-        "version_filter: ini-regex result: {}/{} episodes matched token_count={} \
+        "version_filter: filter-regex result: {}/{} episodes matched token_count={} \
          (need {} unique for exact)",
         ep_data.len(),
         episodes.len(),
@@ -546,10 +546,10 @@ pub fn version_filter(
     );
     if ep_data.len() == ep_num {
         debug!(
-            "version_filter: [DECISION] ini-regex exact match, \
+            "version_filter: [DECISION] filter-regex exact match, \
              locked {} episodes via tokens {:?}",
             ep_data.len(),
-            ini_tokens
+            filter_tokens
         );
         return ep_data;
     }
@@ -575,7 +575,7 @@ pub fn version_filter(
         builtin_res.len()
     );
 
-    let mut ini_res: Vec<Item> = Vec::new();
+    let mut seq_res: Vec<Item> = Vec::new();
     if ep_data.is_empty() {
         if !has_prefer {
             return fallback(builtin_res, ep_current);
@@ -593,12 +593,12 @@ pub fn version_filter(
             }
             return fallback(builtin_res, ep_current);
         }
-        ini_res = seq;
+        seq_res = seq;
     }
 
     let prefer = prefer.unwrap_or_default();
-    let filter_res = if ini_res.len() > builtin_res.len() {
-        ini_res
+    let filter_res = if seq_res.len() > builtin_res.len() {
+        seq_res
     } else {
         builtin_res
     };

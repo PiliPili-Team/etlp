@@ -146,11 +146,13 @@ pub fn assemble_episodes(
             version_prefer: &ctx.config.version_prefer,
             version_prefer_enabled: ctx.config.version_prefer_for_playlist,
         };
+        // Summarise config sizes only; the full filter regex and prefer list
+        // are static and would dump hundreds of characters on every playback.
         debug!(
             "assemble_episodes: calling version_filter \
-             (ver_re={:?}, version_prefer={:?}, prefer_enabled={})",
-            ctx.config.version_filter,
-            ctx.config.version_prefer,
+             (filter_set={}, prefer_rules={}, prefer_enabled={})",
+            !ctx.config.version_filter.is_empty(),
+            ctx.config.version_prefer.len(),
             ctx.config.version_prefer_for_playlist
         );
         episodes = version_filter(&vf_input, &episodes);
