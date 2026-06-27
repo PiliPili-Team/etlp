@@ -502,8 +502,10 @@ pub fn version_filter(
     );
 
     // filter-regex pass: derive tokens from the played path, keep episodes whose
-    // path yields the same number of token matches.
-    let single_line: String = ver_re.split('\n').collect();
+    // path yields the same number of token matches. Strip both CR and LF so a
+    // multi-line config (especially Windows CRLF) does not leave a stray \r
+    // glued onto an alternative, which would silently never match.
+    let single_line: String = ver_re.split(['\n', '\r']).collect();
     let Ok(outer) = RegexBuilder::new(&single_line)
         .case_insensitive(true)
         .build()
@@ -871,6 +873,32 @@ mod tests {
         let res = version_filter(&input("/m/x1.mkv", "1080p"), &eps);
         let ids: Vec<&str> = res.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["a1"]);
+    }
+
+    #[test]
+    fn crlf_in_filter_regex_matches_like_single_line() {
+        // A Windows CRLF (or any multi-line) filter must behave exactly like
+        // the same pattern written on one line: the alternative after the line
+        // break must not carry a stray \r that would never match a file path.
+        let eps = vec![
+            ep("a1", 1, 1, "/m/Show S01E01 - 1080p.mkv"),
+            ep("a2", 1, 1, "/m/Show S01E01 - 720p.mkv"),
+            ep("b1", 1, 2, "/m/Show S01E02 - 1080p.mkv"),
+            ep("b2", 1, 2, "/m/Show S01E02 - 720p.mkv"),
+        ];
+        let ids = |res: Vec<Item>| -> Vec<String> {
+            res.iter().map(|e| e.id.clone()).collect()
+        };
+        let crlf_ids = ids(version_filter(
+            &input("/m/Show S01E01 - 720p.mkv", "1080p|\r\n720p"),
+            &eps,
+        ));
+        let single_ids = ids(version_filter(
+            &input("/m/Show S01E01 - 720p.mkv", "1080p|720p"),
+            &eps,
+        ));
+        assert_eq!(crlf_ids, single_ids);
+        assert_eq!(single_ids, vec!["a2".to_owned(), "b2".to_owned()]);
     }
 
     #[test]
