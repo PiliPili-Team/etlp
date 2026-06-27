@@ -134,18 +134,18 @@ pub fn version_prefer_for_playlist(
         let (picked, reason): (&Item, &str) = if let Some((_, ep)) =
             ep_success_map.iter().find(|(k, _)| *k == key)
         {
-            (ep, "ini success_map")
+            (ep, "by-filter")
         } else if key == current_key {
             let played = sources
                 .iter()
                 .find(|s| is_played_version(s, file_path))
                 .copied()
                 .unwrap_or(*first);
-            (played, "current_key played")
+            (played, "by-played-file")
         } else {
             (
                 pick_by_rules(&sources, rules).unwrap_or(*first),
-                "picked by rules",
+                "by-prefer-rule",
             )
         };
         if logged < MAX_PICK_LOG {
