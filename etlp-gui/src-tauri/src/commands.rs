@@ -273,9 +273,14 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
         .clone()
         .unwrap_or_else(|| data_dir.join("cache"));
 
-    let dl_client = reqwest::Client::builder()
-        .build()
-        .map_err(|e| format!("build dl client: {e}"))?;
+    let dl_client = etlp_net::build_media_download_client(
+        config.dev.proxy_http.clone(),
+        config.dev.proxy_https.clone(),
+        config.dev.proxy_socks5.clone(),
+        config.dev.proxy_enabled,
+        cert_verify,
+    )
+    .map_err(|e| format!("build dl client: {e}"))?;
     let dl_manager = DownloadManager::new(
         cache_path,
         speed_limit,
@@ -758,17 +763,52 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
         }
     }
 
-    let guard = state
-        .app_state
-        .lock()
-        .map_err(|e| format!("lock app_state: {e}"))?;
+    // Rebuild the upstream and download clients from the new proxy/cert config
+    // so toggling the proxy switch applies without restarting the server.
+    let cert_verify = !new_config.dev.skip_certificate_verify;
+    let new_http_client = HttpClientBuilder::new()
+        .proxy_http(new_config.dev.proxy_http.clone())
+        .proxy_https(new_config.dev.proxy_https.clone())
+        .proxy_socks5(new_config.dev.proxy_socks5.clone())
+        .proxy_enabled(new_config.dev.proxy_enabled)
+        .cert_verify(cert_verify)
+        .user_agent(new_config.dev.user_agent.clone())
+        .build()
+        .map_err(|e| format!("rebuild http client: {e}"))?;
+    let new_dl_client = etlp_net::build_media_download_client(
+        new_config.dev.proxy_http.clone(),
+        new_config.dev.proxy_https.clone(),
+        new_config.dev.proxy_socks5.clone(),
+        new_config.dev.proxy_enabled,
+        cert_verify,
+    )
+    .map_err(|e| format!("rebuild download client: {e}"))?;
 
-    if let Some(app_state) = guard.as_ref() {
-        let mut cfg = app_state
-            .config
-            .write()
-            .map_err(|e| format!("lock config: {e}"))?;
-        *cfg = new_config;
+    // Clone the Arc out and drop the std guard before any await below.
+    let app_state = {
+        let guard = state
+            .app_state
+            .lock()
+            .map_err(|e| format!("lock app_state: {e}"))?;
+        guard.as_ref().cloned()
+    };
+
+    if let Some(app_state) = app_state {
+        {
+            let mut cfg = app_state
+                .config
+                .write()
+                .map_err(|e| format!("lock config: {e}"))?;
+            *cfg = new_config;
+        }
+        {
+            let mut http = app_state
+                .http_client
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            *http = new_http_client;
+        }
+        app_state.dl_manager.lock().await.set_client(new_dl_client);
     }
 
     Ok(())

@@ -139,7 +139,13 @@ async fn main() {
         .unwrap_or_else(|| data_dir.join("cache"));
     let speed_limit: u64 = config.gui.speed_limit_mb * 1024 * 1024;
 
-    let dl_client = match reqwest::Client::builder().build() {
+    let dl_client = match etlp_net::build_media_download_client(
+        config.dev.proxy_http.clone(),
+        config.dev.proxy_https.clone(),
+        config.dev.proxy_socks5.clone(),
+        config.dev.proxy_enabled,
+        cert_verify,
+    ) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("failed to build download client: {e}");
