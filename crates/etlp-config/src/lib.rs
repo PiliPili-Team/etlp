@@ -101,9 +101,6 @@ pub struct DevSection {
     /// Proxy for HTTPS traffic.  Usually an HTTP proxy server that speaks
     /// CONNECT tunnelling (`http://host:port`), but can also be `https://`.
     pub proxy_https: Option<String>,
-    /// SOCKS5 proxy used as a catch-all for any traffic not matched by the
-    /// per-protocol proxies above.  Not forwarded to the player.
-    pub proxy_socks5: Option<String>,
     /// When `false`, all proxy URLs are retained but every connection is made
     /// directly.  Private IP ranges (RFC 1918) are always bypassed.
     pub proxy_enabled: bool,
@@ -167,7 +164,6 @@ impl Default for DevSection {
             kill_process_at_start: true,
             proxy_http: None,
             proxy_https: None,
-            proxy_socks5: None,
             proxy_enabled: true,
             skip_certificate_verify: false,
             strm_direct_host: Vec::new(),
@@ -733,6 +729,31 @@ speed_dummy = 1.5
         assert!(cfg.bangumi.access_token.is_empty());
         assert!(cfg.bangumi.private);
         assert_eq!(cfg.bangumi.genres, "动画|anime");
+    }
+
+    #[test]
+    fn legacy_proxy_socks5_field_is_ignored() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[dev]\n\
+             proxy_http = \"http://127.0.0.1:7890\"\n\
+             proxy_https = \"http://127.0.0.1:7890\"\n\
+             proxy_socks5 = \"socks5://127.0.0.1:1080\"\n\
+             proxy_enabled = false\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+
+        assert_eq!(
+            cfg.dev.proxy_http.as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(
+            cfg.dev.proxy_https.as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert!(!cfg.dev.proxy_enabled);
     }
 
     #[test]

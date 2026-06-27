@@ -92,8 +92,6 @@ pub struct HttpClientBuilder {
     proxy_http: Option<String>,
     /// Proxy for HTTPS traffic (CONNECT tunnel).  Usually `http://host:port`.
     proxy_https: Option<String>,
-    /// SOCKS5 catch-all.  Used for traffic not matched by the per-scheme proxies.
-    proxy_socks5: Option<String>,
     /// When `false`, all proxy config is ignored and connections are direct.
     proxy_enabled: bool,
     cert_verify: bool,
@@ -127,13 +125,6 @@ impl HttpClientBuilder {
     #[must_use]
     pub fn proxy_https(mut self, proxy: Option<String>) -> Self {
         self.proxy_https = proxy;
-        self
-    }
-
-    /// SOCKS5 catch-all proxy (full URL: `socks5://host:port`).
-    #[must_use]
-    pub fn proxy_socks5(mut self, proxy: Option<String>) -> Self {
-        self.proxy_socks5 = proxy;
         self
     }
 
@@ -178,7 +169,7 @@ impl HttpClientBuilder {
     pub fn build(self) -> Result<HttpClient> {
         let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
         let proxies = if self.proxy_enabled {
-            Some((self.proxy_http, self.proxy_https, self.proxy_socks5))
+            Some((self.proxy_http, self.proxy_https))
         } else {
             tracing::debug!("http_client: proxy disabled");
             None
@@ -220,10 +211,10 @@ fn is_bypass_host(host: &str, full_url: &str) -> bool {
     false
 }
 
-type ProxyTriple = (Option<String>, Option<String>, Option<String>);
+type ProxyPair = (Option<String>, Option<String>);
 
 fn build_inner(
-    proxies: &Option<ProxyTriple>,
+    proxies: &Option<ProxyPair>,
     cert_verify: bool,
     timeout: Duration,
     follow_redirects: bool,
@@ -237,19 +228,17 @@ fn build_inner(
     if !cert_verify {
         builder = builder.danger_accept_invalid_certs(true);
     }
-    if let Some((ph, ps, p5)) = proxies {
-        let any = ph.as_deref().or(ps.as_deref()).or(p5.as_deref());
-        if any.is_some() {
+    if let Some((ph, ps)) = proxies {
+        if ph.as_deref().or(ps.as_deref()).is_some() {
             tracing::debug!(
                 http = ?ph.as_deref(),
                 https = ?ps.as_deref(),
-                socks5 = ?p5.as_deref(),
                 "http_client: proxy configured"
             );
         } else {
             tracing::debug!("http_client: no proxy configured");
         }
-        if let Some(custom) = custom_proxy(ph, ps, p5) {
+        if let Some(custom) = custom_proxy(ph, ps) {
             builder = builder.proxy(custom);
         }
     } else {
@@ -260,19 +249,17 @@ fn build_inner(
 
 /// Build the bypass-aware custom proxy, or `None` when no proxy URL is set.
 ///
-/// The returned [`Proxy`] routes by request scheme (SOCKS5 acts as a catch-all)
-/// and skips local/private/`plex.direct` hosts via [`is_bypass_host`].
+/// The returned [`Proxy`] routes by request scheme and skips
+/// local/private/`plex.direct` hosts via [`is_bypass_host`].
 fn custom_proxy(
     proxy_http: &Option<String>,
     proxy_https: &Option<String>,
-    proxy_socks5: &Option<String>,
 ) -> Option<Proxy> {
-    if proxy_http.is_none() && proxy_https.is_none() && proxy_socks5.is_none() {
+    if proxy_http.is_none() && proxy_https.is_none() {
         return None;
     }
     let ph = proxy_http.clone();
     let ps = proxy_https.clone();
-    let p5 = proxy_socks5.clone();
     Some(Proxy::custom(move |url| {
         let host = url.host_str().unwrap_or("");
         if is_bypass_host(host, url.as_str()) {
@@ -282,11 +269,11 @@ fn custom_proxy(
             );
             return None;
         }
-        // Route by request scheme; SOCKS5 acts as catch-all.
+        // Route by request scheme.
         let candidate: Option<&str> = match url.scheme() {
-            "http" => ph.as_deref().or(p5.as_deref()),
-            "https" => ps.as_deref().or(p5.as_deref()),
-            _ => p5.as_deref(),
+            "http" => ph.as_deref(),
+            "https" => ps.as_deref(),
+            _ => None,
         };
         candidate.and_then(|proxy_url| {
             tracing::debug!(
@@ -308,7 +295,6 @@ fn custom_proxy(
 pub fn build_media_download_client(
     proxy_http: Option<String>,
     proxy_https: Option<String>,
-    proxy_socks5: Option<String>,
     proxy_enabled: bool,
     cert_verify: bool,
 ) -> Result<Client> {
@@ -317,8 +303,7 @@ pub fn build_media_download_client(
         builder = builder.danger_accept_invalid_certs(true);
     }
     if proxy_enabled
-        && let Some(proxy) =
-            custom_proxy(&proxy_http, &proxy_https, &proxy_socks5)
+        && let Some(proxy) = custom_proxy(&proxy_http, &proxy_https)
     {
         builder = builder.proxy(proxy);
     }
@@ -547,7 +532,6 @@ mod tests {
             build_media_download_client(
                 Some("http://127.0.0.1:7890".to_owned()),
                 None,
-                None,
                 false,
                 true,
             )
@@ -558,16 +542,13 @@ mod tests {
             build_media_download_client(
                 Some("http://127.0.0.1:7890".to_owned()),
                 Some("http://127.0.0.1:7890".to_owned()),
-                Some("socks5://127.0.0.1:1080".to_owned()),
                 true,
                 true,
             )
             .is_ok()
         );
         // Enabled but no URLs is a direct client (no proxy attached).
-        assert!(
-            build_media_download_client(None, None, None, true, true).is_ok()
-        );
+        assert!(build_media_download_client(None, None, true, true).is_ok());
     }
 
     #[derive(Debug, Deserialize, PartialEq, Eq)]
