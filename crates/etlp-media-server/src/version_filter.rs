@@ -381,11 +381,9 @@ pub fn version_filter(
         return match prefer {
             Some(ref p) => {
                 debug!(
-                    "version_filter: version_prefer selected {} episodes: {:?}",
+                    "version_filter: version_prefer selected {} episodes: {}",
                     p.len(),
-                    p.iter()
-                        .map(|e| e.path.as_deref().unwrap_or("?"))
-                        .collect::<Vec<_>>()
+                    summarize_paths(p)
                 );
                 p.clone()
             }
@@ -614,13 +612,10 @@ pub fn version_filter(
     }
     let merged = merge_prefer(&prefer, &filter_res, &seq_keys);
     debug!(
-        "version_filter: [DECISION] merged filter({} eps)+prefer -> {} episodes: {:?}",
+        "version_filter: [DECISION] merged filter({} eps)+prefer -> {} episodes: {}",
         filter_res.len(),
         merged.len(),
-        merged
-            .iter()
-            .map(|e| e.path.as_deref().unwrap_or("?"))
-            .collect::<Vec<_>>()
+        summarize_paths(&merged)
     );
     merged
 }
@@ -641,6 +636,39 @@ fn fallback(builtin_res: Vec<Item>, ep_current: &Item) -> Vec<Item> {
         );
         builtin_res
     }
+}
+
+/// Render episode paths for a debug log, truncating once the rendered list
+/// passes `MAX_CHARS` characters of content. Remaining entries collapse into a
+/// trailing `... and N more`, so a large season logs a bounded line instead of
+/// dumping every path.
+fn summarize_paths(items: &[Item]) -> String {
+    const MAX_CHARS: usize = 1200;
+    let mut out = String::from("[");
+    let mut used = 0usize;
+    let mut shown = 0usize;
+    for (i, item) in items.iter().enumerate() {
+        let path = item.path.as_deref().unwrap_or("?");
+        let piece = if i == 0 {
+            format!("{path:?}")
+        } else {
+            format!(", {path:?}")
+        };
+        let piece_chars = piece.chars().count();
+        // Always show the first entry; stop once the budget is exceeded.
+        if i > 0 && used + piece_chars > MAX_CHARS {
+            break;
+        }
+        out.push_str(&piece);
+        used += piece_chars;
+        shown += 1;
+    }
+    let remaining = items.len() - shown;
+    if remaining > 0 {
+        out.push_str(&format!(", ... and {remaining} more"));
+    }
+    out.push(']');
+    out
 }
 
 /// Splice `filter_res` into `prefer` between the prefer entries before its
@@ -702,6 +730,35 @@ mod tests {
             index_number: Some(index),
             ..Item::default()
         }
+    }
+
+    #[test]
+    fn summarize_paths_truncates_when_over_budget() {
+        let items: Vec<Item> = (0..300)
+            .map(|i| {
+                ep(
+                    &i.to_string(),
+                    5,
+                    i,
+                    &format!("/mnt/media/season5/episode_number_{i:04}.mkv"),
+                )
+            })
+            .collect();
+        let s = summarize_paths(&items);
+        // Tail collapses into a single "... and N more" marker.
+        assert!(s.contains("... and"));
+        assert!(s.contains("more"));
+        // Far smaller than dumping all 300 paths, with a small overhead margin.
+        assert!(s.chars().count() < 1400, "len was {}", s.chars().count());
+    }
+
+    #[test]
+    fn summarize_paths_shows_short_lists_in_full() {
+        let items = vec![ep("1", 5, 1, "/m/a.mkv"), ep("2", 5, 2, "/m/b.mkv")];
+        let s = summarize_paths(&items);
+        assert!(!s.contains("... and"));
+        assert!(s.contains("/m/a.mkv"));
+        assert!(s.contains("/m/b.mkv"));
     }
 
     #[test]
