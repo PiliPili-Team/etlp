@@ -118,7 +118,11 @@ pub fn version_prefer_for_playlist(
         rules.len(),
         current_key
     );
+    // Cap the per-group selection trace so a large season does not flood the
+    // log; a trailing line reports how many selections were suppressed.
+    const MAX_PICK_LOG: usize = 10;
     let mut result = Vec::with_capacity(groups.len());
+    let mut logged = 0usize;
     for (key, sources) in groups {
         let Some(first) = sources.first() else {
             continue;
@@ -127,33 +131,38 @@ pub fn version_prefer_for_playlist(
             result.push((*first).clone());
             continue;
         }
-        if let Some((_, ep)) = ep_success_map.iter().find(|(k, _)| *k == key) {
-            debug!(
-                "    -> ini success_map: {:?}",
-                ep.path.as_deref().unwrap_or("?")
-            );
-            result.push(ep.clone());
-            continue;
-        }
-        if key == current_key {
+        let (picked, reason): (&Item, &str) = if let Some((_, ep)) =
+            ep_success_map.iter().find(|(k, _)| *k == key)
+        {
+            (ep, "ini success_map")
+        } else if key == current_key {
             let played = sources
                 .iter()
                 .find(|s| is_played_version(s, file_path))
                 .copied()
                 .unwrap_or(*first);
+            (played, "current_key played")
+        } else {
+            (
+                pick_by_rules(&sources, rules).unwrap_or(*first),
+                "picked by rules",
+            )
+        };
+        if logged < MAX_PICK_LOG {
             debug!(
-                "    -> current_key played: {:?}",
-                played.path.as_deref().unwrap_or("?")
+                "    -> {}: {:?}",
+                reason,
+                picked.path.as_deref().unwrap_or("?")
             );
-            result.push(played.clone());
-            continue;
         }
-        let picked = pick_by_rules(&sources, rules).unwrap_or(*first);
-        debug!(
-            "    -> picked by rules: {:?}",
-            picked.path.as_deref().unwrap_or("?")
-        );
+        logged += 1;
         result.push(picked.clone());
+    }
+    if logged > MAX_PICK_LOG {
+        debug!(
+            "    -> … {} more selections (suppressed)",
+            logged - MAX_PICK_LOG
+        );
     }
     debug!(
         "version_prefer_for_playlist: selected {} episodes",
