@@ -117,7 +117,6 @@ pub struct ConfigDto {
     // [dev] – network
     pub proxy_http: String,
     pub proxy_https: String,
-    pub proxy_socks5: String,
     pub proxy_enabled: bool,
     pub redirect_check_host: Vec<String>,
     pub skip_certificate_verify: bool,
@@ -175,7 +174,6 @@ impl From<&Config> for ConfigDto {
             version_prefer_for_playlist: c.dev.version_prefer_for_playlist,
             proxy_http: c.dev.proxy_http.clone().unwrap_or_default(),
             proxy_https: c.dev.proxy_https.clone().unwrap_or_default(),
-            proxy_socks5: c.dev.proxy_socks5.clone().unwrap_or_default(),
             proxy_enabled: c.dev.proxy_enabled,
             redirect_check_host: c.dev.redirect_check_host.clone(),
             skip_certificate_verify: c.dev.skip_certificate_verify,
@@ -259,7 +257,6 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     let http_client = HttpClientBuilder::new()
         .proxy_http(config.dev.proxy_http.clone())
         .proxy_https(config.dev.proxy_https.clone())
-        .proxy_socks5(config.dev.proxy_socks5.clone())
         .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())
@@ -276,7 +273,6 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     let dl_client = etlp_net::build_media_download_client(
         config.dev.proxy_http.clone(),
         config.dev.proxy_https.clone(),
-        config.dev.proxy_socks5.clone(),
         config.dev.proxy_enabled,
         cert_verify,
     )
@@ -769,7 +765,6 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     let new_http_client = HttpClientBuilder::new()
         .proxy_http(new_config.dev.proxy_http.clone())
         .proxy_https(new_config.dev.proxy_https.clone())
-        .proxy_socks5(new_config.dev.proxy_socks5.clone())
         .proxy_enabled(new_config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(new_config.dev.user_agent.clone())
@@ -778,7 +773,6 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     let new_dl_client = etlp_net::build_media_download_client(
         new_config.dev.proxy_http.clone(),
         new_config.dev.proxy_https.clone(),
-        new_config.dev.proxy_socks5.clone(),
         new_config.dev.proxy_enabled,
         cert_verify,
     )
@@ -1661,24 +1655,18 @@ fn apply_configured_proxy(
     enabled: bool,
     proxy_http: &str,
     proxy_https: &str,
-    proxy_socks5: &str,
 ) -> Result<reqwest::ClientBuilder, String> {
     if !enabled {
         return Ok(builder);
     }
-    for (raw, kind) in [
-        (proxy_http, "http"),
-        (proxy_https, "https"),
-        (proxy_socks5, "socks5"),
-    ] {
+    for (raw, kind) in [(proxy_http, "http"), (proxy_https, "https")] {
         let raw = raw.trim();
         if raw.is_empty() {
             continue;
         }
         let proxy = match kind {
             "http" => reqwest::Proxy::http(raw),
-            "https" => reqwest::Proxy::https(raw),
-            _ => reqwest::Proxy::all(raw),
+            _ => reqwest::Proxy::https(raw),
         }
         .map_err(|e| format!("invalid {kind} proxy {raw:?}: {e}"))?;
         builder = builder.proxy(proxy);
@@ -1708,7 +1696,6 @@ fn build_proxied_http_client(
         config.dev.proxy_enabled,
         config.dev.proxy_http.as_deref().unwrap_or_default(),
         config.dev.proxy_https.as_deref().unwrap_or_default(),
-        config.dev.proxy_socks5.as_deref().unwrap_or_default(),
     )?
     .build()
     .map_err(|e| format!("build http client: {e}"))
@@ -2423,7 +2410,6 @@ mod tests {
             false,
             "http://127.0.0.1:7890",
             "http://127.0.0.1:7890",
-            "",
         )
         .expect("disabled should be ok");
         assert!(builder.build().is_ok());
@@ -2431,27 +2417,21 @@ mod tests {
 
     #[test]
     fn apply_configured_proxy_enabled_applies_valid_proxies() {
-        // Enabled with valid HTTP/HTTPS/SOCKS5 proxies builds successfully;
+        // Enabled with valid HTTP/HTTPS proxies builds successfully;
         // empty entries are skipped.
         let builder = apply_configured_proxy(
             reqwest::Client::builder(),
             true,
             "http://127.0.0.1:7890",
             "http://127.0.0.1:7890",
-            "socks5://127.0.0.1:1080",
         )
         .expect("valid proxies should be ok");
         assert!(builder.build().is_ok());
 
         // Enabled but all empty is a no-op that still builds.
-        let builder = apply_configured_proxy(
-            reqwest::Client::builder(),
-            true,
-            "",
-            "",
-            "",
-        )
-        .expect("empty proxies should be ok");
+        let builder =
+            apply_configured_proxy(reqwest::Client::builder(), true, "", "")
+                .expect("empty proxies should be ok");
         assert!(builder.build().is_ok());
     }
 

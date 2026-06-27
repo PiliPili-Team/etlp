@@ -119,7 +119,6 @@ async fn main() {
     let http_client = match HttpClientBuilder::new()
         .proxy_http(config.dev.proxy_http.clone())
         .proxy_https(config.dev.proxy_https.clone())
-        .proxy_socks5(config.dev.proxy_socks5.clone())
         .proxy_enabled(config.dev.proxy_enabled)
         .cert_verify(cert_verify)
         .user_agent(config.dev.user_agent.clone())
@@ -142,7 +141,6 @@ async fn main() {
     let dl_client = match etlp_net::build_media_download_client(
         config.dev.proxy_http.clone(),
         config.dev.proxy_https.clone(),
-        config.dev.proxy_socks5.clone(),
         config.dev.proxy_enabled,
         cert_verify,
     ) {

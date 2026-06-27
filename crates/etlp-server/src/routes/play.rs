@@ -123,7 +123,7 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         .unwrap_or_else(|| player.clone());
     let fullscreen = cfg.emby.fullscreen;
     let disable_audio = cfg.emby.disable_audio;
-    // mpv only supports --http-proxy; use proxy_http (primary), skip socks5.
+    // mpv only supports --http-proxy; use proxy_http.
     let http_proxy = if cfg.dev.proxy_enabled {
         cfg.dev.proxy_http.clone()
     } else {
