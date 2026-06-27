@@ -59,6 +59,7 @@ interface ConfigDto {
     bangumi_genres: string;
     bangumi_subject_map: string[];
     bangumi_mark_watching: boolean;
+    bangumi_auto_mark_subject_watched: boolean;
     bangumi_allow_duplicate: boolean;
     bangumi_duplicate_throttle_secs: number;
     tmdb_api_key: string;
@@ -3240,6 +3241,12 @@ function BangumiSection({
                     desc={t("sys_bangumi_private_desc")}
                     checked={cfg.bangumi_private}
                     onChange={(v) => update("bangumi", "private", v)}
+                />
+                <ToggleRow
+                    label={t("bgm_auto_mark_subject_watched")}
+                    desc={t("bgm_auto_mark_subject_watched_desc")}
+                    checked={cfg.bangumi_auto_mark_subject_watched}
+                    onChange={(v) => update("bangumi", "auto_mark_subject_watched", v)}
                 />
                 <ToggleRow
                     label={t("bgm_mark_watching")}

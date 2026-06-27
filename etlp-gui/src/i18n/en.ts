@@ -273,6 +273,9 @@ export const en: typeof zhCN = {
     map_import_url_confirm: "Import",
     cfg_backup_busy: "Backing up…",
     cfg_importing: "Importing…",
+    bgm_auto_mark_subject_watched: "Auto Mark Watched",
+    bgm_auto_mark_subject_watched_desc:
+        "Automatically mark the entire subject as Watched when all its main episodes are marked as watched",
     bgm_mark_watching: "Mark as Watching",
     bgm_mark_watching_desc:
         "When on, a partially-watched episode still marks the subject as watching; when off, only a fully watched episode updates the collection status",
