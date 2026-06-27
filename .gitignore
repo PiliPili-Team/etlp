@@ -26,3 +26,6 @@ target
 
 # Design and planning documents — never committed to the repository
 docs/
+
+# Local Codex workspace notes
+.codex/
