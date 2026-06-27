@@ -257,6 +257,9 @@ export const zhCN = {
     map_import_url_confirm: "导入",
     cfg_backup_busy: "备份中…",
     cfg_importing: "导入中…",
+    bgm_auto_mark_subject_watched: "自动完结",
+    bgm_auto_mark_subject_watched_desc:
+        "当所有正片集数均被标记为“看过”时，自动将整个条目的状态转为“看过”（如果当前在播且有未放送的集数则不会触发）",
     bgm_mark_watching: "标记在看",
     bgm_mark_watching_desc:
         "开启后，未播完一集仍将对应剧集标记为在看；关闭后，仅当有已看过的集数时才将剧集置为在看",
