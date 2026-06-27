@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use tokio::sync::{Mutex, Semaphore};
@@ -48,7 +48,10 @@ pub struct DownloadManager {
     semaphore: Arc<Semaphore>,
     max_per_domain: usize,
     domain_semaphores: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
-    client: reqwest::Client,
+    /// HTTP client for new downloads. Behind an `RwLock` so it can be swapped
+    /// (e.g. after a proxy-config change) without rebuilding the manager and
+    /// losing in-flight task state.
+    client: Arc<RwLock<reqwest::Client>>,
 }
 
 impl DownloadManager {
@@ -71,8 +74,31 @@ impl DownloadManager {
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
             max_per_domain,
             domain_semaphores: Arc::new(Mutex::new(HashMap::new())),
-            client,
+            client: Arc::new(RwLock::new(client)),
         }
+    }
+
+    /// Swap the HTTP client used for **new** downloads.
+    ///
+    /// In-flight tasks keep the client they were spawned with; only downloads
+    /// started after this call use `client`. Used to apply a proxy-config
+    /// change without restarting the server.
+    pub fn set_client(&self, client: reqwest::Client) {
+        // Recover from a poisoned lock: the stored client is still valid even
+        // if a previous holder panicked.
+        let mut guard = self
+            .client
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = client;
+    }
+
+    /// Clone the current download client.
+    fn client(&self) -> reqwest::Client {
+        self.client
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     async fn domain_semaphore(&self, url: &str) -> Arc<Semaphore> {
@@ -115,7 +141,7 @@ impl DownloadManager {
         let mut dl = Downloader::new(
             url.clone(),
             id.clone(),
-            self.client.clone(),
+            self.client(),
             &self.cache_path,
             None,
         )?;
@@ -190,7 +216,7 @@ impl DownloadManager {
         let mut dl = Downloader::new(
             url.clone(),
             id.clone(),
-            self.client.clone(),
+            self.client(),
             &self.cache_path,
             None,
         )?;
