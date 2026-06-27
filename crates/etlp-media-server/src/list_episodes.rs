@@ -158,7 +158,10 @@ pub fn assemble_episodes(
             "assemble_episodes: version_filter returned {} episodes",
             episodes.len()
         );
-        for (i, ep) in episodes.iter().enumerate() {
+        // Cap the per-episode detail so a large season does not flood the log;
+        // a trailing line reports how many entries were suppressed.
+        const MAX_FILTERED_LOG: usize = 10;
+        for (i, ep) in episodes.iter().take(MAX_FILTERED_LOG).enumerate() {
             debug!(
                 "  filtered[{}]: id={:?} S{:?}E{:?} path={:?}",
                 i,
@@ -166,6 +169,12 @@ pub fn assemble_episodes(
                 ep.parent_index_number,
                 ep.index_number,
                 ep.path.as_deref().unwrap_or("<none>")
+            );
+        }
+        if episodes.len() > MAX_FILTERED_LOG {
+            debug!(
+                "  filtered: … {} more (suppressed)",
+                episodes.len() - MAX_FILTERED_LOG
             );
         }
     }
