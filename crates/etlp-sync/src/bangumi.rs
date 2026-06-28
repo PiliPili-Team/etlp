@@ -1061,7 +1061,7 @@ impl BangumiApi {
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         let cache_key: Arc<str> = format!("legacy_search:{keyword}").into();
         if let Some(cached) = self.cache.get(&cache_key).await {
-            return Self::parse_legacy_candidates(cached, keyword, all_keywords);
+            return Self::parse_legacy_candidates(cached, all_keywords);
         }
 
         // Strip the `/v0` suffix: legacy API is at the host root.
@@ -1111,15 +1111,17 @@ impl BangumiApi {
 
         self.cache.insert(cache_key, val.clone()).await;
 
-        let candidates = Self::parse_legacy_candidates(val, keyword, all_keywords);
+        let candidates = Self::parse_legacy_candidates(val, all_keywords);
         debug!(keyword, hits = candidates.len(), "bangumi: legacy_search");
         candidates
     }
 
     /// Parse the legacy `{ "list": [...] }` response into `SubjectCandidate`s.
+    ///
+    /// Candidates are scored against the full `all_keywords` set (original title
+    /// + series name) and the highest similarity wins, mirroring the v0 path.
     fn parse_legacy_candidates(
         val: serde_json::Value,
-        keyword: &str,
         all_keywords: &[&str],
     ) -> Vec<crate::bangumi_web::SubjectCandidate> {
         use crate::bangumi_web::{
@@ -1265,7 +1267,13 @@ async fn collect_details(
         if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
         {
             let mut results = api
-                .search_subjects_api(keyword, keywords, 50, air_date_from, air_date_to)
+                .search_subjects_api(
+                    keyword,
+                    keywords,
+                    50,
+                    air_date_from,
+                    air_date_to,
+                )
                 .await;
             // Stage 2.3: if v0 search returns nothing, fall back to the
             // legacy (non-v0) keyword search endpoint as it handles titles
@@ -1275,7 +1283,8 @@ async fn collect_details(
                     keyword,
                     "bangumi: v0 search empty, trying legacy API fallback"
                 );
-                results = api.search_subjects_legacy_api(keyword, keywords).await;
+                results =
+                    api.search_subjects_legacy_api(keyword, keywords).await;
             }
             e.insert(results);
         }
@@ -2399,7 +2408,9 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", &["AnimeA"], 50, None, None).await;
+        let results = api
+            .search_subjects_api("AnimeA", &["AnimeA"], 50, None, None)
+            .await;
         assert!(results.is_empty());
     }
 
@@ -2424,7 +2435,13 @@ mod tests {
 
         let api = make_api(&server).await;
         let results = api
-            .search_subjects_api("AnimeA", &["AnimeA"], 50, Some("2025-01-01"), None)
+            .search_subjects_api(
+                "AnimeA",
+                &["AnimeA"],
+                50,
+                Some("2025-01-01"),
+                None,
+            )
             .await;
         assert_eq!(results.len(), 1);
         assert_eq!(results.first().map(|c| c.subject_id), Some(516416));
@@ -3492,7 +3509,9 @@ mod tests {
             .await;
 
         let api = make_api(&server).await;
-        let results = api.search_subjects_api("AnimeA", &["AnimeA"], 10, None, None).await;
+        let results = api
+            .search_subjects_api("AnimeA", &["AnimeA"], 10, None, None)
+            .await;
         assert!(results.is_empty());
     }
 

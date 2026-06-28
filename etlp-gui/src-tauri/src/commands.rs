@@ -150,6 +150,7 @@ pub struct ConfigDto {
     pub bangumi_genres: String,
     pub bangumi_subject_map: Vec<String>,
     pub bangumi_mark_watching: bool,
+    pub bangumi_auto_mark_subject_watched: bool,
     pub bangumi_allow_duplicate: bool,
     pub bangumi_duplicate_throttle_secs: u64,
     // [tmdb]
@@ -211,6 +212,7 @@ impl From<&Config> for ConfigDto {
             bangumi_genres: c.bangumi.genres.clone(),
             bangumi_subject_map: c.bangumi.subject_map.clone(),
             bangumi_mark_watching: c.bangumi.mark_watching,
+            bangumi_auto_mark_subject_watched: c.bangumi.auto_mark_subject_watched,
             bangumi_allow_duplicate: c.bangumi.allow_duplicate,
             bangumi_duplicate_throttle_secs: c.bangumi.duplicate_throttle_secs,
             tmdb_api_key: c.tmdb.api_key.clone().unwrap_or_default(),
