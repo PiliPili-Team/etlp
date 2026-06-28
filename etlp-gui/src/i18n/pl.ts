@@ -279,6 +279,9 @@ export const pl: typeof zhCN = {
     map_import_url_confirm: "Importuj",
     cfg_backup_busy: "Tworzenie kopii zapasowej…",
     cfg_importing: "Importowanie…",
+    bgm_auto_mark_subject_watched: "Automatyczne oznaczanie jako obejrzane",
+    bgm_auto_mark_subject_watched_desc:
+        "Automatycznie oznacza całą pozycję jako obejrzaną, gdy wszystkie jej główne odcinki są oznaczone jako obejrzane",
     bgm_mark_watching: "Oznacz jako oglądane",
     bgm_mark_watching_desc:
         "Włączone: częściowe obejrzenie oznacza dzieło jako oglądane. Wyłączone: status aktualizuje się tylko po ukończeniu całego odcinka.",

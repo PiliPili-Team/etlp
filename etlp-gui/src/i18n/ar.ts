@@ -272,6 +272,9 @@ export const ar: typeof zhCN = {
     map_import_url_confirm: "استيراد",
     cfg_backup_busy: "جارٍ النسخ الاحتياطي…",
     cfg_importing: "جارٍ الاستيراد…",
+    bgm_auto_mark_subject_watched: "التحديد التلقائي كمُشاهَد",
+    bgm_auto_mark_subject_watched_desc:
+        "تحديد العمل بأكمله كمُشاهَد تلقائيًا عند تحديد جميع حلقاته الرئيسية كمُشاهَدة",
     bgm_mark_watching: "تمييز كـ «أشاهد»",
     bgm_mark_watching_desc:
         "مفعَّل: تُسجِّل المشاهدة الجزئية العمل كـ «أشاهد». معطَّل: يُحدَّث الوضع فقط عند مشاهدة حلقة كاملة.",

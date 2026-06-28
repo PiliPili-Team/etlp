@@ -269,6 +269,9 @@ export const th: typeof zhCN = {
     map_import_url_confirm: "นำเข้า",
     cfg_backup_busy: "กำลังสำรองข้อมูล…",
     cfg_importing: "กำลังนำเข้า…",
+    bgm_auto_mark_subject_watched: "ทำเครื่องหมายว่าดูแล้วอัตโนมัติ",
+    bgm_auto_mark_subject_watched_desc:
+        "ทำเครื่องหมายทั้งรายการว่าดูแล้วโดยอัตโนมัติเมื่อตอนหลักทั้งหมดถูกทำเครื่องหมายว่าดูแล้ว",
     bgm_mark_watching: "ทำเครื่องหมายว่ากำลังดู",
     bgm_mark_watching_desc:
         "เปิด: การรับชมบางส่วนจะทำเครื่องหมายผลงานว่ากำลังดู ปิด: สถานะจะอัปเดตเฉพาะเมื่อรับชมตอนครบถ้วน",

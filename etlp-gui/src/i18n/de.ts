@@ -279,6 +279,9 @@ export const de: typeof zhCN = {
     map_import_url_confirm: "Importieren",
     cfg_backup_busy: "Sicherung läuft…",
     cfg_importing: "Importieren…",
+    bgm_auto_mark_subject_watched: "Automatisch als gesehen markieren",
+    bgm_auto_mark_subject_watched_desc:
+        "Markiert den gesamten Eintrag automatisch als gesehen, wenn alle Hauptepisoden als gesehen markiert sind",
     bgm_mark_watching: "Als Schauend markieren",
     bgm_mark_watching_desc:
         "Ein: Jede Teilansicht markiert das Werk als schauend. Aus: Nur eine vollständig gesehene Episode aktualisiert den Sammlungsstatus.",

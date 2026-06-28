@@ -273,6 +273,9 @@ export const sr: typeof zhCN = {
     map_import_url_confirm: "Увези",
     cfg_backup_busy: "Прављење резервне копије…",
     cfg_importing: "Увожење…",
+    bgm_auto_mark_subject_watched: "Аутоматски означи као одгледано",
+    bgm_auto_mark_subject_watched_desc:
+        "Аутоматски означава цео унос као одгледан када су све његове главне епизоде означене као одгледане",
     bgm_mark_watching: "Означи као у гледању",
     bgm_mark_watching_desc:
         "Укључено: делимично гледање означава дело као у гледању. Искључено: статус се ажурира само после потпуно одгледане епизоде.",

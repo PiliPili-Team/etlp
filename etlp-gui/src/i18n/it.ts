@@ -278,6 +278,9 @@ export const it: typeof zhCN = {
     map_import_url_confirm: "Importa",
     cfg_backup_busy: "Backup in corso…",
     cfg_importing: "Importazione…",
+    bgm_auto_mark_subject_watched: "Segna come visto automaticamente",
+    bgm_auto_mark_subject_watched_desc:
+        "Contrassegna automaticamente l'intera voce come vista quando tutti gli episodi principali sono contrassegnati come visti",
     bgm_mark_watching: "Segna come in visione",
     bgm_mark_watching_desc:
         "Attivo: una visione parziale marca l'opera come in visione. Disattivo: lo stato viene aggiornato solo dopo aver completato un episodio.",

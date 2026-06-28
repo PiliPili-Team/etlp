@@ -275,6 +275,9 @@ export const tr: typeof zhCN = {
     map_import_url_confirm: "İçe Aktar",
     cfg_backup_busy: "Yedekleniyor…",
     cfg_importing: "İçe aktarılıyor…",
+    bgm_auto_mark_subject_watched: "Otomatik İzlendi İşaretle",
+    bgm_auto_mark_subject_watched_desc:
+        "Tüm ana bölümler izlendi olarak işaretlendiğinde, girdinin tamamını otomatik olarak izlendi şeklinde işaretler",
     bgm_mark_watching: "İzleniyor Olarak İşaretle",
     bgm_mark_watching_desc:
         "Açık: kısmen izlenen bir bölüm eseri izleniyor olarak işaretler. Kapalı: durum yalnızca bir bölüm tamamlandığında güncellenir.",

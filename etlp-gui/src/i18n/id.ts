@@ -275,6 +275,9 @@ export const id: typeof zhCN = {
     map_import_url_confirm: "Impor",
     cfg_backup_busy: "Sedang mencadangkan…",
     cfg_importing: "Sedang mengimpor…",
+    bgm_auto_mark_subject_watched: "Tandai Ditonton Otomatis",
+    bgm_auto_mark_subject_watched_desc:
+        "Secara otomatis menandai seluruh entri sebagai Ditonton saat semua episode utamanya ditandai telah ditonton",
     bgm_mark_watching: "Tandai Sedang Ditonton",
     bgm_mark_watching_desc:
         "Aktif: penayangan sebagian menandai karya sebagai sedang ditonton. Nonaktif: status diperbarui hanya setelah episode selesai ditonton.",

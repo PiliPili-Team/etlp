@@ -269,6 +269,9 @@ export const ja: typeof zhCN = {
     map_import_url_confirm: "インポート",
     cfg_backup_busy: "バックアップ中…",
     cfg_importing: "インポート中…",
+    bgm_auto_mark_subject_watched: "自動的に視聴済みにする",
+    bgm_auto_mark_subject_watched_desc:
+        "本編の全話が視聴済みになると、作品全体を自動的に視聴済みにします",
     bgm_mark_watching: "視聴中としてマーク",
     bgm_mark_watching_desc:
         "オン：部分的な視聴でも作品を視聴中としてマークします。オフ：エピソードを最後まで視聴した場合のみステータスが更新されます。",

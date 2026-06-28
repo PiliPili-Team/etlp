@@ -277,6 +277,9 @@ export const sk: typeof zhCN = {
     map_import_url_confirm: "Importovať",
     cfg_backup_busy: "Zálohovanie…",
     cfg_importing: "Importovanie…",
+    bgm_auto_mark_subject_watched: "Automaticky označiť ako videné",
+    bgm_auto_mark_subject_watched_desc:
+        "Automaticky označí celú položku ako videnú, keď sú všetky jej hlavné epizódy označené ako videné",
     bgm_mark_watching: "Označiť ako pozerané",
     bgm_mark_watching_desc:
         "Zapnuté: čiastočné sledovanie označí dielo ako pozerané. Vypnuté: stav sa aktualizuje len po úplnom zhliadnutí epizódy.",
