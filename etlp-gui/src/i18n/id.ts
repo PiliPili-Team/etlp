@@ -278,6 +278,9 @@ export const id: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Tandai Ditonton Otomatis",
     bgm_auto_mark_subject_watched_desc:
         "Secara otomatis menandai seluruh entri sebagai Ditonton saat semua episode utamanya ditandai telah ditonton",
+    bgm_history_follow_media_server: "Riwayat Mengikuti Server Media",
+    bgm_history_follow_media_server_desc:
+        "Saat satu musim server media memetakan ke beberapa koleksi Bangumi, koleksi sebelumnya yang ditandai telah diputar oleh server juga diisi. Saat nonaktif, hanya koleksi episode yang sedang ditonton yang diisi.",
     bgm_mark_watching: "Tandai Sedang Ditonton",
     bgm_mark_watching_desc:
         "Aktif: penayangan sebagian menandai karya sebagai sedang ditonton. Nonaktif: status diperbarui hanya setelah episode selesai ditonton.",

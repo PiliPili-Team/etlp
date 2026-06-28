@@ -284,6 +284,9 @@ export const es: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Marcar como visto automáticamente",
     bgm_auto_mark_subject_watched_desc:
         "Marca automáticamente toda la entrada como vista cuando todos sus episodios principales están marcados como vistos",
+    bgm_history_follow_media_server: "El historial sigue al servidor multimedia",
+    bgm_history_follow_media_server_desc:
+        "Cuando una temporada del servidor multimedia corresponde a varias colecciones de Bangumi, también se completan las colecciones anteriores que el servidor marca como reproducidas. Si está desactivado, solo se completa la colección del episodio que estás viendo.",
     bgm_mark_watching: "Marcar como viendo",
     bgm_mark_watching_desc:
         "Activado: una reproducción parcial marca la obra como en reproducción. Desactivado: el estado se actualiza solo al completar un episodio.",

@@ -286,6 +286,9 @@ export const fr: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Marquer comme vu automatiquement",
     bgm_auto_mark_subject_watched_desc:
         "Marque automatiquement toute la fiche comme vue lorsque tous ses épisodes principaux sont marqués comme vus",
+    bgm_history_follow_media_server: "L'historique suit le serveur multimédia",
+    bgm_history_follow_media_server_desc:
+        "Lorsqu'une saison du serveur multimédia correspond à plusieurs collections Bangumi, les collections antérieures marquées comme lues par le serveur sont également complétées. Désactivé : seule la collection de l'épisode en cours est complétée.",
     bgm_mark_watching: "Marquer comme en cours",
     bgm_mark_watching_desc:
         "Activé : un visionnage partiel marque l'œuvre comme en cours. Désactivé : le statut se met à jour uniquement après un épisode complet.",

@@ -267,6 +267,9 @@ export const he: typeof zhCN = {
     bgm_auto_mark_subject_watched: "סימון אוטומטי כנצפה",
     bgm_auto_mark_subject_watched_desc:
         "סימון הפריט כולו כנצפה באופן אוטומטי כאשר כל פרקי התוכן הראשי מסומנים כנצפו",
+    bgm_history_follow_media_server: "ההיסטוריה עוקבת אחר שרת המדיה",
+    bgm_history_follow_media_server_desc:
+        "כאשר עונה בשרת המדיה ממופה למספר אוספים ב-Bangumi, מולאים גם האוספים הקודמים שהשרת מסמן כנוגנו. כשמכובה, מתמלא רק האוסף של הפרק שאתה צופה בו.",
     bgm_mark_watching: "סמן כצופה",
     bgm_mark_watching_desc:
         "מופעל: צפייה חלקית מסמנת את היצירה כצופה. מכובה: הסטטוס מתעדכן רק לאחר צפייה מלאה בפרק.",

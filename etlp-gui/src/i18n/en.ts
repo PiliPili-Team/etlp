@@ -276,6 +276,9 @@ export const en: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Auto Mark Watched",
     bgm_auto_mark_subject_watched_desc:
         "Automatically mark the entire subject as Watched when all its main episodes are marked as watched",
+    bgm_history_follow_media_server: "History Follows Media Server",
+    bgm_history_follow_media_server_desc:
+        "When a media-server season maps to several Bangumi collections, also backfill the earlier collections the server reports as played. When off, only the collection containing the episode you're watching is backfilled.",
     bgm_mark_watching: "Mark as Watching",
     bgm_mark_watching_desc:
         "When on, a partially-watched episode still marks the subject as watching; when off, only a fully watched episode updates the collection status",

@@ -66,8 +66,12 @@ pub struct SubjectDetail {
 pub struct ScrapeCache {
     pub search_results: HashMap<String, Vec<SubjectCandidate>>,
     pub subject_details: HashMap<u64, SubjectDetail>,
-    /// Subject IDs whose prequel/sequel relations have been fetched this pass.
-    pub chain_walked: HashSet<u64>,
+    /// Cached relation edges per subject: the followed neighbour ids (prequel /
+    /// sequel, plus alternate adaptations when the node has no sequel). Fetched
+    /// once per subject and reused, so a multi-episode backfill never re-hits
+    /// the relation API — yet the candidate pool is still rebuilt from these
+    /// cached edges on every episode instead of collapsing after the first.
+    pub chain_relations: HashMap<u64, Vec<u64>>,
     /// Subject IDs whose "resolved from cache" line has already been logged
     /// this pass, so a multi-episode backfill logs each subject once instead
     /// of once per episode.

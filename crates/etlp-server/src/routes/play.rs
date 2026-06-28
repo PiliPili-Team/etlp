@@ -1356,7 +1356,7 @@ const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
 /// regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{
-        BangumiApi, SubjectCache, SyncError, new_bgm_read_cache, sync_episodes,
+        BackfillCache, BangumiApi, SubjectCache, SyncError, new_bgm_read_cache,
         sync_movie_subject,
     };
 
@@ -1374,6 +1374,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         subject_map,
         mark_watching,
         auto_mark_subject_watched,
+        history_follow,
         bangumi_allow_dup,
         bangumi_throttle,
         tmdb_api_key,
@@ -1395,6 +1396,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.subject_map.clone(),
             cfg.bangumi.mark_watching,
             cfg.bangumi.auto_mark_subject_watched,
+            cfg.bangumi.history_follow_media_server,
             cfg.bangumi.allow_duplicate,
             cfg.bangumi.duplicate_throttle(),
             cfg.tmdb.effective_api_key().to_owned(),
@@ -1454,6 +1456,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     let _ = std::fs::create_dir_all(&bangumi_cache_dir);
     let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
+    let backfill_cache_path =
+        bangumi_cache_dir.join(BangumiApi::BACKFILL_CACHE_FILE);
+    let mut backfill_cache = BackfillCache::load(&backfill_cache_path);
 
     // TMDB client used to look up episode air dates when Emby does not supply
     // PremiereDate. Constructed once and shared across all entries in this pass.
@@ -1638,81 +1643,35 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         }
 
         // ── TV episode path ────────────────────────────────────────────────
-        // Collect all episodes the user has already finished in Emby/Jellyfin.
+        // Collect every episode the media server reports finished (the current
+        // one plus earlier played ones). A single season can map to several
+        // Bangumi collections (split arcs); resolving each episode separately is
+        // wasteful, so each *collection* is resolved once and the whole pending
+        // set is matched against it by air date in one batch.
         let backfill = emby_played_backfill(state, data).await;
+        let season = data.season_number.unwrap_or(1);
 
-        // Resolve each backfill episode independently so multi-arc series where
-        // episodes belong to different Bangumi subjects are handled correctly.
-        // Results are grouped by subject_id for a single sync_episodes call each.
-        let mut subject_groups: std::collections::HashMap<
-            u64,
-            Vec<(u32, Option<String>)>,
-        > = std::collections::HashMap::new();
+        // High-water gate: a prior pass already handled everything up to this
+        // index, so only newer history needs work. Honoured only when the stored
+        // scope matches the current one (see `BackfillCache`).
+        let high_water =
+            backfill_cache.high_water(&data.series_id, season, history_follow);
 
-        for played_ep in &backfill {
-            if !current_watched && played_ep.index == ep_index {
-                continue;
-            }
-            if let Some(t) = resolve_bangumi_subject(
-                &api,
-                &tmdb,
-                data,
-                played_ep.index,
-                played_ep.premiere_date.clone(),
-                media_server_series_premiere.clone(),
-                title_fallback,
-                &genres,
-                &mappings,
-                &series_provider_ids,
-                &mut cache,
-                &cache_path,
-                &mut scrape_cache,
-            )
-            .await
-                && let Some(sort) = u32::try_from(played_ep.index + t.ep_offset)
-                    .ok()
-                    .filter(|&s| s > 0)
-            {
-                subject_groups
-                    .entry(t.subject_id)
-                    .or_default()
-                    .push((sort, played_ep.premiere_date.clone()));
-            }
+        // Pending = played history (excluding the current episode), gated by the
+        // high-water mark. The current episode is added unconditionally once it
+        // crosses the watched threshold so it is always the resolution anchor.
+        let mut pending: std::collections::BTreeMap<i64, Option<String>> =
+            backfill
+                .iter()
+                .filter(|p| p.index != ep_index && p.index > high_water)
+                .map(|p| (p.index, p.premiere_date.clone()))
+                .collect();
+        if current_watched && ep_index > 0 {
+            let _ = pending.insert(ep_index, data.premiere_date.clone());
         }
 
-        // Non-Emby servers report no backfill; fall back to the current episode
-        // when it passed the watched threshold.
-        if subject_groups.is_empty()
-            && current_watched
-            && let Some(t) = resolve_bangumi_subject(
-                &api,
-                &tmdb,
-                data,
-                ep_index,
-                data.premiere_date.clone(),
-                media_server_series_premiere.clone(),
-                title_fallback,
-                &genres,
-                &mappings,
-                &series_provider_ids,
-                &mut cache,
-                &cache_path,
-                &mut scrape_cache,
-            )
-            .await
-            && let Some(sort) = u32::try_from(ep_index + t.ep_offset)
-                .ok()
-                .filter(|&s| s > 0)
-        {
-            subject_groups
-                .entry(t.subject_id)
-                .or_default()
-                .push((sort, data.premiere_date.clone()));
-        }
-
-        // Nothing watched to mark: register the subject as "watching" when the
-        // user has enabled the option.
-        if subject_groups.is_empty() {
+        // Nothing to mark: register the subject as "watching" when enabled.
+        if pending.is_empty() {
             if let Some(t) = resolve_bangumi_subject(
                 &api,
                 &tmdb,
@@ -1752,34 +1711,185 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        // Sort and dedup episodes within each subject group, then sync.
-        for (subject_id, mut eps) in subject_groups {
-            eps.sort_by_key(|(s, _)| *s);
-            eps.dedup_by_key(|(s, _)| *s);
-            debug!(subject_id, count = eps.len(), "bangumi: syncing entry");
-            match sync_episodes(&api, subject_id, &eps).await {
-                Ok(ids) => {
-                    info!(
-                        "bangumi: marked {} episode(s) for subject \
-                         {subject_id}",
-                        ids.len()
-                    );
-                    // Stage 7: auto-upgrade subject to Watched when all main
-                    // episodes are done, if the user has opted in.
-                    if auto_mark_subject_watched
-                        && let Err(e) =
-                            api.maybe_mark_subject_watched(subject_id).await
-                    {
-                        warn!(
-                            "bangumi: Stage7 check failed for \
-                             subject {subject_id}: {e}"
-                        );
-                    }
-                }
-                Err(e) => {
-                    warn!("bangumi sync error for subject {subject_id}: {e}")
+        let mut processed_max = high_water;
+        let mut touched: std::collections::HashSet<u64> =
+            std::collections::HashSet::new();
+        // Safety bound: a season never splits into this many BGM collections.
+        const MAX_COLLECTIONS: usize = 64;
+
+        // Phase 1 — the current episode's collection. It defines the
+        // per-collection scope used when `history_follow` is false, and is the
+        // natural first collection in follow mode. It is resolved even when the
+        // current episode is below the watched threshold: it then only scopes
+        // the backfill (the episode itself is absent from `pending`, so it is
+        // not marked).
+        if ep_index > 0
+            && let Some(t) = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                ep_index,
+                data.premiere_date.clone(),
+                media_server_series_premiere.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await
+        {
+            let _ = process_backfill_collection(
+                &api,
+                t.subject_id,
+                t.ep_offset,
+                &mut pending,
+                &mut processed_max,
+                &mut touched,
+            )
+            .await;
+        }
+
+        // Phase 2 — remaining collections, only when following the media
+        // server. Each iteration resolves the lowest still-pending episode's
+        // collection and marks every pending episode that belongs to it, so the
+        // resolve count equals the number of collections, not episodes.
+        if history_follow {
+            for _ in 0..MAX_COLLECTIONS {
+                let Some(&anchor_index) = pending.keys().next() else {
+                    break;
+                };
+                let anchor_date = pending.get(&anchor_index).cloned().flatten();
+                let Some(t) = resolve_bangumi_subject(
+                    &api,
+                    &tmdb,
+                    data,
+                    anchor_index,
+                    anchor_date,
+                    media_server_series_premiere.clone(),
+                    title_fallback,
+                    &genres,
+                    &mappings,
+                    &series_provider_ids,
+                    &mut cache,
+                    &cache_path,
+                    &mut scrape_cache,
+                )
+                .await
+                else {
+                    // Unresolvable: drop it so the loop always makes progress.
+                    let _ = pending.remove(&anchor_index);
+                    continue;
+                };
+                let consumed = process_backfill_collection(
+                    &api,
+                    t.subject_id,
+                    t.ep_offset,
+                    &mut pending,
+                    &mut processed_max,
+                    &mut touched,
+                )
+                .await;
+                if consumed == 0 {
+                    // Matched nothing in this subject: drop the anchor so the
+                    // loop cannot spin on the same episode.
+                    let _ = pending.remove(&anchor_index);
                 }
             }
+        }
+
+        // Stage 7: auto-upgrade each touched subject to Watched when complete.
+        if auto_mark_subject_watched {
+            for subject_id in &touched {
+                if let Err(e) =
+                    api.maybe_mark_subject_watched(*subject_id).await
+                {
+                    warn!(
+                        "bangumi: Stage7 check failed for subject \
+                         {subject_id}: {e}"
+                    );
+                }
+            }
+        }
+
+        // Advance the high-water mark so a later pass skips this history.
+        // In follow mode the mark is held just below the lowest episode we
+        // could not mark, so unresolved collections are retried without leaving
+        // a gap; in per-collection mode lower episodes belong to collections we
+        // deliberately skip and the current episode always bypasses the gate,
+        // so the processed maximum is safe.
+        let new_high_water = if history_follow {
+            match pending.keys().next() {
+                Some(&min_remaining) => (min_remaining - 1).max(high_water),
+                None => processed_max,
+            }
+        } else {
+            processed_max
+        };
+        if new_high_water > high_water
+            && !data.series_id.is_empty()
+            && let Err(e) = backfill_cache.record(
+                &data.series_id,
+                season,
+                new_high_water,
+                history_follow,
+                &backfill_cache_path,
+            )
+        {
+            warn!("bangumi: backfill cache write failed: {e}");
+        }
+    }
+}
+
+/// Mark every pending history episode that belongs to one resolved subject.
+///
+/// Pulls the subject's episode list and the user's watched state once, matches
+/// the whole `pending` set against it by air date (with a sort fallback), marks
+/// the not-yet-watched matches in a single batch, and removes the matched
+/// indices from `pending`. Returns how many entries the subject consumed (0
+/// means it matched nothing, e.g. the pending episodes belong elsewhere).
+///
+/// `processed_max` is advanced to the highest consumed index and `touched`
+/// gains the subject id when at least one episode was freshly marked (so the
+/// caller can run the Stage-7 completion check on it).
+async fn process_backfill_collection(
+    api: &etlp_sync::BangumiApi,
+    subject_id: u64,
+    ep_offset: i64,
+    pending: &mut std::collections::BTreeMap<i64, Option<String>>,
+    processed_max: &mut i64,
+    touched: &mut std::collections::HashSet<u64>,
+) -> usize {
+    let candidates: Vec<(i64, Option<String>)> =
+        pending.iter().map(|(i, d)| (*i, d.clone())).collect();
+    match etlp_sync::mark_backfill_in_subject(
+        api,
+        subject_id,
+        &candidates,
+        ep_offset,
+    )
+    .await
+    {
+        Ok(outcome) => {
+            for idx in &outcome.consumed {
+                let _ = pending.remove(idx);
+                *processed_max = (*processed_max).max(*idx);
+            }
+            if !outcome.marked.is_empty() {
+                info!(
+                    "bangumi: backfill marked {} episode(s) for subject {}",
+                    outcome.marked.len(),
+                    subject_id
+                );
+                let _ = touched.insert(subject_id);
+            }
+            outcome.consumed.len()
+        }
+        Err(e) => {
+            warn!("bangumi backfill error for subject {subject_id}: {e}");
+            0
         }
     }
 }

@@ -21,7 +21,8 @@ pub mod tmdb;
 pub mod trakt;
 
 pub use bangumi::{
-    BangumiApi, BgmReadCache, CollectionState, SubjectCache, WebScrapeReq,
+    BackfillCache, BackfillMarkOutcome, BangumiApi, BgmReadCache,
+    CollectionState, SubjectCache, WebScrapeReq, mark_backfill_in_subject,
     new_bgm_read_cache, normalize_title, resolve_by_web_scrape_with_chain,
     sync_episode_by_bangumi_id, sync_episodes, sync_movie_subject,
 };

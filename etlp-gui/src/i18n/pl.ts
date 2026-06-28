@@ -282,6 +282,9 @@ export const pl: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Automatyczne oznaczanie jako obejrzane",
     bgm_auto_mark_subject_watched_desc:
         "Automatycznie oznacza całą pozycję jako obejrzaną, gdy wszystkie jej główne odcinki są oznaczone jako obejrzane",
+    bgm_history_follow_media_server: "Historia podąża za serwerem multimediów",
+    bgm_history_follow_media_server_desc:
+        "Gdy sezon serwera multimediów odpowiada kilku kolekcjom Bangumi, uzupełniane są również wcześniejsze kolekcje oznaczone przez serwer jako odtworzone. Po wyłączeniu uzupełniana jest tylko kolekcja oglądanego odcinka.",
     bgm_mark_watching: "Oznacz jako oglądane",
     bgm_mark_watching_desc:
         "Włączone: częściowe obejrzenie oznacza dzieło jako oglądane. Wyłączone: status aktualizuje się tylko po ukończeniu całego odcinka.",

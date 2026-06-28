@@ -282,6 +282,9 @@ export const de: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Automatisch als gesehen markieren",
     bgm_auto_mark_subject_watched_desc:
         "Markiert den gesamten Eintrag automatisch als gesehen, wenn alle Hauptepisoden als gesehen markiert sind",
+    bgm_history_follow_media_server: "Verlauf folgt Medienserver",
+    bgm_history_follow_media_server_desc:
+        "Wenn eine Medienserver-Staffel mehreren Bangumi-Sammlungen entspricht, werden auch die früheren vom Server als abgespielt markierten Sammlungen nachgetragen. Bei Aus wird nur die Sammlung der gerade angesehenen Folge nachgetragen.",
     bgm_mark_watching: "Als Schauend markieren",
     bgm_mark_watching_desc:
         "Ein: Jede Teilansicht markiert das Werk als schauend. Aus: Nur eine vollständig gesehene Episode aktualisiert den Sammlungsstatus.",

@@ -263,6 +263,9 @@ export const zhTW: typeof zhCN = {
     bgm_auto_mark_subject_watched: "自動完結",
     bgm_auto_mark_subject_watched_desc:
         "當所有正片集數均被標記為「看過」時，自動將整個條目的狀態轉為「看過」（若目前在播且有未放送的集數則不會觸發）",
+    bgm_history_follow_media_server: "歷史跟隨媒體伺服器",
+    bgm_history_follow_media_server_desc:
+        "當媒體伺服器的一季對應多個 Bangumi 合集時，一併回填伺服器標記為已播放的較早合集；關閉時，僅回填目前觀看集所在的合集。",
     bgm_mark_watching: "標記在看",
     bgm_mark_watching_desc:
         "開啟後，未播完一集仍將對應劇集標記為在看；關閉後，僅當有已看過的集數時才將劇集置為在看",

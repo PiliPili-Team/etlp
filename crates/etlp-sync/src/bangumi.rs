@@ -225,6 +225,18 @@ fn pick_episode_id(
     air_date: Option<&str>,
     fuzzy_days: i64,
 ) -> Option<u64> {
+    pick_episode(episodes, target_sort, air_date, fuzzy_days).map(|ep| ep.id)
+}
+
+/// Same matching logic as [`pick_episode_id`] but returns the whole episode so
+/// callers that need the resolved `sort` (e.g. to check the user's watched
+/// state) do not have to look it up a second time.
+fn pick_episode<'a>(
+    episodes: &'a [BangumiEpisode],
+    target_sort: u32,
+    air_date: Option<&str>,
+    fuzzy_days: i64,
+) -> Option<&'a BangumiEpisode> {
     if let Some(date) = air_date {
         let candidates: Vec<(i64, &BangumiEpisode)> = episodes
             .iter()
@@ -265,7 +277,7 @@ fn pick_episode_id(
                          (sort mismatch — nearest date used)"
                     );
                 }
-                return Some(ep.id);
+                return Some(ep);
             }
         } else {
             debug!(
@@ -285,7 +297,7 @@ fn pick_episode_id(
             debug!(target_sort, "bangumi: episode not found");
         }
     }
-    ep.map(|ep| ep.id)
+    ep
 }
 
 /// Find the episode ID in a scraped page list whose air date is closest to
@@ -340,6 +352,9 @@ impl BangumiApi {
 
     /// Filename for the persisted `series:season:episode → subject_id` cache.
     pub const SUBJECT_CACHE_FILE: &'static str = "bangumi_subjects.json";
+
+    /// Filename for the persisted per-season history-backfill high-water cache.
+    pub const BACKFILL_CACHE_FILE: &'static str = "bangumi_backfill.json";
 
     /// Create a new client with a shared `BgmReadCache`.
     ///
@@ -1324,74 +1339,91 @@ async fn enrich_with_chain(
 
     let mut in_result: HashSet<u64> =
         details.iter().map(|d| d.subject_id).collect();
+    // `visited` is per call, not cached: it only guards against re-expanding a
+    // node within this single BFS. The relation edges themselves are cached in
+    // `scrape_cache.chain_relations`, so a later episode re-walks the graph
+    // (rebuilding its own full candidate pool) without re-hitting the API —
+    // the bug where a shared "walked" set collapsed every later pool to the raw
+    // search hits.
+    let mut visited: HashSet<u64> = HashSet::new();
     let mut queue: VecDeque<u64> = in_result.iter().copied().collect();
 
     while let Some(id) = queue.pop_front() {
-        if scrape_cache.chain_walked.contains(&id) {
+        if !visited.insert(id) {
             continue;
         }
         if in_result.len() >= MAX_CHAIN_SUBJECTS {
             break;
         }
-        scrape_cache.chain_walked.insert(id);
 
-        let related = match api.get_related_subjects(id).await {
-            Ok(r) => r,
-            Err(e) => {
-                debug!(subject_id = id, "bangumi: chain walk error: {e}");
-                continue;
-            }
-        };
-
-        // BFS candidates: prequels (前传) and sequels (续集) are always
+        // Followed neighbours: prequels (前传) and sequels (续集) are always
         // followed so the whole linear franchise is reachable from any seed
         // node. Alternate adaptations (不同演绎) are only added when this node
         // has no sequel, covering Fate/TYPE-MOON style multi-branch IPs without
-        // blindly flooding the queue with every related subject.
-        let has_sequel = related.iter().any(|r| r.relation == "续集");
-        let mut candidates: Vec<u64> = related
-            .iter()
-            .filter(|r| r.relation == "前传" || r.relation == "续集")
-            .map(|r| r.id)
-            .collect();
-
-        if !has_sequel {
-            let alt: Vec<u64> = related
-                .iter()
-                .filter(|r| r.relation == "不同演绎")
-                .map(|r| r.id)
-                .collect();
-            if !alt.is_empty() {
-                debug!(
-                    subject_id = id,
-                    count = alt.len(),
-                    "bangumi: no sequel, queuing alternate adaptation as secondary"
-                );
-            }
-            candidates.extend(alt);
-        }
-
-        for rid in candidates {
-            if !in_result.insert(rid) {
-                if !scrape_cache.chain_walked.contains(&rid) {
-                    queue.push_back(rid);
-                }
-                continue;
-            }
-
-            let detail = if let Some(d) =
-                scrape_cache.subject_details.get(&rid).cloned()
-            {
-                d
-            } else {
-                let Some(d) = api.fetch_subject_detail_api(rid).await else {
-                    continue;
+        // blindly flooding the queue with every related subject. The resolved
+        // edge list is cached so each subject's relations are fetched once.
+        let neighbours: Vec<u64> = match scrape_cache.chain_relations.get(&id) {
+            Some(cached) => cached.clone(),
+            None => {
+                let related = match api.get_related_subjects(id).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        debug!(
+                            subject_id = id,
+                            "bangumi: chain walk error: {e}"
+                        );
+                        scrape_cache.chain_relations.insert(id, Vec::new());
+                        continue;
+                    }
                 };
-                scrape_cache.subject_details.insert(rid, d.clone());
-                d
-            };
 
-            details.push(detail);
+                let has_sequel = related.iter().any(|r| r.relation == "续集");
+                let mut edges: Vec<u64> = related
+                    .iter()
+                    .filter(|r| r.relation == "前传" || r.relation == "续集")
+                    .map(|r| r.id)
+                    .collect();
+
+                if !has_sequel {
+                    let alt: Vec<u64> = related
+                        .iter()
+                        .filter(|r| r.relation == "不同演绎")
+                        .map(|r| r.id)
+                        .collect();
+                    if !alt.is_empty() {
+                        debug!(
+                            subject_id = id,
+                            count = alt.len(),
+                            "bangumi: no sequel, queuing alternate adaptation \
+                             as secondary"
+                        );
+                    }
+                    edges.extend(alt);
+                }
+
+                scrape_cache.chain_relations.insert(id, edges.clone());
+                edges
+            }
+        };
+
+        for rid in neighbours {
+            if in_result.insert(rid) {
+                let detail = if let Some(d) =
+                    scrape_cache.subject_details.get(&rid).cloned()
+                {
+                    d
+                } else {
+                    let Some(d) = api.fetch_subject_detail_api(rid).await
+                    else {
+                        continue;
+                    };
+                    scrape_cache.subject_details.insert(rid, d.clone());
+                    d
+                };
+                details.push(detail);
+            }
+            // Always traverse through `rid` (even when already in the pool) so
+            // its neighbours are reachable; `visited` prevents re-expansion.
             queue.push_back(rid);
         }
     }
@@ -2109,6 +2141,99 @@ impl SubjectCache {
     }
 }
 
+// ── History-backfill high-water cache ───────────────────────────────────────────
+
+/// One persisted high-water entry for a `(series_id, season)` pair.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct BackfillMark {
+    /// Highest media-server episode index already processed by the backfill.
+    high_water: i64,
+    /// The `follow_media_server` scope in effect when this mark was written.
+    /// A later pass with a different scope must ignore the mark and re-scan,
+    /// because the two scopes mark a different set of collections.
+    follow: bool,
+}
+
+/// On-disk cache recording, per `(series_id, season)`, the highest episode
+/// index the history backfill has already processed.
+///
+/// A long-watched season would otherwise have its entire watched history
+/// re-matched against Bangumi on every single playback. Gating the backfill on
+/// the recorded high-water mark makes each subsequent pass touch only the
+/// genuinely new episodes. The stored `follow` scope guards correctness: when
+/// the user flips `history_follow_media_server`, the set of collections that
+/// should be marked changes, so a mismatched mark is treated as absent and the
+/// season is fully re-scanned once under the new scope.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct BackfillCache {
+    #[serde(flatten)]
+    map: std::collections::BTreeMap<String, BackfillMark>,
+}
+
+impl BackfillCache {
+    fn key(series_id: &str, season: i64) -> String {
+        format!("{series_id}:{season}")
+    }
+
+    /// Load the cache from `path`, returning an empty cache on any error.
+    #[must_use]
+    pub fn load(path: &Path) -> Self {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Highest already-processed episode index for `(series_id, season)`.
+    ///
+    /// Returns `0` (process everything) when no mark exists or when the stored
+    /// scope differs from the requested `follow`, forcing a full re-scan after
+    /// a scope change.
+    #[must_use]
+    pub fn high_water(
+        &self,
+        series_id: &str,
+        season: i64,
+        follow: bool,
+    ) -> i64 {
+        match self.map.get(&Self::key(series_id, season)) {
+            Some(m) if m.follow == follow => m.high_water,
+            _ => 0,
+        }
+    }
+
+    /// Record a high-water mark and persist the cache to `path`.
+    ///
+    /// The mark is only advanced; a lower `high_water` for the same scope never
+    /// overwrites a higher one, so an out-of-order replay cannot shrink it.
+    pub fn record(
+        &mut self,
+        series_id: &str,
+        season: i64,
+        high_water: i64,
+        follow: bool,
+        path: &Path,
+    ) -> Result<()> {
+        let key = Self::key(series_id, season);
+        let next = match self.map.get(&key) {
+            Some(m) if m.follow == follow && m.high_water >= high_water => {
+                m.high_water
+            }
+            _ => high_water,
+        };
+        let _ = self.map.insert(
+            key,
+            BackfillMark {
+                high_water: next,
+                follow,
+            },
+        );
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+}
+
 // ── Sync orchestration ────────────────────────────────────────────────────────
 
 /// Sync episode watch status to Bangumi using a subject ID obtained directly
@@ -2294,6 +2419,109 @@ pub async fn sync_episodes(
         "bangumi: marked episodes watched"
     );
     Ok(ep_ids)
+}
+
+/// Outcome of [`mark_backfill_in_subject`].
+#[derive(Debug, Default, Clone)]
+pub struct BackfillMarkOutcome {
+    /// Media-server episode indices this subject accounted for — freshly
+    /// marked *or* already watched on Bangumi. The caller removes these from
+    /// its pending set so the per-collection loop is guaranteed to terminate.
+    pub consumed: Vec<i64>,
+    /// Bangumi episode IDs freshly marked watched in this call (excludes
+    /// episodes that were already watched).
+    pub marked: Vec<u64>,
+}
+
+/// Mark a batch of history episodes that belong to one already-resolved subject.
+///
+/// Unlike [`sync_episodes`], the input is keyed by the media server's episode
+/// *index* (not the Bangumi `sort`) and every episode is matched against this
+/// single subject's episode list in one shot:
+///
+/// 1. Ensure the subject is collected (added as *Watching* when absent).
+/// 2. Fetch the subject's episode list and the user's per-episode watched
+///    state — one request each, regardless of how many episodes are pending.
+/// 3. For each pending `(index, air_date)`, resolve it to a Bangumi episode by
+///    air-date proximity (≤ 2 days) with a `sort = index + ep_offset` fallback.
+///    An episode that resolves is *consumed*; one already watched on Bangumi is
+///    skipped (not re-marked) but still consumed.
+/// 4. PATCH the remaining freshly-resolved episodes in a single batch.
+///
+/// Pending entries that resolve to no episode in this subject are left
+/// untouched, so the caller can route them to the next collection.
+pub async fn mark_backfill_in_subject(
+    api: &BangumiApi,
+    subject_id: u64,
+    pending: &[(i64, Option<String>)],
+    ep_offset: i64,
+) -> Result<BackfillMarkOutcome> {
+    let mut outcome = BackfillMarkOutcome::default();
+    if pending.is_empty() {
+        return Ok(outcome);
+    }
+
+    // Ensure the subject is collected. A subject already marked Watched (2) is
+    // left as-is: its episodes are all watched, so the matching below simply
+    // consumes the relevant pending entries without re-marking anything.
+    if api.get_subject_collection(subject_id).await?.is_none() {
+        info!(
+            "bangumi: subject {subject_id} not collected, adding as Watching"
+        );
+        api.add_collection_subject(subject_id, CollectionState::Watching)
+            .await?;
+    }
+
+    let ep_list = api.get_episodes(subject_id).await?;
+    let user_eps = api
+        .get_user_eps_collection(subject_id)
+        .await
+        .unwrap_or_default();
+
+    let mut to_mark: Vec<u64> = Vec::new();
+    for (index, air_date) in pending {
+        // The sort fallback only applies when index + offset is a valid sort.
+        let Some(target_sort) = index
+            .checked_add(ep_offset)
+            .and_then(|s| u32::try_from(s).ok())
+            .filter(|&s| s > 0)
+        else {
+            continue;
+        };
+        let Some(ep) =
+            pick_episode(&ep_list.data, target_sort, air_date.as_deref(), 2)
+        else {
+            continue;
+        };
+        outcome.consumed.push(*index);
+        let already = user_eps
+            .get(&(ep.sort as u64))
+            .map(|s| s.watched)
+            .unwrap_or(false);
+        if already {
+            debug!(
+                subject_id,
+                index,
+                ep_id = ep.id,
+                "bangumi: backfill already watched, skip"
+            );
+        } else {
+            to_mark.push(ep.id);
+        }
+    }
+
+    to_mark.sort_unstable();
+    to_mark.dedup();
+    if !to_mark.is_empty() {
+        api.mark_episodes_watched(subject_id, &to_mark).await?;
+        info!(
+            subject_id,
+            count = to_mark.len(),
+            "bangumi: backfill marked episodes watched"
+        );
+        outcome.marked = to_mark;
+    }
+    Ok(outcome)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -2937,6 +3165,152 @@ mod tests {
         assert_eq!(marked, vec![3002]);
     }
 
+    // ── mark_backfill_in_subject ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn mark_backfill_matches_air_date_and_skips_already_watched() {
+        let server = MockServer::start().await;
+
+        // Already collected (Watching), so no POST add is issued.
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/400"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "type": 3, "subject_id": 400 }),
+            ))
+            .mount(&server)
+            .await;
+        // Subject episode list: two arcs-worth of episodes.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "id": 8701, "sort": 87.0, "ep": 87.0,
+                          "date": "2026-05-25" },
+                        { "id": 8801, "sort": 88.0, "ep": 88.0,
+                          "date": "2026-06-01" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // User episode state: ep 87 already watched (type 2), ep 88 not.
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/400/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "data": [
+                        { "type": 2, "episode": { "id": 8701, "sort": 87.0,
+                          "ep": 87.0, "date": "2026-05-25" } },
+                        { "type": 0, "episode": { "id": 8801, "sort": 88.0,
+                          "ep": 88.0, "date": "2026-06-01" } },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // Only the single unwatched episode (88) is freshly marked → PUT.
+        Mock::given(method("PUT"))
+            .and(path("/users/-/collections/-/episodes/8801"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let pending = vec![
+            (87, Some("2026-05-25".to_owned())),
+            (88, Some("2026-06-01".to_owned())),
+            // Belongs to another collection; matches no episode here.
+            (10, Some("2010-01-01".to_owned())),
+        ];
+        let out = mark_backfill_in_subject(&api, 400, &pending, 0)
+            .await
+            .unwrap();
+
+        let mut consumed = out.consumed.clone();
+        consumed.sort_unstable();
+        // Episodes 87 and 88 are accounted for; 10 is left for another subject.
+        assert_eq!(consumed, vec![87, 88]);
+        // Only 88 is freshly marked; 87 was already watched.
+        assert_eq!(out.marked, vec![8801]);
+    }
+
+    #[tokio::test]
+    async fn mark_backfill_batch_marks_unwatched_and_adds_when_uncollected() {
+        let server = MockServer::start().await;
+
+        // Not collected yet → triggers a POST add as Watching.
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/401"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/users/-/collections/401"))
+            .respond_with(ResponseTemplate::new(202))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        { "id": 11, "sort": 1.0, "ep": 1.0,
+                          "date": "2026-01-01" },
+                        { "id": 12, "sort": 2.0, "ep": 2.0,
+                          "date": "2026-01-08" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        // No user episode state yet (nothing watched).
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/401/episodes"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "data": [] })),
+            )
+            .mount(&server)
+            .await;
+        // Two unwatched episodes → one PATCH batch.
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/401/episodes"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let pending = vec![
+            (1, Some("2026-01-01".to_owned())),
+            (2, Some("2026-01-08".to_owned())),
+        ];
+        let out = mark_backfill_in_subject(&api, 401, &pending, 0)
+            .await
+            .unwrap();
+
+        let mut consumed = out.consumed.clone();
+        consumed.sort_unstable();
+        assert_eq!(consumed, vec![1, 2]);
+        let mut marked = out.marked.clone();
+        marked.sort_unstable();
+        assert_eq!(marked, vec![11, 12]);
+    }
+
+    #[tokio::test]
+    async fn mark_backfill_empty_pending_is_noop() {
+        let server = MockServer::start().await;
+        let api = make_api(&server).await;
+        let out = mark_backfill_in_subject(&api, 402, &[], 0).await.unwrap();
+        assert!(out.consumed.is_empty());
+        assert!(out.marked.is_empty());
+    }
+
     // ── pick_episode_id: same-day batch tie-breaking ──────────────────────────
 
     /// Episodes 1-4 all share the same airdate (premiere week batch release,
@@ -3143,6 +3517,49 @@ mod tests {
         let path = std::path::Path::new("/nonexistent/etlp/bgm_cache.json");
         let cache = SubjectCache::load(path);
         assert_eq!(cache.get("x", 1, 1), None);
+    }
+
+    // ── BackfillCache ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn backfill_cache_roundtrips_and_only_advances() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let path = tmp.path();
+
+        let mut cache = BackfillCache::load(path);
+        assert_eq!(cache.high_water("s1", 1, false), 0);
+
+        cache.record("s1", 1, 88, false, path).unwrap();
+        let reloaded = BackfillCache::load(path);
+        assert_eq!(reloaded.high_water("s1", 1, false), 88);
+
+        // A lower mark for the same scope never shrinks the recorded one.
+        let mut cache = BackfillCache::load(path);
+        cache.record("s1", 1, 40, false, path).unwrap();
+        assert_eq!(BackfillCache::load(path).high_water("s1", 1, false), 88);
+
+        // A higher mark advances it.
+        cache.record("s1", 1, 120, false, path).unwrap();
+        assert_eq!(BackfillCache::load(path).high_water("s1", 1, false), 120);
+    }
+
+    #[test]
+    fn backfill_cache_scope_change_invalidates_mark() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let path = tmp.path();
+
+        let mut cache = BackfillCache::load(path);
+        cache.record("s1", 1, 88, false, path).unwrap();
+
+        // Reading with the opposite scope ignores the mark (full re-scan).
+        assert_eq!(cache.high_water("s1", 1, true), 0);
+        // Reading with the matching scope still sees it.
+        assert_eq!(cache.high_water("s1", 1, false), 88);
+
+        // Recording under the new scope overwrites with the new high-water.
+        cache.record("s1", 1, 50, true, path).unwrap();
+        assert_eq!(BackfillCache::load(path).high_water("s1", 1, true), 50);
+        assert_eq!(BackfillCache::load(path).high_water("s1", 1, false), 0);
     }
 
     // ── resolve_by_web_scrape_with_chain (new algorithm) ─────────────────────
@@ -3736,6 +4153,99 @@ mod tests {
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(601));
+    }
+
+    // ── BFS: candidate pool survives multi-episode backfill ───────────────────
+
+    /// A backfill resolves many episodes against one shared `ScrapeCache`.
+    /// Regression: a long franchise where the keyword search only ever returns
+    /// the earliest season (anchored on the franchise premiere), and a later
+    /// season is reachable only through the relation chain. The first episode
+    /// walks the full chain; a later-season episode resolved afterwards must
+    /// still rebuild the complete candidate pool — it previously collapsed to
+    /// the raw search hit because a shared "walked" set blocked re-expansion,
+    /// so the later season's subject was never a candidate. The relation API
+    /// must also be hit only once per subject across the whole backfill.
+    #[tokio::test]
+    async fn bfs_pool_survives_across_episodes_sharing_cache() {
+        let server = MockServer::start().await;
+
+        // Keyword search always returns only the franchise's first season (700,
+        // premiere 2017), because the search window is anchored on the premiere.
+        mount_api_search(&server, vec![(700, "Franchise")]).await;
+        mount_api_subject(&server, 700, "Franchise", Some("2017-01-01")).await;
+        mount_api_episodes_with_dates(&server, 700, vec![(1, "2017-01-07")])
+            .await;
+        // Season 1 → sequel season 2 (701). The relation endpoint is expected
+        // to be queried exactly once even though two episodes are resolved.
+        Mock::given(method("GET"))
+            .and(path("/subjects/700/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 701, "name": "Franchise S2",
+                      "name_cn": "", "relation": "续集" }
+                ]),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        // Season 2 (701) airs years later; its episode aired 2026-06-21 while
+        // the media server reports 2026-06-20 — a one-day skew within tolerance.
+        mount_api_subject(&server, 701, "Franchise S2", Some("2026-01-01"))
+            .await;
+        mount_api_episodes_with_dates(&server, 701, vec![(204, "2026-06-21")])
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/701/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 700, "name": "Franchise",
+                      "name_cn": "", "relation": "前传" }
+                ]),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["Franchise"];
+
+        // First episode belongs to season 1 → walks the full chain, selects 700.
+        let s1 = WebScrapeReq {
+            series: "Franchise",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2017-01-01"),
+            season_premiere_date: Some("2017-01-01"),
+            episode_air_date: Some("2017-01-07"),
+        };
+        let first =
+            resolve_by_web_scrape_with_chain(&s1, &mut cache, &api).await;
+        assert_eq!(
+            first,
+            Some(700),
+            "season 1 episode resolves to subject 700"
+        );
+
+        // Later season-2 episode, resolved against the SAME cache. The pool must
+        // be rebuilt to include 701 even though its relations are now cached.
+        let s2 = WebScrapeReq {
+            series: "Franchise",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2017-01-01"),
+            season_premiere_date: Some("2017-01-01"),
+            episode_air_date: Some("2026-06-20"),
+        };
+        let second =
+            resolve_by_web_scrape_with_chain(&s2, &mut cache, &api).await;
+        assert_eq!(
+            second,
+            Some(701),
+            "season 2 episode still resolves after the cache was warmed"
+        );
     }
 
     // ── mark_episodes_watched PATCH chunking ──────────────────────────────────

@@ -283,6 +283,9 @@ export const pt: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Marcar como visto automaticamente",
     bgm_auto_mark_subject_watched_desc:
         "Marca automaticamente toda a entrada como vista quando todos os seus episódios principais estiverem marcados como vistos",
+    bgm_history_follow_media_server: "Histórico segue o servidor de mídia",
+    bgm_history_follow_media_server_desc:
+        "Quando uma temporada do servidor de mídia corresponde a várias coleções do Bangumi, também são preenchidas as coleções anteriores que o servidor marca como reproduzidas. Quando desativado, apenas a coleção do episódio em exibição é preenchida.",
     bgm_mark_watching: "Marcar como a ver",
     bgm_mark_watching_desc:
         "Ativado: uma visualização parcial marca a obra como a ver. Desativado: o estado só é atualizado após a conclusão de um episódio.",

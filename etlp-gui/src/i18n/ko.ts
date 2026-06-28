@@ -272,6 +272,9 @@ export const ko: typeof zhCN = {
     bgm_auto_mark_subject_watched: "자동 시청 완료 표시",
     bgm_auto_mark_subject_watched_desc:
         "본편의 모든 에피소드가 시청함으로 표시되면 항목 전체를 자동으로 시청함으로 표시합니다",
+    bgm_history_follow_media_server: "기록을 미디어 서버에 맞춤",
+    bgm_history_follow_media_server_desc:
+        "미디어 서버의 한 시즌이 여러 Bangumi 컬렉션으로 나뉘는 경우, 서버가 재생함으로 표시한 이전 컬렉션도 함께 채웁니다. 끄면 현재 시청 중인 에피소드가 속한 컬렉션만 채웁니다.",
     bgm_mark_watching: "보는 중으로 표시",
     bgm_mark_watching_desc:
         "켜짐: 부분 시청도 작품을 보는 중으로 표시합니다. 꺼짐: 에피소드를 완전히 시청한 후에만 상태가 업데이트됩니다.",

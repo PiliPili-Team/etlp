@@ -272,6 +272,9 @@ export const ja: typeof zhCN = {
     bgm_auto_mark_subject_watched: "自動的に視聴済みにする",
     bgm_auto_mark_subject_watched_desc:
         "本編の全話が視聴済みになると、作品全体を自動的に視聴済みにします",
+    bgm_history_follow_media_server: "履歴をメディアサーバーに合わせる",
+    bgm_history_follow_media_server_desc:
+        "メディアサーバーの1シーズンが複数のBangumiコレクションに分かれている場合、サーバーが再生済みとする以前のコレクションもまとめて補完します。オフの場合は、視聴中のエピソードが属するコレクションのみを補完します。",
     bgm_mark_watching: "視聴中としてマーク",
     bgm_mark_watching_desc:
         "オン：部分的な視聴でも作品を視聴中としてマークします。オフ：エピソードを最後まで視聴した場合のみステータスが更新されます。",

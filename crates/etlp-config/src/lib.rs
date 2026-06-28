@@ -407,6 +407,14 @@ pub struct BangumiSection {
     /// who prefer to manage their completion status manually are not surprised.
     #[serde(default)]
     pub auto_mark_subject_watched: bool,
+    /// History-backfill scope when a media-server season maps to several
+    /// Bangumi collections (split arcs). When `false` (default), only the
+    /// collection that contains the currently-watched episode has its earlier
+    /// episodes marked. When `true`, every earlier collection the media server
+    /// reports as played is also backfilled, so the whole media-server season
+    /// is mirrored across all of its Bangumi collections.
+    #[serde(default)]
+    pub history_follow_media_server: bool,
     /// Allow re-marking the same episode/movie on every completion instead of
     /// throttling repeats. When `true`, the just-watched item bypasses the
     /// throttle window so finishing it again immediately adds another mark.
@@ -439,6 +447,7 @@ impl Default for BangumiSection {
             subject_map: Vec::new(),
             mark_watching: true,
             auto_mark_subject_watched: false,
+            history_follow_media_server: false,
             allow_duplicate: false,
             duplicate_throttle_secs: DEFAULT_BANGUMI_THROTTLE_SECS,
         }
@@ -923,6 +932,8 @@ speed_dummy = 1.5
         write_config(dir.path(), "config.toml", "[bangumi]\n");
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert!(!cfg.bangumi.allow_duplicate);
+        // History backfill defaults to per-collection scope (false).
+        assert!(!cfg.bangumi.history_follow_media_server);
         assert_eq!(
             cfg.bangumi.duplicate_throttle_secs,
             DEFAULT_BANGUMI_THROTTLE_SECS
@@ -971,6 +982,18 @@ speed_dummy = 1.5
         );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert!(cfg.bangumi.allow_duplicate);
+    }
+
+    #[test]
+    fn bangumi_history_follow_media_server_parses() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[bangumi]\nhistory_follow_media_server = true\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert!(cfg.bangumi.history_follow_media_server);
     }
 
     #[test]

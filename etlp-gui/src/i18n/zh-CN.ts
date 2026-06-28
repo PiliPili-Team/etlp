@@ -260,6 +260,9 @@ export const zhCN = {
     bgm_auto_mark_subject_watched: "自动完结",
     bgm_auto_mark_subject_watched_desc:
         "当所有正片集数均被标记为“看过”时，自动将整个条目的状态转为“看过”（如果当前在播且有未放送的集数则不会触发）",
+    bgm_history_follow_media_server: "历史跟随媒体服务器",
+    bgm_history_follow_media_server_desc:
+        "当媒体服务器的一季对应多个 Bangumi 合集时，同时回填服务器标记为已播放的较早合集；关闭时，仅回填当前观看集所在的合集。",
     bgm_mark_watching: "标记在看",
     bgm_mark_watching_desc:
         "开启后，未播完一集仍将对应剧集标记为在看；关闭后，仅当有已看过的集数时才将剧集置为在看",

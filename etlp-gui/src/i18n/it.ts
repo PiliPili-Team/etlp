@@ -281,6 +281,9 @@ export const it: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Segna come visto automaticamente",
     bgm_auto_mark_subject_watched_desc:
         "Contrassegna automaticamente l'intera voce come vista quando tutti gli episodi principali sono contrassegnati come visti",
+    bgm_history_follow_media_server: "La cronologia segue il server multimediale",
+    bgm_history_follow_media_server_desc:
+        "Quando una stagione del server multimediale corrisponde a più raccolte Bangumi, vengono completate anche le raccolte precedenti contrassegnate come riprodotte dal server. Se disattivato, viene completata solo la raccolta dell'episodio in riproduzione.",
     bgm_mark_watching: "Segna come in visione",
     bgm_mark_watching_desc:
         "Attivo: una visione parziale marca l'opera come in visione. Disattivo: lo stato viene aggiornato solo dopo aver completato un episodio.",

@@ -278,6 +278,9 @@ export const tr: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Otomatik İzlendi İşaretle",
     bgm_auto_mark_subject_watched_desc:
         "Tüm ana bölümler izlendi olarak işaretlendiğinde, girdinin tamamını otomatik olarak izlendi şeklinde işaretler",
+    bgm_history_follow_media_server: "Geçmiş Medya Sunucusunu İzler",
+    bgm_history_follow_media_server_desc:
+        "Bir medya sunucusu sezonu birden çok Bangumi koleksiyonuna karşılık geldiğinde, sunucunun oynatıldı olarak işaretlediği önceki koleksiyonlar da tamamlanır. Kapalıyken yalnızca izlediğiniz bölümün koleksiyonu tamamlanır.",
     bgm_mark_watching: "İzleniyor Olarak İşaretle",
     bgm_mark_watching_desc:
         "Açık: kısmen izlenen bir bölüm eseri izleniyor olarak işaretler. Kapalı: durum yalnızca bir bölüm tamamlandığında güncellenir.",

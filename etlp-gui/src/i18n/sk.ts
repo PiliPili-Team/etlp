@@ -280,6 +280,9 @@ export const sk: typeof zhCN = {
     bgm_auto_mark_subject_watched: "Automaticky označiť ako videné",
     bgm_auto_mark_subject_watched_desc:
         "Automaticky označí celú položku ako videnú, keď sú všetky jej hlavné epizódy označené ako videné",
+    bgm_history_follow_media_server: "História sleduje multimediálny server",
+    bgm_history_follow_media_server_desc:
+        "Keď sezóna multimediálneho servera zodpovedá viacerým zbierkam Bangumi, doplnia sa aj skoršie zbierky označené serverom ako prehraté. Pri vypnutí sa doplní iba zbierka aktuálne sledovanej epizódy.",
     bgm_mark_watching: "Označiť ako pozerané",
     bgm_mark_watching_desc:
         "Zapnuté: čiastočné sledovanie označí dielo ako pozerané. Vypnuté: stav sa aktualizuje len po úplnom zhliadnutí epizódy.",
