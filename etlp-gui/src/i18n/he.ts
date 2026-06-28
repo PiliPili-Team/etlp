@@ -264,6 +264,9 @@ export const he: typeof zhCN = {
     map_import_url_confirm: "ייבוא",
     cfg_backup_busy: "מבצע גיבוי…",
     cfg_importing: "מייבא…",
+    bgm_auto_mark_subject_watched: "סימון אוטומטי כנצפה",
+    bgm_auto_mark_subject_watched_desc:
+        "סימון הפריט כולו כנצפה באופן אוטומטי כאשר כל פרקי התוכן הראשי מסומנים כנצפו",
     bgm_mark_watching: "סמן כצופה",
     bgm_mark_watching_desc:
         "מופעל: צפייה חלקית מסמנת את היצירה כצופה. מכובה: הסטטוס מתעדכן רק לאחר צפייה מלאה בפרק.",

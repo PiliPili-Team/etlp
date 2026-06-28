@@ -283,6 +283,9 @@ export const fr: typeof zhCN = {
     map_import_url_confirm: "Importer",
     cfg_backup_busy: "Sauvegarde en cours…",
     cfg_importing: "Importation…",
+    bgm_auto_mark_subject_watched: "Marquer comme vu automatiquement",
+    bgm_auto_mark_subject_watched_desc:
+        "Marque automatiquement toute la fiche comme vue lorsque tous ses épisodes principaux sont marqués comme vus",
     bgm_mark_watching: "Marquer comme en cours",
     bgm_mark_watching_desc:
         "Activé : un visionnage partiel marque l'œuvre comme en cours. Désactivé : le statut se met à jour uniquement après un épisode complet.",

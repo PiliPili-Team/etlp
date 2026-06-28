@@ -281,6 +281,9 @@ export const es: typeof zhCN = {
     map_import_url_confirm: "Importar",
     cfg_backup_busy: "Haciendo copia de seguridad…",
     cfg_importing: "Importando…",
+    bgm_auto_mark_subject_watched: "Marcar como visto automáticamente",
+    bgm_auto_mark_subject_watched_desc:
+        "Marca automáticamente toda la entrada como vista cuando todos sus episodios principales están marcados como vistos",
     bgm_mark_watching: "Marcar como viendo",
     bgm_mark_watching_desc:
         "Activado: una reproducción parcial marca la obra como en reproducción. Desactivado: el estado se actualiza solo al completar un episodio.",
