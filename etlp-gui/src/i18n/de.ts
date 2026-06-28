@@ -371,6 +371,8 @@ export const de: typeof zhCN = {
     ov_update_dismiss: "Diese Version ignorieren",
     ov_update_downloading: "Update wird heruntergeladen…",
     ov_update_failed: "Update fehlgeschlagen",
+    ov_update_extracting: "Update wird entpackt…",
+    ov_update_installing: "Neue Version wird installiert…",
     sys_privacy: "Datenschutz",
     sys_no_progress: "Fortschrittsmeldung deaktivieren",
     sys_no_progress_desc:

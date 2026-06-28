@@ -355,6 +355,8 @@ export const ja: typeof zhCN = {
     ov_update_dismiss: "このバージョンを無視",
     ov_update_downloading: "アップデートをダウンロード中…",
     ov_update_failed: "アップデート失敗",
+    ov_update_extracting: "アップデートを展開中…",
+    ov_update_installing: "新しいバージョンをインストール中…",
     sys_privacy: "プライバシー",
     sys_no_progress: "進捗レポートを無効化",
     sys_no_progress_desc: "Emby/Jellyfin サーバーに再生進捗を報告しません",

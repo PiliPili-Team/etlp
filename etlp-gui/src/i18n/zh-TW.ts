@@ -343,6 +343,8 @@ export const zhTW: typeof zhCN = {
     ov_update_dismiss: "忽略此版本",
     ov_update_downloading: "正在下載更新…",
     ov_update_failed: "更新失敗",
+    ov_update_extracting: "正在解壓更新…",
+    ov_update_installing: "新版本開始安裝…",
     sys_privacy: "隱私",
     sys_no_progress: "停用播放進度回報",
     sys_no_progress_desc: "開啟後不向 Emby/Jellyfin 伺服器傳送播放進度",

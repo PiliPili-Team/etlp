@@ -358,6 +358,8 @@ export const ar: typeof zhCN = {
     ov_update_dismiss: "تجاهل هذا الإصدار",
     ov_update_downloading: "جارٍ تنزيل التحديث…",
     ov_update_failed: "فشل التحديث",
+    ov_update_extracting: "جارٍ فك ضغط التحديث…",
+    ov_update_installing: "جارٍ تثبيت الإصدار الجديد…",
     sys_privacy: "الخصوصية",
     sys_no_progress: "تعطيل تقرير التقدّم",
     sys_no_progress_desc: "عدم إبلاغ خادم Emby/Jellyfin بتقدّم التشغيل",

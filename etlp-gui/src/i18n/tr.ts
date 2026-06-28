@@ -361,6 +361,8 @@ export const tr: typeof zhCN = {
     ov_update_dismiss: "Bu Sürümü Atla",
     ov_update_downloading: "Güncelleme indiriliyor…",
     ov_update_failed: "Güncelleme başarısız",
+    ov_update_extracting: "Güncelleme çıkarılıyor…",
+    ov_update_installing: "Yeni sürüm yükleniyor…",
     sys_privacy: "Gizlilik",
     sys_no_progress: "İlerleme Raporlamayı Devre Dışı Bırak",
     sys_no_progress_desc: "Oynatma ilerlemesini Emby/Jellyfin sunucusuna bildirme",

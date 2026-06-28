@@ -364,6 +364,8 @@ export const id: typeof zhCN = {
     ov_update_dismiss: "Lewati Versi Ini",
     ov_update_downloading: "Mengunduh pembaruan…",
     ov_update_failed: "Pembaruan gagal",
+    ov_update_extracting: "Mengekstrak pembaruan…",
+    ov_update_installing: "Memasang versi baru…",
     sys_privacy: "Privasi",
     sys_no_progress: "Nonaktifkan Pelaporan Kemajuan",
     sys_no_progress_desc: "Jangan laporkan kemajuan pemutaran ke server Emby/Jellyfin",

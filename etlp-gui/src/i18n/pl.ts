@@ -369,6 +369,8 @@ export const pl: typeof zhCN = {
     ov_update_dismiss: "Pomiń tę wersję",
     ov_update_downloading: "Pobieranie aktualizacji…",
     ov_update_failed: "Błąd aktualizacji",
+    ov_update_extracting: "Rozpakowywanie aktualizacji…",
+    ov_update_installing: "Instalowanie nowej wersji…",
     sys_privacy: "Prywatność",
     sys_no_progress: "Wyłącz raportowanie postępu",
     sys_no_progress_desc: "Nie zgłaszaj postępu odtwarzania do serwera Emby/Jellyfin",

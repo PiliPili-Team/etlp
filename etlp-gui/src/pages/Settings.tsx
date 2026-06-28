@@ -1408,6 +1408,19 @@ interface UpdateInfo {
     url: string;
 }
 
+/** Live progress frame emitted by the backend on the `update-progress` event. */
+interface UpdateProgressEvent {
+    phase: "download" | "extract" | "install";
+    received: number;
+    total: number;
+}
+
+/** Whole-number percent for a progress frame, or null when indeterminate. */
+function progressPercent(p: UpdateProgressEvent | null): number | null {
+    if (!p || p.total <= 0) return null;
+    return Math.min(100, Math.round((p.received / p.total) * 100));
+}
+
 function ConfigSection({ addToast }: { addToast: (msg: string, err?: boolean) => void }) {
     const t = useI18n();
     const [busy, setBusy] = useState(false);
@@ -1949,6 +1962,30 @@ function SystemSection({
     const [checking, setChecking] = useState(false);
     const [updateResult, setUpdateResult] = useState<UpdateInfo | null>(null);
     const [downloadingUpdate, setDownloadingUpdate] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState<UpdateProgressEvent | null>(
+        null,
+    );
+
+    // Drive the inline download bar and the one-shot "installing" toast from the
+    // backend's update-progress frames (see Overview for the matching listener).
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        let installToasted = false;
+        import("@tauri-apps/api/event").then(({ listen }) => {
+            listen<UpdateProgressEvent>("update-progress", (e) => {
+                setUpdateProgress(e.payload);
+                if (e.payload.phase === "install" && !installToasted) {
+                    installToasted = true;
+                    addToast(t("ov_update_installing"));
+                }
+            }).then((fn) => {
+                unlisten = fn;
+            });
+        });
+        return () => {
+            unlisten?.();
+        };
+    }, [addToast, t]);
 
     const doCheckUpdate = async () => {
         setChecking(true);
@@ -1966,13 +2003,14 @@ function SystemSection({
     const doInstallUpdate = async () => {
         if (!updateResult?.has_update || downloadingUpdate) return;
         setDownloadingUpdate(true);
+        setUpdateProgress(null);
         try {
             await invoke("download_and_apply_update", {
                 version: updateResult.latest,
             });
         } catch (e) {
             addToast(mapBackendError(e, t), true);
-        } finally {
+            // Only a failed install returns here; success exits the process.
             setDownloadingUpdate(false);
         }
     };
@@ -2110,56 +2148,90 @@ function SystemSection({
                     onClick={() => void doCheckUpdate()}
                     disabled={checking}
                 />
-                {updateResult && (
-                    <div className="update-result-row">
-                        <div className="update-result-info">
-                            <span className="update-result-label">
-                                {t("cfg_update_current_ver")}
+                {updateResult &&
+                    (downloadingUpdate ? (
+                        <div className="update-result-row update-result-progress">
+                            <span className="update-progress-label">
+                                {(() => {
+                                    const phase = updateProgress?.phase ?? "download";
+                                    const pct = progressPercent(updateProgress);
+                                    const label =
+                                        phase === "install"
+                                            ? t("ov_update_installing")
+                                            : phase === "extract"
+                                              ? t("ov_update_extracting")
+                                              : t("ov_update_downloading");
+                                    return pct !== null && phase !== "install"
+                                        ? `${label} ${pct}%`
+                                        : label;
+                                })()}
                             </span>
-                            <span
-                                className={
-                                    !updateResult.has_update &&
-                                    updateResult.current !== updateResult.latest
-                                        ? "update-result-ver update-result-ver-ahead"
-                                        : "update-result-ver"
-                                }
+                            <div
+                                className={`update-progress-track${
+                                    progressPercent(updateProgress) === null
+                                        ? " indeterminate"
+                                        : ""
+                                }`}
                             >
-                                {updateResult.current}
-                            </span>
-                            <span className="update-result-label">
-                                {t("cfg_update_latest_ver")}
-                            </span>
-                            <span
-                                className={
-                                    updateResult.has_update
-                                        ? "update-result-ver update-result-ver-new"
-                                        : "update-result-ver"
-                                }
-                            >
-                                {updateResult.latest}
-                            </span>
+                                <div
+                                    className="update-progress-fill"
+                                    style={
+                                        progressPercent(updateProgress) !== null
+                                            ? {
+                                                  width: `${progressPercent(updateProgress)}%`,
+                                              }
+                                            : undefined
+                                    }
+                                />
+                            </div>
                         </div>
-                        <div className="update-result-actions">
-                            {updateResult.has_update && (
-                                <button
-                                    className="update-result-install"
-                                    onClick={() => void doInstallUpdate()}
-                                    disabled={downloadingUpdate}
+                    ) : (
+                        <div className="update-result-row">
+                            <div className="update-result-info">
+                                <span className="update-result-label">
+                                    {t("cfg_update_current_ver")}
+                                </span>
+                                <span
+                                    className={
+                                        !updateResult.has_update &&
+                                        updateResult.current !== updateResult.latest
+                                            ? "update-result-ver update-result-ver-ahead"
+                                            : "update-result-ver"
+                                    }
                                 >
-                                    {downloadingUpdate
-                                        ? t("ov_update_downloading")
-                                        : t("cfg_update_install")}
+                                    {updateResult.current}
+                                </span>
+                                <span className="update-result-label">
+                                    {t("cfg_update_latest_ver")}
+                                </span>
+                                <span
+                                    className={
+                                        updateResult.has_update
+                                            ? "update-result-ver update-result-ver-new"
+                                            : "update-result-ver"
+                                    }
+                                >
+                                    {updateResult.latest}
+                                </span>
+                            </div>
+                            <div className="update-result-actions">
+                                {updateResult.has_update && (
+                                    <button
+                                        className="update-result-install"
+                                        onClick={() => void doInstallUpdate()}
+                                    >
+                                        {t("cfg_update_install")}
+                                    </button>
+                                )}
+                                <button
+                                    className="update-result-close"
+                                    onClick={() => setUpdateResult(null)}
+                                >
+                                    ×
                                 </button>
-                            )}
-                            <button
-                                className="update-result-close"
-                                onClick={() => setUpdateResult(null)}
-                            >
-                                ×
-                            </button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    ))}
             </div>
 
             {/* Logs */}

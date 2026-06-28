@@ -349,6 +349,8 @@ export const he: typeof zhCN = {
     ov_update_dismiss: "דלג על גרסה זו",
     ov_update_downloading: "מוריד עדכון…",
     ov_update_failed: "העדכון נכשל",
+    ov_update_extracting: "מחלץ עדכון…",
+    ov_update_installing: "מתקין את הגרסה החדשה…",
     sys_privacy: "פרטיות",
     sys_no_progress: "בטל דיווח התקדמות",
     sys_no_progress_desc: "אל תדווח על התקדמות הפעלה לשרת Emby/Jellyfin",

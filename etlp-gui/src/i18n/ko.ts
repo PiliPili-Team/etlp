@@ -355,6 +355,8 @@ export const ko: typeof zhCN = {
     ov_update_dismiss: "이 버전 무시",
     ov_update_downloading: "업데이트 다운로드 중…",
     ov_update_failed: "업데이트 실패",
+    ov_update_extracting: "업데이트 압축 해제 중…",
+    ov_update_installing: "새 버전 설치를 시작합니다…",
     sys_privacy: "개인정보",
     sys_no_progress: "진행률 보고 비활성화",
     sys_no_progress_desc: "Emby/Jellyfin 서버에 재생 진행률을 보고하지 않습니다",
