@@ -355,6 +355,8 @@ export const th: typeof zhCN = {
     ov_update_dismiss: "ข้ามเวอร์ชันนี้",
     ov_update_downloading: "กำลังดาวน์โหลดการอัปเดต…",
     ov_update_failed: "การอัปเดตล้มเหลว",
+    ov_update_extracting: "กำลังแตกไฟล์อัปเดต…",
+    ov_update_installing: "กำลังติดตั้งเวอร์ชันใหม่…",
     sys_privacy: "ความเป็นส่วนตัว",
     sys_no_progress: "ปิดใช้งานการรายงานความคืบหน้า",
     sys_no_progress_desc: "ไม่รายงานความคืบหน้าการเล่นไปยังเซิร์ฟเวอร์ Emby/Jellyfin",

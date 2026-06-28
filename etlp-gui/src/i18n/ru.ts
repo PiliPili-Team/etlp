@@ -364,6 +364,8 @@ export const ru: typeof zhCN = {
     ov_update_dismiss: "Пропустить эту версию",
     ov_update_downloading: "Загрузка обновления…",
     ov_update_failed: "Ошибка обновления",
+    ov_update_extracting: "Распаковка обновления…",
+    ov_update_installing: "Установка новой версии…",
     sys_privacy: "Конфиденциальность",
     sys_no_progress: "Отключить отчёт о прогрессе",
     sys_no_progress_desc: "Не сообщать о прогрессе воспроизведения серверу Emby/Jellyfin",

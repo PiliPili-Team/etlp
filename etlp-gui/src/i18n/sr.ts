@@ -360,6 +360,8 @@ export const sr: typeof zhCN = {
     ov_update_dismiss: "Прескочи ову верзију",
     ov_update_downloading: "Преузимање ажурирања…",
     ov_update_failed: "Ажурирање неуспешно",
+    ov_update_extracting: "Распакивање ажурирања…",
+    ov_update_installing: "Инсталирање нове верзије…",
     sys_privacy: "Приватност",
     sys_no_progress: "Онемогући извештавање о напретку",
     sys_no_progress_desc: "Не пријављуј напредак репродукције Emby/Jellyfin серверу",

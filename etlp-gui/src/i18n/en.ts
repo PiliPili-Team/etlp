@@ -360,6 +360,8 @@ export const en: typeof zhCN = {
     ov_update_dismiss: "Dismiss this version",
     ov_update_downloading: "Downloading update…",
     ov_update_failed: "Update failed",
+    ov_update_extracting: "Extracting update…",
+    ov_update_installing: "Installing the new version…",
     sys_privacy: "Privacy",
     sys_no_progress: "Disable Progress Reporting",
     sys_no_progress_desc: "Do not report playback progress to the Emby/Jellyfin server",

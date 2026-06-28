@@ -340,6 +340,8 @@ export const zhCN = {
     ov_update_dismiss: "忽略此版本",
     ov_update_downloading: "正在下载更新…",
     ov_update_failed: "更新失败",
+    ov_update_extracting: "正在解压更新…",
+    ov_update_installing: "新版本开始安装…",
     sys_privacy: "隐私",
     sys_no_progress: "禁止上报播放进度",
     sys_no_progress_desc: "开启后不向 Emby/Jellyfin 服务器发送播放进度",

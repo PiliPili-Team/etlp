@@ -212,7 +212,9 @@ impl From<&Config> for ConfigDto {
             bangumi_genres: c.bangumi.genres.clone(),
             bangumi_subject_map: c.bangumi.subject_map.clone(),
             bangumi_mark_watching: c.bangumi.mark_watching,
-            bangumi_auto_mark_subject_watched: c.bangumi.auto_mark_subject_watched,
+            bangumi_auto_mark_subject_watched: c
+                .bangumi
+                .auto_mark_subject_watched,
             bangumi_allow_duplicate: c.bangumi.allow_duplicate,
             bangumi_duplicate_throttle_secs: c.bangumi.duplicate_throttle_secs,
             tmdb_api_key: c.tmdb.api_key.clone().unwrap_or_default(),
@@ -1620,6 +1622,37 @@ pub struct UpdateInfo {
     pub url: String,
 }
 
+/// Live progress of the update pipeline, broadcast on the `update-progress`
+/// event so the frontend can render a download bar and an "installing" toast.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UpdateProgress {
+    /// Pipeline stage: `"download"`, `"extract"`, or `"install"`.
+    pub phase: &'static str,
+    /// Units processed so far (bytes while downloading, entries while
+    /// extracting).
+    pub received: u64,
+    /// Total units; `0` when the size is unknown (renders as indeterminate).
+    pub total: u64,
+}
+
+/// Broadcast a single [`UpdateProgress`] frame; emit failures are non-fatal.
+fn emit_update_progress(
+    app: &tauri::AppHandle,
+    phase: &'static str,
+    received: u64,
+    total: u64,
+) {
+    use tauri::Emitter as _;
+    let _ = app.emit(
+        "update-progress",
+        UpdateProgress {
+            phase,
+            received,
+            total,
+        },
+    );
+}
+
 /// Whether dotted-numeric version `a` is strictly newer than `b`.
 ///
 /// Compares component by component (`0.0.3` > `0.0.2`); non-numeric suffixes on
@@ -1792,13 +1825,24 @@ fn inner_asset_name(_version: &str) -> String {
 }
 
 /// Download `url` to `dest`, creating parent directories as needed.
+///
+/// Streams the body chunk by chunk so large assets are written incrementally
+/// and `update-progress` events can report live download progress. Emits are
+/// throttled to at most one per `PROGRESS_INTERVAL` to avoid flooding the
+/// event channel on fast connections; the final 100% frame is always sent.
 async fn download_file(
+    app: &tauri::AppHandle,
     url: &str,
     dest: &std::path::Path,
 ) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt as _;
+
+    const PROGRESS_INTERVAL: std::time::Duration =
+        std::time::Duration::from_millis(120);
+
     let client = build_proxied_http_client(None)?;
 
-    let resp = client
+    let mut resp = client
         .get(url)
         .send()
         .await
@@ -1811,19 +1855,44 @@ async fn download_file(
         ));
     }
 
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("read response body: {e}"))?;
+    // `Content-Length` is absent for chunked responses; `0` then renders as an
+    // indeterminate bar on the frontend instead of a misleading percentage.
+    let total = resp.content_length().unwrap_or(0);
 
     if let Some(parent) = dest.parent() {
         tokio::fs::create_dir_all(parent)
             .await
             .map_err(|e| format!("create download dir: {e}"))?;
     }
-    tokio::fs::write(dest, bytes.as_ref())
+    let mut file = tokio::fs::File::create(dest)
         .await
-        .map_err(|e| format!("write downloaded file: {e}"))?;
+        .map_err(|e| format!("create downloaded file: {e}"))?;
+
+    let mut received: u64 = 0;
+    let mut last_emit = std::time::Instant::now();
+    emit_update_progress(app, "download", 0, total);
+
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("read response chunk: {e}"))?
+    {
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("write downloaded file: {e}"))?;
+        received += chunk.len() as u64;
+        if last_emit.elapsed() >= PROGRESS_INTERVAL {
+            emit_update_progress(app, "download", received, total);
+            last_emit = std::time::Instant::now();
+        }
+    }
+
+    file.flush()
+        .await
+        .map_err(|e| format!("flush downloaded file: {e}"))?;
+    // Final frame: when the size was unknown, report `received` as the total so
+    // the bar still settles at 100%.
+    emit_update_progress(app, "download", received, received.max(total));
     Ok(())
 }
 
@@ -1832,6 +1901,7 @@ async fn download_file(
 /// Path components containing `..` are rejected to prevent zip-slip attacks.
 #[cfg(target_os = "windows")]
 fn extract_zip(
+    app: &tauri::AppHandle,
     zip_path: &std::path::Path,
     output_dir: &std::path::Path,
 ) -> Result<(), String> {
@@ -1846,6 +1916,7 @@ fn extract_zip(
         .map_err(|e| format!("create extraction dir: {e}"))?;
 
     let entry_count = archive.len();
+    emit_update_progress(app, "extract", 0, entry_count as u64);
     for i in 0..entry_count {
         let mut entry = archive
             .by_index(i)
@@ -1876,6 +1947,12 @@ fn extract_zip(
             std::io::Write::write_all(&mut out, &buf)
                 .map_err(|e| format!("write {}: {e}", entry_path.display()))?;
         }
+        emit_update_progress(
+            app,
+            "extract",
+            (i + 1) as u64,
+            entry_count as u64,
+        );
     }
     Ok(())
 }
@@ -1890,9 +1967,90 @@ fn apply_update_installer(
 
 #[cfg(target_os = "macos")]
 fn apply_installer_inner(
-    _app: &tauri::AppHandle,
+    app: &tauri::AppHandle,
     dest: &std::path::Path,
 ) -> Result<(), String> {
+    // Resolve the running `.app` bundle from the executable path:
+    // `<Bundle>.app/Contents/MacOS/<bin>` → the bundle is three levels up.
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("resolve current exe: {e}"))?;
+    let bundle = exe.ancestors().nth(3).filter(|p| {
+        p.extension()
+            .map(|e| e.eq_ignore_ascii_case("app"))
+            .unwrap_or(false)
+    });
+
+    // Without a resolvable bundle (e.g. a `cargo run` dev build) or with paths
+    // we cannot safely embed in the helper script, fall back to opening the DMG
+    // for a manual drag-install.
+    let Some(bundle) = bundle else {
+        return open_dmg_fallback(dest);
+    };
+    let (Some(dmg_str), Some(bundle_str)) = (dest.to_str(), bundle.to_str())
+    else {
+        return open_dmg_fallback(dest);
+    };
+    if [dmg_str, bundle_str]
+        .iter()
+        .any(|s| s.contains('"') || s.contains('\n'))
+    {
+        return open_dmg_fallback(dest);
+    }
+
+    let pid = std::process::id();
+    let script = format!(
+        r#"#!/bin/sh
+# ETLP macOS auto-update: wait for the app to quit, replace the installed
+# bundle from the downloaded DMG, then relaunch the new version.
+set -e
+PID={pid}
+DMG="{dmg_str}"
+TARGET="{bundle_str}"
+
+# Wait for the running app to exit so its bundle can be overwritten.
+while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
+
+MOUNT=$(mktemp -d /tmp/etlp-update.XXXXXX)
+if ! hdiutil attach "$DMG" -nobrowse -noautoopen -mountpoint "$MOUNT" \
+        >/dev/null 2>&1; then
+    open "$DMG"
+    exit 0
+fi
+
+SRC=$(ls -d "$MOUNT"/*.app 2>/dev/null | head -n 1)
+if [ -n "$SRC" ]; then
+    rm -rf "$TARGET"
+    ditto "$SRC" "$TARGET"
+    xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+fi
+
+hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
+rmdir "$MOUNT" 2>/dev/null || true
+
+open "$TARGET"
+"#
+    );
+
+    let script_path =
+        std::env::temp_dir().join(format!("etlp-update-{pid}.sh"));
+    std::fs::write(&script_path, script)
+        .map_err(|e| format!("write install script: {e}"))?;
+
+    // Spawn detached via `/bin/sh`: a GUI app has no controlling terminal, so
+    // the child is reparented to launchd (not killed) when we exit below.
+    std::process::Command::new("/bin/sh")
+        .arg(&script_path)
+        .spawn()
+        .map_err(|e| format!("launch install script: {e}"))?;
+    info!("macOS update helper launched; exiting to allow bundle swap");
+    app.exit(0);
+    Ok(())
+}
+
+/// Open the DMG in Finder so the user can drag-install manually. Used as the
+/// macOS fallback whenever the silent in-place swap cannot be performed.
+#[cfg(target_os = "macos")]
+fn open_dmg_fallback(dest: &std::path::Path) -> Result<(), String> {
     std::process::Command::new("open")
         .arg(dest)
         .spawn()
@@ -1907,29 +2065,104 @@ fn apply_installer_inner(
 ) -> Result<(), String> {
     // Silent NSIS install. Exit the app immediately so the installer can
     // replace the locked executable without a file-lock conflict.
-    std::process::Command::new(dest)
+    let installer = std::process::Command::new(dest)
         .arg("/S")
         .spawn()
         .map_err(|e| format!("launch NSIS installer: {e}"))?;
+
+    // Relaunch the app once the installer finishes. A detached PowerShell waiter
+    // keyed on the installer PID is robust against the file-swap race: it starts
+    // the freshly written executable only after NSIS exits, not merely after we
+    // do. Failure here is non-fatal — the user can relaunch manually.
+    let exe = std::env::current_exe().ok();
+    if let Some(exe_str) = exe.as_deref().and_then(|p| p.to_str()) {
+        let escaped = exe_str.replace('\'', "''");
+        let cmd = format!(
+            "Wait-Process -Id {} -ErrorAction SilentlyContinue; \
+             Start-Sleep -Seconds 1; Start-Process '{}'",
+            installer.id(),
+            escaped,
+        );
+        let _ = std::process::Command::new("powershell")
+            .args(["-WindowStyle", "Hidden", "-Command", &cmd])
+            .spawn();
+    }
+
     app.exit(0);
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn apply_installer_inner(
-    _app: &tauri::AppHandle,
+    app: &tauri::AppHandle,
     dest: &std::path::Path,
 ) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt as _;
+
     let mut perms = std::fs::metadata(dest)
         .map_err(|e| format!("stat AppImage: {e}"))?
         .permissions();
     perms.set_mode(0o755);
     std::fs::set_permissions(dest, perms)
         .map_err(|e| format!("chmod AppImage: {e}"))?;
-    std::process::Command::new(dest)
+
+    // Launch the downloaded AppImage directly. The macOS/portable in-place swap
+    // is unnecessary on Linux: the user runs an arbitrary `.AppImage` file and
+    // there is no fixed install location to overwrite.
+    let launch_downloaded = || -> Result<(), String> {
+        std::process::Command::new(dest)
+            .spawn()
+            .map_err(|e| format!("launch AppImage: {e}"))?;
+        Ok(())
+    };
+
+    // The `APPIMAGE` env var holds the path of the running `.AppImage` file
+    // (`current_exe()` instead points into the temporary squashfs mount). When
+    // present, overwrite that file in place and relaunch it via a detached
+    // helper — launching the downloaded copy directly would be intercepted by
+    // the single-instance guard and forwarded to the still-running old process.
+    let Some(target) = std::env::var_os("APPIMAGE") else {
+        return launch_downloaded();
+    };
+    let (Some(new_str), Some(target_str)) = (dest.to_str(), target.to_str())
+    else {
+        return launch_downloaded();
+    };
+    if [new_str, target_str]
+        .iter()
+        .any(|s| s.contains('"') || s.contains('\n'))
+    {
+        return launch_downloaded();
+    }
+
+    let pid = std::process::id();
+    let script = format!(
+        r#"#!/bin/sh
+# ETLP Linux auto-update: wait for the app to quit, overwrite the installed
+# AppImage with the downloaded one, then relaunch it.
+set -e
+PID={pid}
+NEW="{new_str}"
+TARGET="{target_str}"
+
+while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
+
+cp -f "$NEW" "$TARGET"
+chmod 0755 "$TARGET"
+"$TARGET" &
+"#
+    );
+
+    let script_path =
+        std::env::temp_dir().join(format!("etlp-update-{pid}.sh"));
+    std::fs::write(&script_path, script)
+        .map_err(|e| format!("write install script: {e}"))?;
+    std::process::Command::new("/bin/sh")
+        .arg(&script_path)
         .spawn()
-        .map_err(|e| format!("launch AppImage: {e}"))?;
+        .map_err(|e| format!("launch install script: {e}"))?;
+    info!("Linux update helper launched; exiting to allow AppImage swap");
+    app.exit(0);
     Ok(())
 }
 
@@ -1981,7 +2214,7 @@ pub async fn download_and_apply_update(
 
     let dest = dl_dir.join(&filename);
     info!(url = %url, dest = %dest.display(), "downloading update asset");
-    download_file(&url, &dest).await?;
+    download_file(&app, &url, &dest).await?;
     info!(dest = %dest.display(), "update asset downloaded");
 
     // Windows Portable: extract zip and delegate file-swap to updater.exe.
@@ -1990,16 +2223,21 @@ pub async fn download_and_apply_update(
         let tmp_dir = dl_dir.join("tmp");
         let dest_c = dest.clone();
         let tmp_c = tmp_dir.clone();
+        let app_c = app.clone();
         tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
             if tmp_c.exists() {
                 std::fs::remove_dir_all(&tmp_c)
                     .map_err(|e| format!("cleanup tmp dir: {e}"))?;
             }
-            extract_zip(&dest_c, &tmp_c)
+            extract_zip(&app_c, &dest_c, &tmp_c)
         })
         .await
         .map_err(|e| format!("extract task panicked: {e}"))?
         .map_err(|e| format!("extract update zip: {e}"))?;
+
+        // Signal the install stage so the frontend shows the "installing" toast
+        // before the app exits to hand control to updater.exe.
+        emit_update_progress(&app, "install", 0, 0);
 
         let current_exe = std::env::current_exe()
             .map_err(|e| format!("resolve current exe: {e}"))?;
@@ -2045,6 +2283,9 @@ pub async fn download_and_apply_update(
         return Ok(());
     }
 
+    // Installer builds (DMG / NSIS / AppImage): announce the install stage, then
+    // hand off to the platform installer (which relaunches the new version).
+    emit_update_progress(&app, "install", 0, 0);
     apply_update_installer(&app, &dest)
 }
 

@@ -366,6 +366,8 @@ export const uk: typeof zhCN = {
     ov_update_dismiss: "Пропустити цю версію",
     ov_update_downloading: "Завантаження оновлення…",
     ov_update_failed: "Помилка оновлення",
+    ov_update_extracting: "Розпакування оновлення…",
+    ov_update_installing: "Встановлення нової версії…",
     sys_privacy: "Конфіденційність",
     sys_no_progress: "Вимкнути звіт про прогрес",
     sys_no_progress_desc: "Не повідомляти про прогрес відтворення серверу Emby/Jellyfin",

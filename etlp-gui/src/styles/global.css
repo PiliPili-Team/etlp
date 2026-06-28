@@ -1203,6 +1203,55 @@ html[data-center-nav="true"] .sidebar {
     color: var(--text);
 }
 
+/* ── Update download/install progress ──────────────────────────────────────── */
+
+/* The download bar reuses the banner/row shells; only the inner body and the
+   track differ, so the two hosts (overview banner, settings row) share styles. */
+.update-banner-progress .update-progress-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+.update-result-progress {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+}
+.update-progress-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.update-progress-track {
+    position: relative;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+}
+.update-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.18s ease;
+}
+/* Indeterminate: a fixed-width sliver sweeps the track when total is unknown. */
+.update-progress-track.indeterminate .update-progress-fill {
+    width: 35%;
+    animation: update-progress-sweep 1.1s ease-in-out infinite;
+}
+@keyframes update-progress-sweep {
+    0% {
+        transform: translateX(-110%);
+    }
+    100% {
+        transform: translateX(310%);
+    }
+}
+
 .btn-primary {
     background: var(--accent);
     border-color: var(--accent);

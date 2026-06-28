@@ -10,6 +10,22 @@ interface ServerStatus {
     uptime_secs: number | null;
 }
 
+/** Live progress frame emitted by the backend on the `update-progress` event. */
+interface UpdateProgressEvent {
+    /** Pipeline stage: download → extract (portable only) → install. */
+    phase: "download" | "extract" | "install";
+    /** Units done so far (bytes while downloading, entries while extracting). */
+    received: number;
+    /** Total units; 0 when unknown, rendered as an indeterminate bar. */
+    total: number;
+}
+
+/** Whole-number percent for a progress frame, or null when indeterminate. */
+function progressPercent(p: UpdateProgressEvent | null): number | null {
+    if (!p || p.total <= 0) return null;
+    return Math.min(100, Math.round((p.received / p.total) * 100));
+}
+
 interface Props {
     addToast: (msg: string, err?: boolean) => void;
     /** Pending update info from the app-level check, or null when none. */
@@ -39,20 +55,45 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
 
     const [downloading, setDownloading] = useState(false);
     const [downloadErr, setDownloadErr] = useState<string | null>(null);
+    const [progress, setProgress] = useState<UpdateProgressEvent | null>(null);
+
+    // Listen for backend update-progress frames to drive the inline bar and the
+    // one-shot "installing" toast. Only one update flow runs at a time, so the
+    // installed-toast guard ref is enough to avoid duplicate toasts.
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        let installToasted = false;
+        import("@tauri-apps/api/event").then(({ listen }) => {
+            listen<UpdateProgressEvent>("update-progress", (e) => {
+                setProgress(e.payload);
+                if (e.payload.phase === "install" && !installToasted) {
+                    installToasted = true;
+                    addToast(t("ov_update_installing"));
+                }
+            }).then((fn) => {
+                unlisten = fn;
+            });
+        });
+        return () => {
+            unlisten?.();
+        };
+    }, [addToast, t]);
 
     const doInstallUpdate = useCallback(async () => {
         if (!update || downloading) return;
         setDownloading(true);
         setDownloadErr(null);
+        setProgress(null);
         try {
             await invoke("download_and_apply_update", {
                 version: update.latest,
             });
         } catch (e) {
             setDownloadErr(String(e));
-        } finally {
             setDownloading(false);
         }
+        // On success the backend exits the process to install, so there is no
+        // resolved path that should clear `downloading`.
     }, [update, downloading]);
 
     // Anchor `startTime` to `now - uptime`, keeping the existing anchor when it
@@ -145,35 +186,71 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
         <>
             <div className="page-title">{t("page_overview")}</div>
 
-            {update && (
-                <div className="update-banner">
-                    <span className="update-banner-dot" />
-                    <span className="update-banner-text">
-                        {downloading
-                            ? t("ov_update_downloading")
-                            : downloadErr
-                              ? `${t("ov_update_failed")}: ${downloadErr}`
-                              : t("ov_update_available", {
-                                    version: update.latest,
-                                })}
-                    </span>
-                    <button
-                        className="update-banner-btn"
-                        onClick={() => void doInstallUpdate()}
-                        disabled={downloading}
-                    >
-                        {t("ov_update_action")}
-                    </button>
-                    <button
-                        className="update-banner-close"
-                        title={t("ov_update_dismiss")}
-                        onClick={onDismissUpdate}
-                        disabled={downloading}
-                    >
-                        ✕
-                    </button>
-                </div>
-            )}
+            {update &&
+                (downloading ? (
+                    <div className="update-banner update-banner-progress">
+                        <span className="update-banner-dot" />
+                        <div className="update-progress-body">
+                            <span className="update-progress-label">
+                                {(() => {
+                                    const phase = progress?.phase ?? "download";
+                                    const pct = progressPercent(progress);
+                                    const label =
+                                        phase === "install"
+                                            ? t("ov_update_installing")
+                                            : phase === "extract"
+                                              ? t("ov_update_extracting")
+                                              : t("ov_update_downloading");
+                                    return pct !== null && phase !== "install"
+                                        ? `${label} ${pct}%`
+                                        : label;
+                                })()}
+                            </span>
+                            <div
+                                className={`update-progress-track${
+                                    progressPercent(progress) === null
+                                        ? " indeterminate"
+                                        : ""
+                                }`}
+                            >
+                                <div
+                                    className="update-progress-fill"
+                                    style={
+                                        progressPercent(progress) !== null
+                                            ? {
+                                                  width: `${progressPercent(progress)}%`,
+                                              }
+                                            : undefined
+                                    }
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="update-banner">
+                        <span className="update-banner-dot" />
+                        <span className="update-banner-text">
+                            {downloadErr
+                                ? `${t("ov_update_failed")}: ${downloadErr}`
+                                : t("ov_update_available", {
+                                      version: update.latest,
+                                  })}
+                        </span>
+                        <button
+                            className="update-banner-btn"
+                            onClick={() => void doInstallUpdate()}
+                        >
+                            {t("ov_update_action")}
+                        </button>
+                        <button
+                            className="update-banner-close"
+                            title={t("ov_update_dismiss")}
+                            onClick={onDismissUpdate}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                ))}
 
             {/* Hero card */}
             <div className="overview-hero">

@@ -364,6 +364,8 @@ export const sk: typeof zhCN = {
     ov_update_dismiss: "Ignorovať túto verziu",
     ov_update_downloading: "Sťahovanie aktualizácie…",
     ov_update_failed: "Aktualizácia zlyhala",
+    ov_update_extracting: "Rozbaľovanie aktualizácie…",
+    ov_update_installing: "Inštaluje sa nová verzia…",
     sys_privacy: "Súkromie",
     sys_no_progress: "Zakázať hlásenie priebehu",
     sys_no_progress_desc: "Nehlásiť priebeh prehrávania serveru Emby/Jellyfin",
