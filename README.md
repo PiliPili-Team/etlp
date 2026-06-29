@@ -20,7 +20,11 @@ playlist construction, progress write-back, and optional watch-history sync.
 - Trakt.tv and Bangumi.tv watch-history sync
 - Concurrent download manager with pause / resume and rate limiting
 - Native GUI for macOS and Windows (Tauri, vibrancy on macOS)
-- Single static binary — zero runtime dependencies on every platform
+
+> [!IMPORTANT]
+> The Genshin-themed icon is copyrighted by miHoYo. It is used only because
+> we love the work. If this usage infringes any rights, it will be removed
+> immediately.
 
 ---
 
@@ -147,9 +151,10 @@ cargo build --release
 ./etlp bgm-mark-played <subject_id> <episode_sort>
 ```
 
-Install the browser userscript from the
-[embyToLocalPlayer repository](https://github.com/kjtsune/embyToLocalPlayer)
-— it is fully compatible with this server.
+Install the companion browser userscript from
+[Greasy Fork](https://greasyfork.org/zh-CN/scripts/584775-etlp). It is the
+recommended userscript for etlp and supports the current `/etlp` route while
+remaining compatible with legacy routes.
 
 Configuration is read from `config.toml` in the working directory.
 See the [Wiki](https://github.com/PiliPili-Team/etlp/wiki) for the full
