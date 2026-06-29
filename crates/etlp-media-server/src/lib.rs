@@ -26,7 +26,7 @@ pub mod version_filter;
 pub use meta::{emby_title, intro_markers};
 pub use path_map::translate_path;
 pub use resolve::{ResolveInput, StreamResolution, resolve_stream};
-pub use stream_url::{StreamUrlInput, build_stream_url};
+pub use stream_url::{StreamUrlInput, build_stream_url, server_media_url};
 
 pub use alternate::{assemble_episodes_alt, looks_like_legacy_shape};
 pub use dto::{

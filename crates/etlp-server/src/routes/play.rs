@@ -739,7 +739,34 @@ async fn build_emby_playlist(
     if episodes.is_empty() {
         None
     } else {
+        warn_remote_strm_static_playlist_urls(&episodes);
         Some(episodes)
+    }
+}
+
+/// Warn when remote `.strm` playlist entries still use generated static URLs.
+///
+/// The season-list endpoint often only has enough information to build a
+/// static `/original.mkv?...Static=true` URL. We do not fetch per-episode
+/// PlaybackInfo here because large seasons would make player startup depend on
+/// N extra network calls. The currently clicked item still uses the original
+/// PlaybackInfo payload and can prefer `TranscodingUrl` when present.
+fn warn_remote_strm_static_playlist_urls(episodes: &[PlaybackData]) {
+    for ep in episodes {
+        if ep.is_strm
+            && ep.is_http_source
+            && !ep.source_path.is_empty()
+            && ep.stream_url.contains("Static=true")
+        {
+            warn!(
+                item_id = %ep.item_id,
+                media_source_id = %ep.media_source_id,
+                source_path = %ep.source_path,
+                stream_url = %ep.stream_url,
+                "remote strm playlist entry uses generated static URL; \
+                 server PlaybackInfo was only available for the clicked item"
+            );
+        }
     }
 }
 
@@ -2303,6 +2330,7 @@ fn host_enabled(netloc: &str, enable_host: &str) -> bool {
 mod tests {
     use axum::body::Body;
     use axum::http::{Method, Request, StatusCode};
+    use etlp_core::{PlaybackData, Server};
     use tower::ServiceExt as _;
 
     use crate::router::{ROUTE_EMBY, ROUTE_ETLP, ROUTE_PLEX, build_router};
@@ -2341,6 +2369,36 @@ mod tests {
         assert!(super::genres_match(&live, ""));
         // Missing genre data is not a negative signal -> allowed.
         assert!(super::genres_match(&[], "动画|anime"));
+    }
+
+    #[test]
+    fn remote_strm_playlist_warning_does_not_rewrite_url() {
+        let episodes = vec![PlaybackData {
+            server: Server::Emby,
+            scheme: "http".into(),
+            netloc: "emby.example".into(),
+            api_key: "KEY".into(),
+            user_id: "U1".into(),
+            item_id: "1182337".into(),
+            media_source_id: "src-http-strm".into(),
+            source_path: "https://nas.example/d/alist/video.mkv".into(),
+            stream_url:
+                "http://old/emby/videos/1182337/original.mkv?Static=true".into(),
+            media_path:
+                "http://old/emby/videos/1182337/original.mkv?Static=true".into(),
+            is_strm: true,
+            is_http_source: true,
+            ..PlaybackData::default()
+        }];
+
+        super::warn_remote_strm_static_playlist_urls(&episodes);
+
+        let episode = episodes.first().expect("one playlist entry");
+        assert_eq!(
+            episode.stream_url,
+            "http://old/emby/videos/1182337/original.mkv?Static=true"
+        );
+        assert_eq!(episode.media_path, episode.stream_url);
     }
 
     #[tokio::test]

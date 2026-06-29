@@ -46,6 +46,27 @@ pub fn absolute_media_url(
     None
 }
 
+/// Prefer the media server's prepared stream endpoint for a source.
+///
+/// Emby may return `TranscodingUrl` or `DirectStreamUrl` in `PlaybackInfo`.
+/// Those URLs carry the server's container/bitrate decision and are safer for
+/// remote `.strm` sources than a locally constructed static stream URL.
+#[must_use]
+pub fn server_media_url(
+    scheme: &str,
+    netloc: &str,
+    source: &crate::dto::MediaSource,
+) -> Option<String> {
+    absolute_media_url(scheme, netloc, source.transcoding_url.as_deref())
+        .or_else(|| {
+            absolute_media_url(
+                scheme,
+                netloc,
+                source.direct_stream_url.as_deref(),
+            )
+        })
+}
+
 /// The file extension (including the dot) of a path, lowercased dot kept as-is.
 fn extension_with_dot(file_path: &str) -> String {
     match file_path.rsplit_once('.') {
@@ -148,6 +169,31 @@ mod tests {
         assert!(absolute_media_url("https", "h", Some("")).is_none());
         assert!(absolute_media_url("https", "h", Some("videos/1")).is_none());
         assert!(absolute_media_url("https", "h", None).is_none());
+    }
+
+    #[test]
+    fn server_media_url_prefers_transcoding_url() {
+        let source = crate::dto::MediaSource {
+            direct_stream_url: Some("/videos/1/master.m3u8?direct=1".into()),
+            transcoding_url: Some("/videos/1/master.m3u8?transcode=1".into()),
+            ..crate::dto::MediaSource::default()
+        };
+        assert_eq!(
+            server_media_url("https", "h", &source).as_deref(),
+            Some("https://h/videos/1/master.m3u8?transcode=1")
+        );
+    }
+
+    #[test]
+    fn server_media_url_falls_back_to_direct_stream_url() {
+        let source = crate::dto::MediaSource {
+            direct_stream_url: Some("/videos/1/master.m3u8?direct=1".into()),
+            ..crate::dto::MediaSource::default()
+        };
+        assert_eq!(
+            server_media_url("https", "h", &source).as_deref(),
+            Some("https://h/videos/1/master.m3u8?direct=1")
+        );
     }
 
     #[test]

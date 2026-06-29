@@ -23,7 +23,7 @@ use crate::dto::MediaSource;
 use crate::meta::{emby_title, intro_markers};
 use crate::received::ReceivedData;
 use crate::resolve::{ResolveInput, classify_source, resolve_stream};
-use crate::stream_url::{StreamUrlInput, absolute_media_url, build_stream_url};
+use crate::stream_url::{StreamUrlInput, build_stream_url, server_media_url};
 use crate::subtitle::subtitle_checker;
 use crate::version::select_version_index;
 
@@ -473,15 +473,7 @@ pub async fn parse_received_data_emby(
         video_type: source.video_type.as_deref(),
         server_version,
     });
-    let server_stream_url =
-        absolute_media_url(scheme, netloc, source.transcoding_url.as_deref())
-            .or_else(|| {
-                absolute_media_url(
-                    scheme,
-                    netloc,
-                    source.direct_stream_url.as_deref(),
-                )
-            });
+    let server_stream_url = server_media_url(scheme, netloc, source);
     let has_server_stream_url = server_stream_url.is_some();
     if let Some(server_url) = &server_stream_url {
         stream_url = server_url.clone();
