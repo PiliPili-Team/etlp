@@ -132,19 +132,19 @@
             serviceBody: "旅行者，您需要先开启服务！",
             serviceHelp: "旅行者，我们先把服务打开吧！",
             errorTitle: "原神启动不能！",
-            errorBody:
-                "以普遍理性而言，旅行者，您的服务存在某些问题：{error}",
+            errorBody: "以普遍理性而言，旅行者，配套程序存在某些问题。",
             portTitle: "端口设置",
-            portBody: "脚本端口必须与 etlp 实际监听端口一致。",
+            portBody: "脚本端口必须和配套程序设置端口一致。",
             invalidPort: "端口无效，请输入 1 到 65535 之间的整数。",
-            portReset: "已恢复默认端口 58000，请确认 etlp 使用相同端口。",
-            portSaved: "已设置脚本端口为 {port}，请确认 etlp 使用相同端口。",
+            portReset: "已恢复默认端口 58000，请确认配套程序使用相同端口。",
+            portSaved:
+                "已设置脚本端口为 {port}，请确认配套程序使用相同端口。",
             seriesHint: "请在需要隐藏的电视剧条目根页面操作。",
             seriesHidden: "已隐藏该电视剧。SeriesId={id}",
             seriesExists: "该电视剧已在隐藏列表中。",
             seriesReset: "已重置隐藏设置，刷新页面后生效。",
             trailer: "etlp 不支持 Trailers 插件，请禁用后再试。",
-            menuCurrentPort: "当前端口：{port}（必须与 etlp 一致）",
+            menuCurrentPort: "当前端口：{port}（必须和配套程序设置端口一致）",
             menuPortNotice: "当前脚本端口：{port}",
             menuSetPort: "设置 etlp 端口",
             menuResetPort: "重置端口为 58000",
@@ -155,7 +155,8 @@
             menuOpenCacheTasks: "打开缓存任务",
             menuHideSeries: "继续观看：隐藏当前电视剧",
             menuResetSeries: "继续观看：重置隐藏电视剧",
-            portPrompt: "请输入 etlp 端口。\n脚本端口必须与 etlp 保持一致。",
+            portPrompt:
+                "请输入 etlp 端口。\n脚本端口必须和配套程序设置端口一致。",
         },
         "zh-Hant": {
             normalTitle: "原神啟動！",
@@ -164,20 +165,22 @@
             serviceBody: "旅行者，您需要先開啟服務！",
             serviceHelp: "旅行者，我們先把服務打開吧！",
             errorTitle: "原神啟動不能！",
-            errorBody:
-                "以普遍理性而言，旅行者，您的服務存在某些問題：{error}",
+            errorBody: "以普遍理性而言，旅行者，配套程式存在某些問題。",
             portTitle: "連接埠設定",
-            portBody: "腳本連接埠必須與 etlp 實際監聽連接埠一致。",
+            portBody: "腳本連接埠必須和配套程式設定連接埠一致。",
             invalidPort: "連接埠無效，請輸入 1 到 65535 之間的整數。",
-            portReset: "已恢復預設連接埠 58000，請確認 etlp 使用相同連接埠。",
+            portReset:
+                "已恢復預設連接埠 58000，請確認配套程式使用相同連接埠。",
             portSaved:
-                "已設定腳本連接埠為 {port}，請確認 etlp 使用相同連接埠。",
+                "已設定腳本連接埠為 {port}，" +
+                "請確認配套程式使用相同連接埠。",
             seriesHint: "請在需要隱藏的電視劇條目根頁面操作。",
             seriesHidden: "已隱藏該電視劇。SeriesId={id}",
             seriesExists: "該電視劇已在隱藏列表中。",
             seriesReset: "已重置隱藏設定，重新整理頁面後生效。",
             trailer: "etlp 不支援 Trailers 外掛，請停用後再試。",
-            menuCurrentPort: "目前連接埠：{port}（必須與 etlp 一致）",
+            menuCurrentPort:
+                "目前連接埠：{port}（必須和配套程式設定連接埠一致）",
             menuPortNotice: "目前腳本連接埠：{port}",
             menuSetPort: "設定 etlp 連接埠",
             menuResetPort: "重設連接埠為 58000",
@@ -189,7 +192,8 @@
             menuHideSeries: "繼續觀看：隱藏目前電視劇",
             menuResetSeries: "繼續觀看：重設隱藏電視劇",
             portPrompt:
-                "請輸入 etlp 連接埠。\n腳本連接埠必須與 etlp 保持一致。",
+                "請輸入 etlp 連接埠。\n" +
+                "腳本連接埠必須和配套程式設定連接埠一致。",
         },
         en: {
             normalTitle: "Genshin Impact, start!",
@@ -198,18 +202,23 @@
             serviceBody: "Traveler, please start the service first!",
             serviceHelp: "Traveler, let's open the service first!",
             errorTitle: "Genshin Impact cannot start!",
-            errorBody: "In common rational terms, Traveler, your service has a problem: {error}",
+            errorBody:
+                "In common rational terms, Traveler, the companion app has a problem.",
             portTitle: "Port setting",
-            portBody: "The userscript port must match the etlp listening port.",
+            portBody:
+                "The userscript port must match the companion app port setting.",
             invalidPort: "Invalid port. Enter an integer between 1 and 65535.",
-            portReset: "Port reset to 58000. Ensure etlp uses the same port.",
-            portSaved: "Userscript port set to {port}. Ensure etlp uses the same port.",
+            portReset:
+                "Port reset to 58000. Ensure the companion app uses the same port.",
+            portSaved:
+                "Userscript port set to {port}. Ensure the companion app uses it.",
             seriesHint: "Open the root page of the series you want to hide.",
             seriesHidden: "Series hidden. SeriesId={id}",
             seriesExists: "This series is already hidden.",
             seriesReset: "Hidden series settings reset. Refresh the page to apply.",
             trailer: "etlp does not support the Trailers plugin. Disable it first.",
-            menuCurrentPort: "Current port: {port} (must match etlp)",
+            menuCurrentPort:
+                "Current port: {port} (must match the companion app port)",
             menuPortNotice: "Current userscript port: {port}",
             menuSetPort: "Set etlp port",
             menuResetPort: "Reset port to 58000",
@@ -220,7 +229,8 @@
             menuOpenCacheTasks: "Open cache tasks",
             menuHideSeries: "Resume: hide this series",
             menuResetSeries: "Resume: reset hidden series",
-            portPrompt: "Enter the etlp port.\nThe userscript port must match etlp.",
+            portPrompt:
+                "Enter the etlp port.\nIt must match the companion app port setting.",
         },
     });
 
@@ -544,7 +554,7 @@
             return;
         }
 
-        showNotice("error", errorMessage(error), { url });
+        showNotice("error", null, { url });
     }
 
     function isServiceDownError(error) {
@@ -556,16 +566,6 @@
         }
         const message = String(error.message || "");
         return /timed out|failed|network/i.test(message);
-    }
-
-    function errorMessage(error) {
-        if (!error) {
-            return "unknown error";
-        }
-        if (error.message) {
-            return String(error.message);
-        }
-        return String(error);
     }
 
     function currentLocale() {
@@ -897,7 +897,7 @@
         }
         return {
             title: t("errorTitle"),
-            body: t("errorBody", { error: detail || "unknown error" }),
+            body: t("errorBody"),
         };
     }
 
