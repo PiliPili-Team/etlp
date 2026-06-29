@@ -147,11 +147,13 @@ pub struct ConfigDto {
     pub trakt_client_id: String,
     pub trakt_client_secret: String,
     pub trakt_user_name: String,
+    pub trakt_enabled: bool,
     pub trakt_enable_host: String,
     pub trakt_allow_duplicate: bool,
     pub trakt_duplicate_throttle_secs: u64,
     // [bangumi]
     pub bangumi_access_token: String,
+    pub bangumi_enabled: bool,
     pub bangumi_enable_host: String,
     pub bangumi_username: String,
     pub bangumi_private: bool,
@@ -208,10 +210,12 @@ impl From<&Config> for ConfigDto {
             trakt_client_id: c.trakt.client_id.clone(),
             trakt_client_secret: c.trakt.client_secret.clone(),
             trakt_user_name: c.trakt.user_name.clone(),
+            trakt_enabled: c.trakt.enabled,
             trakt_enable_host: c.trakt.enable_host.clone(),
             trakt_allow_duplicate: c.trakt.allow_duplicate,
             trakt_duplicate_throttle_secs: c.trakt.duplicate_throttle_secs,
             bangumi_access_token: c.bangumi.access_token.clone(),
+            bangumi_enabled: c.bangumi.enabled,
             bangumi_enable_host: if c.bangumi.enable_host.trim().is_empty() {
                 ".".to_owned()
             } else {

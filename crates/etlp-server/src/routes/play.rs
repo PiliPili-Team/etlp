@@ -1172,8 +1172,9 @@ async fn backfill_trakt_episodes(
 
 /// Sync all completed entries to Trakt.tv when configured.
 ///
-/// Reads `trakt.enable_host` and `trakt.client_id` from the config; silently
-/// skips when either is absent or the netloc does not match `enable_host`.
+/// Reads `trakt.enabled`, `trakt.enable_host` and `trakt.client_id` from the
+/// config; silently skips when disabled, missing credentials, or no entry
+/// matches `enable_host`.
 async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{
         ScrobbleAction, TraktApi, TraktHistoryItem, TraktItemKind,
@@ -1198,6 +1199,10 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             warn!("trakt: config lock poisoned, skip");
             return;
         };
+        if !cfg.trakt.enabled {
+            debug!("trakt: disabled by master switch, skip");
+            return;
+        }
         if cfg.trakt.client_id.is_empty() {
             debug!("trakt: client_id not configured, skip");
             return;
@@ -1376,8 +1381,9 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
 ///
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
-/// Reads `[bangumi]` from the config. Silently skips when `access_token` is
-/// empty or the media-server host does not match any `enable_host` keyword.
+/// Reads `[bangumi]` from the config. Silently skips when disabled,
+/// `access_token` is empty, or the media-server host does not match any
+/// `enable_host` keyword.
 /// The subject ID comes from `provider_ids["Bangumi"]`; when that is absent and
 /// `title_search_fallback` is enabled, it is resolved by searching bgm by title
 /// and walking the sequel chain to the season given by `season_number`. The
@@ -1413,6 +1419,10 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         let Ok(cfg) = state.config.read() else {
             return;
         };
+        if !cfg.bangumi.enabled {
+            debug!("bangumi: disabled by master switch, skip");
+            return;
+        }
         if cfg.bangumi.access_token.is_empty() {
             return;
         }

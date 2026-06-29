@@ -50,10 +50,12 @@ interface ConfigDto {
     trakt_client_id: string;
     trakt_client_secret: string;
     trakt_user_name: string;
+    trakt_enabled: boolean;
     trakt_enable_host: string;
     trakt_allow_duplicate: boolean;
     trakt_duplicate_throttle_secs: number;
     bangumi_access_token: string;
+    bangumi_enabled: boolean;
     bangumi_enable_host: string;
     bangumi_username: string;
     bangumi_private: boolean;
@@ -3274,6 +3276,12 @@ function BangumiSection({
             </div>
 
             <div className="settings-group">
+                <ToggleRow
+                    label={t("sys_bangumi_enabled")}
+                    desc={t("sys_bangumi_enabled_desc")}
+                    checked={cfg.bangumi_enabled}
+                    onChange={(v) => update("bangumi", "enabled", v)}
+                />
                 <TagListRow
                     label={t("sys_bangumi_host")}
                     desc={t("sys_bangumi_host_desc")}
@@ -3552,6 +3560,12 @@ function TraktSection({
             </div>
 
             <div className="settings-group">
+                <ToggleRow
+                    label={t("sys_trakt_enabled")}
+                    desc={t("sys_trakt_enabled_desc")}
+                    checked={cfg.trakt_enabled}
+                    onChange={(v) => update("trakt", "enabled", v)}
+                />
                 <TagListRow
                     label={t("sys_trakt_host")}
                     desc={t("sys_trakt_host_desc")}

@@ -207,6 +207,9 @@ export const pt: typeof zhCN = {
     sys_trakt_sync_note:
         "Quando a reprodução termina, a sua visualização é sincronizada automaticamente com o Trakt: atingir cerca de 80 % ou mais marca o episódio como visto, abaixo disso permanece sem marca; outros episódios da mesma temporada que já concluiu no seu servidor multimédia também são marcados, sem duplicar os já existentes. Abaixo de 80 %, a sua posição é memorizada para retomar mais tarde, e o episódio seguinte aparece em «Continuar a ver»; rever o mesmo episódio regista-o novamente — se é permitido um curto intervalo é controlado pelo interruptor «permitir duplicados» abaixo.",
     sys_trakt_dashboard: "Abrir o painel do Trakt",
+    sys_trakt_enabled: "Ativar sincronização do Trakt",
+    sys_trakt_enabled_desc:
+        "Quando desligado, nenhum dado de visualização é sincronizado com o Trakt",
     sys_trakt_setup_title: "Configuração",
     sys_trakt_setup_step1: "1. Crie uma aplicação no Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -241,6 +244,9 @@ export const pt: typeof zhCN = {
     sys_bangumi: "Rastreio do Bangumi.tv",
     sys_bangumi_sync_note:
         "Quando a reprodução termina, a sua visualização é sincronizada automaticamente com o Bangumi: atingir ≥ 80 % marca o episódio atual como visto, abaixo disso permanece sem marca; outros episódios da mesma temporada já concluídos no servidor multimédia também são adicionados, sem duplicar os existentes. Se não houver nada a marcar (< 80 % e sem histórico), a obra é definida como «a ver» apenas se a duração de reprodução efetiva for ≥ 20 segundos, caso contrário é ignorada para evitar adições acidentais.",
+    sys_bangumi_enabled: "Ativar sincronização do Bangumi",
+    sys_bangumi_enabled_desc:
+        "Quando desligado, nenhum dado de visualização é sincronizado com o Bangumi",
     sys_bangumi_host: "Ativar anfitrião",
     sys_bangumi_host_desc:
         'Palavras-chave de anfitrião separadas por vírgulas, vazio para desativar；ex. emby.local, 192.168.1；insira "." para ativar todos',

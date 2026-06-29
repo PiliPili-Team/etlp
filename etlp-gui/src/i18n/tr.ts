@@ -203,6 +203,8 @@ export const tr: typeof zhCN = {
     sys_trakt_sync_note:
         "Oynatma tamamlandığında izlemeniz otomatik olarak Trakt ile senkronize edilir: yaklaşık %80 veya daha fazlasına ulaşmak bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de işaretlenir, mevcut olanlar çoğaltılmaz. %80'in altında pozisyonunuz daha sonra devam etmek için kaydedilir ve sonraki bölüm 'İzlemeye Devam Et'te görünür; aynı bölümü tekrar oynatmak yeniden kaydeder — kısa aralığa izin verilip verilmediğini aşağıdaki 'kopyalara izin ver' anahtarı kontrol eder.",
     sys_trakt_dashboard: "Trakt Panosunu Aç",
+    sys_trakt_enabled: "Trakt eşitlemesini etkinleştir",
+    sys_trakt_enabled_desc: "Kapalıyken izleme verileri Trakt ile eşitlenmez",
     sys_trakt_setup_title: "Kurulum",
     sys_trakt_setup_step1: "1. Trakt'ta bir uygulama oluşturun: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -236,6 +238,8 @@ export const tr: typeof zhCN = {
     sys_bangumi: "Bangumi.tv Takibi",
     sys_bangumi_sync_note:
         "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: ≥ %80'e ulaşmak mevcut bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de eklenir, mevcut olanlar çoğaltılmaz. İşaretlenecek bir şey yoksa (< %80 ve geçmiş yoksa), eserin durumu yalnızca gerçek oynatma süresi ≥ 20 saniyeyse 'izliyorum' olarak ayarlanır, aksi takdirde yanlışlıkla eklemeyi önlemek için atlanır.",
+    sys_bangumi_enabled: "Bangumi eşitlemesini etkinleştir",
+    sys_bangumi_enabled_desc: "Kapalıyken izleme verileri Bangumi ile eşitlenmez",
     sys_bangumi_host: "Ana Bilgisayarı Etkinleştir",
     sys_bangumi_host_desc:
         'Virgülle ayrılmış host anahtar kelimeleri, devre dışı için boş bırakın；örn. emby.local, 192.168.1；tüm hostlar için "." girin',

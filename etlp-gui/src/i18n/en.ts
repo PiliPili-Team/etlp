@@ -203,6 +203,8 @@ export const en: typeof zhCN = {
     sys_trakt_sync_note:
         'When playback ends, your viewing is synced to Trakt automatically: reaching about 80% or more marks the episode watched, below that it stays unmarked; other episodes of the same season you already finished in your media server are marked too, without duplicating ones already there. Below 80% your position is remembered so you can pick up later, and the next episode shows under Continue Watching; re-watching the same episode records it again — whether a short time gap is allowed is controlled by the "allow duplicate" switch below.',
     sys_trakt_dashboard: "Open Trakt dashboard",
+    sys_trakt_enabled: "Enable Trakt Sync",
+    sys_trakt_enabled_desc: "When off, no viewing data is synced to Trakt",
     sys_trakt_setup_title: "Setup",
     sys_trakt_setup_step1: "1. Create an app on Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -236,6 +238,8 @@ export const en: typeof zhCN = {
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_sync_note:
         "When playback ends, your viewing is synced to Bangumi automatically: ≥ 80% progress marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
+    sys_bangumi_enabled: "Enable Bangumi Sync",
+    sys_bangumi_enabled_desc: "When off, no viewing data is synced to Bangumi",
     sys_bangumi_host: "Enable Host",
     sys_bangumi_host_desc:
         'Comma-separated host keywords; sync is enabled when any keyword matches. Leave empty to disable sync for all servers. To enable for every server, type "." in the input box and click Add.',
