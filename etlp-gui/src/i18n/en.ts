@@ -159,6 +159,11 @@ export const en: typeof zhCN = {
     sys_silent_start: "Silent Start",
     sys_silent_start_desc:
         "Start hidden in the tray without showing the main window (quieter with launch-at-login)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "Logs",
     sys_log_level: "Log Level",
     sys_log_level_desc: "Set to Debug for more verbose output when troubleshooting",

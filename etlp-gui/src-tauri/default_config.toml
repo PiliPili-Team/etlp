@@ -11,6 +11,11 @@ fullscreen = false
 
 # ── Developer / advanced ──────────────────────────────────────────────────────
 
+[server]
+# Local HTTP port used by the browser userscript and OAuth callbacks.
+# Keep this value the same as the browser userscript port.
+listen_port = 58000
+
 [dev]
 # Absolute path to the player binary (was [exe] mpv = ... in INI).
 player_path = ""

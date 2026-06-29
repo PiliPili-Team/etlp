@@ -64,6 +64,7 @@ pub struct GuiState {
     pub running: AtomicBool,
     pub app_state: Mutex<Option<SharedState>>,
     pub shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    pub lifecycle_lock: tokio::sync::Mutex<()>,
     pub port: AtomicU16,
     /// Monotonic instant the service last started, or `None` while stopped.
     /// Lives in the backend so uptime survives window reloads but resets on a
@@ -79,11 +80,16 @@ pub struct GuiState {
 impl Default for GuiState {
     fn default() -> Self {
         let data = platform::data_dir().unwrap_or_else(|| PathBuf::from("."));
+        let initial_port = platform::config_dir()
+            .and_then(|d| etlp_config::Config::load_from_dir(&d).ok())
+            .and_then(|c| u16::try_from(c.server.listen_port).ok())
+            .unwrap_or(etlp_config::DEFAULT_LISTEN_PORT as u16);
         Self {
             running: AtomicBool::new(false),
             app_state: Mutex::new(None),
             shutdown_tx: Mutex::new(None),
-            port: AtomicU16::new(58000),
+            lifecycle_lock: tokio::sync::Mutex::new(()),
+            port: AtomicU16::new(initial_port),
             started_at: Mutex::new(None),
             log_file: Mutex::new(
                 platform::log_dir_in(&data).join(APP_LOG_FILE),
@@ -99,6 +105,8 @@ impl Default for GuiState {
 /// Flat, serialisable representation of all user-visible config fields.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConfigDto {
+    // [server]
+    pub listen_port: u32,
     // [emby]
     pub player: String,
     pub fullscreen: bool,
@@ -163,6 +171,7 @@ pub struct ConfigDto {
 impl From<&Config> for ConfigDto {
     fn from(c: &Config) -> Self {
         Self {
+            listen_port: c.server.listen_port,
             player: c.emby.player.clone(),
             fullscreen: c.emby.fullscreen,
             disable_audio: c.emby.disable_audio,
@@ -231,6 +240,11 @@ impl From<&Config> for ConfigDto {
 
 #[tauri::command]
 pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
+    let _guard = state.lifecycle_lock.lock().await;
+    start_server_locked(&state).await
+}
+
+async fn start_server_locked(state: &GuiState) -> Result<u16, String> {
     if state.running.load(Ordering::Acquire) {
         return Ok(state.port.load(Ordering::Acquire));
     }
@@ -294,10 +308,10 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
     );
     dl_manager.start_update_db_loop(30);
 
+    let port = u16::try_from(config.server.listen_port)
+        .map_err(|e| format!("invalid listen port: {e}"))?;
     let app_state =
         Arc::new(AppState::new(config, dl_manager, http_client, data_dir));
-
-    let port = 58000u16;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
@@ -345,6 +359,11 @@ pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
 
 #[tauri::command]
 pub async fn stop_server(state: State<'_, GuiState>) -> Result<(), String> {
+    let _guard = state.lifecycle_lock.lock().await;
+    stop_server_locked(&state).await
+}
+
+async fn stop_server_locked(state: &GuiState) -> Result<(), String> {
     if !state.running.load(Ordering::Acquire) {
         return Ok(());
     }
@@ -487,6 +506,9 @@ pub async fn update_config_field(
                 && (key == "log_max_size_mb" || key == "log_max_files")
             {
                 apply_log_rotation(&state, &cfg_dir);
+            }
+            if section == "server" && key == "listen_port" {
+                reload_config(state).await?;
             }
             Ok(())
         }
@@ -750,6 +772,8 @@ pub fn validate_regex(pattern: String) -> Result<(), String> {
 pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
     let working_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let new_config = load_or_default_config(&working_dir)?;
+    let new_port = u16::try_from(new_config.server.listen_port)
+        .map_err(|e| format!("invalid listen port: {e}"))?;
 
     // Apply log level before writing the new config so the level change is
     // visible in the logs that follow.
@@ -766,6 +790,21 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
             ));
         }
     }
+
+    if state.running.load(Ordering::Acquire)
+        && state.port.load(Ordering::Acquire) != new_port
+    {
+        let _guard = state.lifecycle_lock.lock().await;
+        if state.running.load(Ordering::Acquire)
+            && state.port.load(Ordering::Acquire) != new_port
+        {
+            stop_server_locked(&state).await?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            start_server_locked(&state).await?;
+        }
+        return Ok(());
+    }
+    state.port.store(new_port, Ordering::Release);
 
     // Rebuild the upstream and download clients from the new proxy/cert config
     // so toggling the proxy switch applies without restarting the server.
@@ -819,11 +858,12 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
 /// Stop, wait briefly, then restart the server to pick up config changes.
 #[tauri::command]
 pub async fn restart_server(state: State<'_, GuiState>) -> Result<u16, String> {
+    let _guard = state.lifecycle_lock.lock().await;
     if state.running.load(Ordering::Acquire) {
-        stop_server(state.clone()).await?;
+        stop_server_locked(&state).await?;
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
     }
-    start_server(state).await
+    start_server_locked(&state).await
 }
 
 /// Open the configuration directory in the system file manager.
