@@ -70,6 +70,14 @@ pub struct MediaSource {
     pub run_time_ticks: Option<i64>,
     #[serde(rename = "Size", default)]
     pub size: Option<i64>,
+    #[serde(rename = "DirectStreamUrl", default)]
+    pub direct_stream_url: Option<String>,
+    #[serde(rename = "TranscodingUrl", default)]
+    pub transcoding_url: Option<String>,
+    #[serde(rename = "SupportsDirectPlay", default)]
+    pub supports_direct_play: Option<bool>,
+    #[serde(rename = "SupportsDirectStream", default)]
+    pub supports_direct_stream: Option<bool>,
     /// Present when the source belongs to a different item (multi-version).
     #[serde(rename = "ItemId", default)]
     pub item_id: Option<String>,

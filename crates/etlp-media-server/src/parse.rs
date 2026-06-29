@@ -23,7 +23,7 @@ use crate::dto::MediaSource;
 use crate::meta::{emby_title, intro_markers};
 use crate::received::ReceivedData;
 use crate::resolve::{ResolveInput, classify_source, resolve_stream};
-use crate::stream_url::{StreamUrlInput, build_stream_url};
+use crate::stream_url::{StreamUrlInput, absolute_media_url, build_stream_url};
 use crate::subtitle::subtitle_checker;
 use crate::version::select_version_index;
 
@@ -473,10 +473,23 @@ pub async fn parse_received_data_emby(
         video_type: source.video_type.as_deref(),
         server_version,
     });
+    let server_stream_url =
+        absolute_media_url(scheme, netloc, source.transcoding_url.as_deref())
+            .or_else(|| {
+                absolute_media_url(
+                    scheme,
+                    netloc,
+                    source.direct_stream_url.as_deref(),
+                )
+            });
+    let has_server_stream_url = server_stream_url.is_some();
+    if let Some(server_url) = &server_stream_url {
+        stream_url = server_url.clone();
+    }
 
     let is_http_direct_strm = is_strm && strm_direct && is_http_source;
-    let mut stream_netloc = netloc.to_owned();
-    if is_http_direct_strm {
+    let mut stream_netloc = url_netloc(&stream_url);
+    if is_http_direct_strm && !has_server_stream_url {
         stream_url = source_path.clone();
         stream_netloc = url_netloc(&stream_url);
     }
@@ -877,6 +890,129 @@ mod tests {
         let data = parse_sample(&received);
         assert_eq!(data.total_sec, RUNTIME_FALLBACK_SEC);
         assert!(data.runtime_missing());
+    }
+
+    #[test]
+    fn http_strm_uses_server_transcoding_url() {
+        let payload = r#"{
+            "mountDiskEnable": "false",
+            "playbackUrl": "https://e/emby/Items/1182337/PlaybackInfo?X-Emby-Token=KEY",
+            "ApiClient": {
+                "_serverAddress": "https://e",
+                "_serverVersion": "4.9.0.15"
+            },
+            "request": {"headers": {}},
+            "playbackData": {
+                "PlaySessionId": "ps-hls",
+                "MediaSources": [
+                    {
+                        "Id": "src-http-strm",
+                        "Name": "Remote strm",
+                        "Path": "https://nas.example/d/alist/video.mkv",
+                        "Container": "mkv",
+                        "RunTimeTicks": 25552550000,
+                        "Size": 2746294443,
+                        "SupportsDirectPlay": false,
+                        "SupportsDirectStream": false,
+                        "DirectStreamUrl": "/videos/1182337/master.m3u8?direct=1",
+                        "TranscodingUrl": "/videos/1182337/master.m3u8?transcode=1",
+                        "MediaStreams": [
+                            {"Type": "Video", "Index": 0, "Codec": "hevc"},
+                            {"Type": "Audio", "Index": 1, "Codec": "ac3"}
+                        ]
+                    }
+                ]
+            },
+            "extraData": {
+                "mainEpInfo": {
+                    "Id": "1182337",
+                    "Name": "第55集",
+                    "Path": "/alist/电视剧/汉武大帝/S01E55.strm",
+                    "Type": "Episode",
+                    "SeasonId": "s1",
+                    "SeriesName": "汉武大帝",
+                    "IndexNumber": 55,
+                    "ParentIndexNumber": 1
+                },
+                "episodesInfo": [{"Id": "1182337", "IndexNumber": 55}],
+                "playlistInfo": []
+            }
+        }"#;
+        let received: ReceivedData =
+            serde_json::from_str(payload).expect("payload");
+        let data = parse_sample(&received);
+
+        assert!(data.is_strm);
+        assert!(data.is_http_source);
+        assert!(!data.mount_disk_mode);
+        assert_eq!(
+            data.stream_url,
+            "https://e/videos/1182337/master.m3u8?transcode=1"
+        );
+        assert_eq!(data.media_path, data.stream_url);
+        assert!(
+            !data
+                .stream_url
+                .contains("/emby/videos/1182337/original.strm"),
+            "server-provided HLS URL must not be replaced by static strm URL"
+        );
+    }
+
+    #[test]
+    fn transcoding_url_wins_over_strm_direct_host() {
+        let payload = r#"{
+            "mountDiskEnable": "false",
+            "playbackUrl": "https://e/emby/Items/1/PlaybackInfo?X-Emby-Token=KEY",
+            "ApiClient": {
+                "_serverAddress": "https://e",
+                "_serverVersion": "4.9.0.15"
+            },
+            "request": {"headers": {}},
+            "playbackData": {
+                "PlaySessionId": "ps-hls",
+                "MediaSources": [
+                    {
+                        "Id": "src1",
+                        "Path": "https://nas.example/media.mkv",
+                        "Container": "mkv",
+                        "TranscodingUrl": "/videos/1/master.m3u8?api_key=KEY"
+                    }
+                ]
+            },
+            "extraData": {
+                "mainEpInfo": {
+                    "Id": "1",
+                    "Name": "Ep1",
+                    "Path": "/library/Ep1.strm",
+                    "Type": "Episode"
+                },
+                "episodesInfo": [{"Id": "1", "IndexNumber": 1}],
+                "playlistInfo": []
+            }
+        }"#;
+        let received: ReceivedData =
+            serde_json::from_str(payload).expect("payload");
+        let config = EmbyParseConfig {
+            strm_direct_hosts: vec!["e".to_owned()],
+            ..EmbyParseConfig::default()
+        };
+        let http = HttpClient::new().expect("client");
+        let cache = RedirectCache::new();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("rt");
+        let data = rt
+            .block_on(parse_received_data_emby(
+                &received, &config, &http, &cache,
+            ))
+            .expect("parse");
+
+        assert_eq!(
+            data.stream_url,
+            "https://e/videos/1/master.m3u8?api_key=KEY"
+        );
+        assert_eq!(data.media_path, data.stream_url);
+        assert_ne!(data.stream_url, "https://nas.example/media.mkv");
     }
 
     #[test]

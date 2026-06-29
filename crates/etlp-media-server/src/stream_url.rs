@@ -26,6 +26,26 @@ pub struct StreamUrlInput<'a> {
     pub server_version: &'a str,
 }
 
+/// Convert a server-provided media URL to an absolute URL.
+#[must_use]
+pub fn absolute_media_url(
+    scheme: &str,
+    netloc: &str,
+    candidate: Option<&str>,
+) -> Option<String> {
+    let raw = candidate?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if raw.starts_with("http://") || raw.starts_with("https://") {
+        return Some(raw.to_owned());
+    }
+    if raw.starts_with('/') {
+        return Some(format!("{scheme}://{netloc}{raw}"));
+    }
+    None
+}
+
 /// The file extension (including the dot) of a path, lowercased dot kept as-is.
 fn extension_with_dot(file_path: &str) -> String {
     match file_path.rsplit_once('.') {
@@ -98,6 +118,36 @@ mod tests {
         assert_eq!(extension_with_dot("/m/a.mkv"), ".mkv");
         assert_eq!(extension_with_dot("/m/noext"), "");
         assert_eq!(extension_with_dot("/m/a.b.ts"), ".ts");
+    }
+
+    #[test]
+    fn absolute_media_url_uses_absolute_input() {
+        let url = absolute_media_url(
+            "https",
+            "h:8096",
+            Some("https://cdn/media/master.m3u8"),
+        );
+        assert_eq!(url.as_deref(), Some("https://cdn/media/master.m3u8"));
+    }
+
+    #[test]
+    fn absolute_media_url_expands_root_relative_input() {
+        let url = absolute_media_url(
+            "https",
+            "h:8096",
+            Some("/emby/videos/1/master.m3u8"),
+        );
+        assert_eq!(
+            url.as_deref(),
+            Some("https://h:8096/emby/videos/1/master.m3u8")
+        );
+    }
+
+    #[test]
+    fn absolute_media_url_rejects_empty_or_relative_path() {
+        assert!(absolute_media_url("https", "h", Some("")).is_none());
+        assert!(absolute_media_url("https", "h", Some("videos/1")).is_none());
+        assert!(absolute_media_url("https", "h", None).is_none());
     }
 
     #[test]
