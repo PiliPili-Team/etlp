@@ -19,7 +19,7 @@ pub const MPV_LOG_FILE: &str = "mpv.log";
 use etlp_download::{
     DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_PER_DOMAIN, DownloadManager,
 };
-use etlp_net::HttpClientBuilder;
+use etlp_net::{HttpClient, HttpClientBuilder, build_media_download_client};
 use etlp_server::{AppState, SharedState, build_router, platform};
 
 use crate::config_patch::patch_field;
@@ -749,21 +749,10 @@ pub async fn import_bangumi_map_url(
     url: String,
     prefer_imported: bool,
 ) -> Result<serde_json::Value, String> {
-    let client =
-        build_proxied_http_client(Some(std::time::Duration::from_secs(30)))?;
-
-    let resp = client
-        .get(&url)
-        .send()
+    let content = build_proxied_http_client()?
+        .get_text(&url, &[])
         .await
         .map_err(|e| format!("fetch error: {e}"))?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(format!("HTTP {status}"));
-    }
-
-    let content = resp.text().await.map_err(|e| format!("read error: {e}"))?;
     let imported: Vec<String> = serde_json::from_str(&content)
         .map_err(|e| format!("JSON parse error: {e}"))?;
 
@@ -1688,6 +1677,13 @@ pub fn get_app_version() -> &'static str {
 
 /// GitHub repository releases are checked against, in `owner/repo` form.
 const GITHUB_REPO: &str = "PiliPili-Team/etlp";
+const GITHUB_LATEST_RELEASE_API: &str =
+    "https://api.github.com/repos/%s/releases/latest";
+const GITHUB_TAGGED_RELEASE_API: &str =
+    "https://api.github.com/repos/%s/releases/tags/%s";
+const GITHUB_LATEST_RELEASE_PAGE: &str =
+    "https://github.com/%s/releases/latest";
+const GITHUB_API_RETRY_LIMIT: usize = 5;
 
 /// Result of an update check surfaced to the frontend.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -1760,60 +1756,119 @@ fn version_gt(a: &str, b: &str) -> bool {
     false
 }
 
-/// Apply the saved proxy settings to a reqwest client builder.
-///
-/// Proxies are applied per scheme only when `enabled` is set; empty URLs are
-/// skipped. Extracted as a pure function so the proxy wiring is unit-testable
-/// without reading the config from disk.
-fn apply_configured_proxy(
-    mut builder: reqwest::ClientBuilder,
-    enabled: bool,
-    proxy_http: &str,
-    proxy_https: &str,
-) -> Result<reqwest::ClientBuilder, String> {
-    if !enabled {
-        return Ok(builder);
-    }
-    for (raw, kind) in [(proxy_http, "http"), (proxy_https, "https")] {
-        let raw = raw.trim();
-        if raw.is_empty() {
-            continue;
-        }
-        let proxy = match kind {
-            "http" => reqwest::Proxy::http(raw),
-            _ => reqwest::Proxy::https(raw),
-        }
-        .map_err(|e| format!("invalid {kind} proxy {raw:?}: {e}"))?;
-        builder = builder.proxy(proxy);
-    }
-    Ok(builder)
-}
-
-/// Build a reqwest client for outbound GUI requests that honours the saved
+/// Build a HTTP client for outbound GUI requests that honours the saved
 /// proxy settings.
 ///
 /// The config is read on every call, so toggling the proxy switch takes effect
 /// immediately without restarting the app. The standard [`etlp_core::UA_ETLP`]
-/// user agent is always used — callers must not hand-craft one. Pass a
-/// `timeout` for short requests; pass `None` for unbounded transfers such as
-/// downloading a large update asset.
+/// user agent is always used — callers must not hand-craft one.
 fn build_proxied_http_client(
-    timeout: Option<std::time::Duration>,
-) -> Result<reqwest::Client, String> {
+) -> Result<HttpClient, String> {
     let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
     let config = load_or_default_config(&cfg_dir)?;
-    let mut builder = reqwest::Client::builder().user_agent(etlp_core::UA_ETLP);
-    if let Some(timeout) = timeout {
-        builder = builder.timeout(timeout);
-    }
-    apply_configured_proxy(
-        builder,
-        config.dev.proxy_enabled,
-        config.dev.proxy_http.as_deref().unwrap_or_default(),
-        config.dev.proxy_https.as_deref().unwrap_or_default(),
-    )?
-    .build()
+    HttpClientBuilder::new()
+        .proxy_http(config.dev.proxy_http.clone())
+        .proxy_https(config.dev.proxy_https.clone())
+        .proxy_enabled(config.dev.proxy_enabled)
+        .cert_verify(!config.dev.skip_certificate_verify)
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
     .map_err(|e| format!("build http client: {e}"))
+}
+
+fn build_proxied_download_client() -> Result<reqwest::Client, String> {
+    let cfg_dir = platform::config_dir().ok_or_else(err_no_config_dir)?;
+    let config = load_or_default_config(&cfg_dir)?;
+    build_media_download_client(
+        config.dev.proxy_http.clone(),
+        config.dev.proxy_https.clone(),
+        config.dev.proxy_enabled,
+        !config.dev.skip_certificate_verify,
+    )
+    .map_err(|e| format!("build download client: {e}"))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    html_url: Option<String>,
+    #[serde(default)]
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+fn latest_release_api_url() -> String {
+    GITHUB_LATEST_RELEASE_API.replace("%s", GITHUB_REPO)
+}
+
+fn tagged_release_api_url(tag: &str) -> String {
+    GITHUB_TAGGED_RELEASE_API
+        .replacen("%s", GITHUB_REPO, 1)
+        .replacen("%s", tag, 1)
+}
+
+fn latest_release_page_url() -> String {
+    GITHUB_LATEST_RELEASE_PAGE.replace("%s", GITHUB_REPO)
+}
+
+async fn github_release(api: &str) -> Result<GithubRelease, String> {
+    let client = build_proxied_http_client()?;
+    let mut last_error = String::new();
+    for attempt in 1..=GITHUB_API_RETRY_LIMIT {
+        match client.get_json(api, &[]).await {
+            Ok(release) => return Ok(release),
+            Err(e) => {
+                last_error = e.to_string();
+                debug!(
+                    attempt,
+                    max_attempts = GITHUB_API_RETRY_LIMIT,
+                    api,
+                    error = %last_error,
+                    "github release request failed; attempt to retry \
+                     {attempt}/{GITHUB_API_RETRY_LIMIT}"
+                );
+            }
+        }
+    }
+    warn!(
+        attempts = GITHUB_API_RETRY_LIMIT,
+        api,
+        error = %last_error,
+        "github release request failed"
+    );
+    Err(format!(
+        "github release request failed after {GITHUB_API_RETRY_LIMIT} tries: \
+         {last_error}"
+    ))
+}
+
+fn release_asset_url(
+    release: &GithubRelease,
+    filename: &str,
+) -> Result<String, String> {
+    release
+        .assets
+        .iter()
+        .find(|asset| asset.name == filename)
+        .map(|asset| asset.browser_download_url.clone())
+        .ok_or_else(|| {
+            let available = release
+                .assets
+                .iter()
+                .map(|asset| asset.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if available.is_empty() {
+                format!("release asset not found: {filename}")
+            } else {
+                format!("release asset not found: {filename}; available: {available}")
+            }
+        })
 }
 
 /// Check GitHub for the latest release and compare it to the running version.
@@ -1824,35 +1879,22 @@ fn build_proxied_http_client(
 #[tauri::command]
 pub async fn check_update() -> Result<UpdateInfo, String> {
     let current = env!("CARGO_PKG_VERSION").to_owned();
-    let api =
-        format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
-    let fallback_url =
-        format!("https://github.com/{GITHUB_REPO}/releases/latest");
+    let fallback_url = latest_release_page_url();
 
-    let client = build_proxied_http_client(None)?;
-    let resp = client
-        .get(&api)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| format!("update request failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("github api status {}", resp.status().as_u16()));
-    }
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("parse release: {e}"))?;
-    let tag = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_owned();
-    let url = json
-        .get("html_url")
-        .and_then(|v| v.as_str())
-        .map(str::to_owned)
-        .unwrap_or(fallback_url);
+    let release = match github_release(&latest_release_api_url()).await {
+        Ok(release) => release,
+        Err(e) => {
+            debug!(error = %e, "update check failed");
+            return Ok(UpdateInfo {
+                current: current.clone(),
+                latest: current,
+                has_update: false,
+                url: fallback_url,
+            });
+        }
+    };
+    let tag = release.tag_name;
+    let url = release.html_url.unwrap_or(fallback_url);
     let latest = tag.trim_start_matches(['v', 'V']).to_owned();
     let has_update = !latest.is_empty() && version_gt(&latest, &current);
     info!(current, latest, has_update, "update check");
@@ -1920,7 +1962,7 @@ async fn download_file(
     const PROGRESS_INTERVAL: std::time::Duration =
         std::time::Duration::from_millis(120);
 
-    let client = build_proxied_http_client(None)?;
+    let client = build_proxied_download_client()?;
 
     let mut resp = client
         .get(url)
@@ -2279,9 +2321,9 @@ pub async fn download_and_apply_update(
         );
     }
 
-    let url = format!(
-        "https://github.com/{GITHUB_REPO}/releases/download/v{version}/{filename}"
-    );
+    let tag = format!("v{version}");
+    let release = github_release(&tagged_release_api_url(&tag)).await?;
+    let url = release_asset_url(&release, &filename)?;
 
     // Portable installations stage updates inside the exe directory;
     // installer builds use the system temp directory (auto-cleaned on reboot).
@@ -2720,27 +2762,14 @@ fn default_config_template() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        GuiState, apply_configured_proxy, configured_listen_port,
+        GithubRelease, GithubReleaseAsset, GuiState, configured_listen_port,
         is_listen_port_field, listen_port_changed, read_lines_before,
-        scan_system_fonts, version_gt,
+        release_asset_url, scan_system_fonts, version_gt,
     };
     use std::io::Write as _;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
-
-    #[test]
-    fn apply_configured_proxy_disabled_keeps_builder_usable() {
-        // Disabled: proxy URLs are ignored and the builder still builds.
-        let builder = apply_configured_proxy(
-            reqwest::Client::builder(),
-            false,
-            "http://127.0.0.1:7890",
-            "http://127.0.0.1:7890",
-        )
-        .expect("disabled should be ok");
-        assert!(builder.build().is_ok());
-    }
 
     #[test]
     fn listen_port_field_is_detected_exactly() {
@@ -2795,26 +2824,6 @@ mod tests {
     }
 
     #[test]
-    fn apply_configured_proxy_enabled_applies_valid_proxies() {
-        // Enabled with valid HTTP/HTTPS proxies builds successfully;
-        // empty entries are skipped.
-        let builder = apply_configured_proxy(
-            reqwest::Client::builder(),
-            true,
-            "http://127.0.0.1:7890",
-            "http://127.0.0.1:7890",
-        )
-        .expect("valid proxies should be ok");
-        assert!(builder.build().is_ok());
-
-        // Enabled but all empty is a no-op that still builds.
-        let builder =
-            apply_configured_proxy(reqwest::Client::builder(), true, "", "")
-                .expect("empty proxies should be ok");
-        assert!(builder.build().is_ok());
-    }
-
-    #[test]
     fn scan_always_includes_cross_platform_presets() {
         // Presets are prepended regardless of what is installed, so the picker
         // is never empty even on a machine with no scannable font files.
@@ -2842,6 +2851,31 @@ mod tests {
         // Missing trailing components count as zero.
         assert!(version_gt("1.2", "1.1.9"));
         assert!(!version_gt("1.2", "1.2.0"));
+    }
+
+    #[test]
+    fn release_asset_url_uses_github_asset_metadata() {
+        let release = GithubRelease {
+            tag_name: "v0.0.18".to_owned(),
+            html_url: None,
+            assets: vec![
+                GithubReleaseAsset {
+                    name: "Genshin_0.0.18_x64-setup.exe".to_owned(),
+                    browser_download_url: "https://download/setup".to_owned(),
+                },
+                GithubReleaseAsset {
+                    name: "Genshin_0.0.18_aarch64.dmg".to_owned(),
+                    browser_download_url: "https://download/dmg".to_owned(),
+                },
+            ],
+        };
+
+        assert_eq!(
+            release_asset_url(&release, "Genshin_0.0.18_aarch64.dmg")
+                .expect("asset"),
+            "https://download/dmg"
+        );
+        assert!(release_asset_url(&release, "missing.AppImage").is_err());
     }
 
     fn write_tmp(content: &str) -> tempfile::NamedTempFile {

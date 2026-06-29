@@ -67,6 +67,17 @@ impl SyncProxy {
     }
 }
 
+fn normalize_proxy_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if raw.contains("://") {
+        return Some(raw.to_owned());
+    }
+    Some(format!("http://{raw}"))
+}
+
 /// Build a `reqwest::Client` with the given `timeout` and optional proxy.
 ///
 /// When `proxy.enabled` is `false` or no proxy URLs are configured, a direct
@@ -94,11 +105,32 @@ pub(crate) fn build_http_client(
                     "http" => ph.as_deref(),
                     _ => ps.as_deref().or(ph.as_deref()),
                 };
-                candidate.and_then(|u| url::Url::parse(u).ok())
+                candidate.and_then(|u| {
+                    normalize_proxy_url(u)
+                        .and_then(|url| url.parse::<url::Url>().ok())
+                })
             });
             builder = builder.proxy(custom);
         }
     }
 
     builder.build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_proxy_url;
+
+    #[test]
+    fn proxy_url_accepts_host_port_and_full_url() {
+        assert_eq!(
+            normalize_proxy_url("127.0.0.1:7890").as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(
+            normalize_proxy_url("http://127.0.0.1:7890").as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(normalize_proxy_url("   "), None);
+    }
 }

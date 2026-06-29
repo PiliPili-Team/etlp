@@ -6,16 +6,14 @@
 
 use std::time::Duration;
 
+use crate::UA_ETLP;
+use crate::url_tools::{build_referer, safe_url};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, LOCATION, REFERER, USER_AGENT};
 use reqwest::redirect::Policy;
 use reqwest::{Client, Method, Proxy};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use url::Url;
-
-use crate::UA_ETLP;
-use crate::url_tools::{build_referer, safe_url};
 
 /// Emit a DEBUG-level curl equivalent for the outgoing request.
 fn log_curl(
@@ -213,6 +211,17 @@ fn is_bypass_host(host: &str, full_url: &str) -> bool {
 
 type ProxyPair = (Option<String>, Option<String>);
 
+fn normalize_proxy_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if raw.contains("://") {
+        return Some(raw.to_owned());
+    }
+    Some(format!("http://{raw}"))
+}
+
 fn build_inner(
     proxies: &Option<ProxyPair>,
     cert_verify: bool,
@@ -281,7 +290,8 @@ fn custom_proxy(
                 proxy = %proxy_url,
                 "http_client: routing via proxy"
             );
-            Url::parse(proxy_url).ok()
+            normalize_proxy_url(proxy_url)
+                .and_then(|url| url.parse::<url::Url>().ok())
         })
     }))
 }
@@ -530,7 +540,7 @@ mod tests {
         // Proxy disabled: direct client builds even with URLs present.
         assert!(
             build_media_download_client(
-                Some("http://127.0.0.1:7890".to_owned()),
+                Some("127.0.0.1:7890".to_owned()),
                 None,
                 false,
                 true,
@@ -540,7 +550,7 @@ mod tests {
         // Proxy enabled with valid URLs builds successfully.
         assert!(
             build_media_download_client(
-                Some("http://127.0.0.1:7890".to_owned()),
+                Some("127.0.0.1:7890".to_owned()),
                 Some("http://127.0.0.1:7890".to_owned()),
                 true,
                 true,
@@ -549,6 +559,19 @@ mod tests {
         );
         // Enabled but no URLs is a direct client (no proxy attached).
         assert!(build_media_download_client(None, None, true, true).is_ok());
+    }
+
+    #[test]
+    fn proxy_url_accepts_host_port_and_full_url() {
+        assert_eq!(
+            normalize_proxy_url("127.0.0.1:7890").as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(
+            normalize_proxy_url("http://127.0.0.1:7890").as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(normalize_proxy_url("   "), None);
     }
 
     #[derive(Debug, Deserialize, PartialEq, Eq)]
