@@ -866,6 +866,31 @@ speed_dummy = 1.5
     }
 
     #[test]
+    fn listen_port_bounds_are_normalized_on_load() {
+        let dir = tempdir().expect("tempdir");
+
+        write_config(dir.path(), "config.toml", "[server]\nlisten_port = 0\n");
+        let cfg = Config::load_from_dir(dir.path()).expect("load low port");
+        assert_eq!(cfg.server.listen_port, LISTEN_PORT_MIN);
+
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[server]\nlisten_port = 65535\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load max port");
+        assert_eq!(cfg.server.listen_port, LISTEN_PORT_MAX);
+
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[server]\nlisten_port = 65536\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load high port");
+        assert_eq!(cfg.server.listen_port, LISTEN_PORT_MAX);
+    }
+
+    #[test]
     fn bangumi_section_parses_custom_values() {
         let dir = tempdir().expect("tempdir");
         write_config(

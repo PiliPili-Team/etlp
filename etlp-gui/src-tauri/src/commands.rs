@@ -457,6 +457,24 @@ fn apply_log_rotation(state: &GuiState, cfg_dir: &std::path::Path) {
     }
 }
 
+fn is_listen_port_field(section: &str, key: &str) -> bool {
+    section == "server" && key == "listen_port"
+}
+
+fn config_listen_port(config: &Config) -> Result<u16, String> {
+    u16::try_from(config.server.listen_port)
+        .map_err(|e| format!("invalid listen port: {e}"))
+}
+
+fn configured_listen_port(cfg_dir: &std::path::Path) -> Result<u16, String> {
+    let config = load_or_default_config(cfg_dir)?;
+    config_listen_port(&config)
+}
+
+fn listen_port_changed(previous: u16, next: u16) -> bool {
+    previous != next
+}
+
 /// Patch exactly one field in the config file without rewriting the rest.
 ///
 /// `section` is the TOML table name (e.g. `"emby"`, `"dev"`, `"playlist"`).
@@ -480,6 +498,12 @@ pub async fn update_config_field(
     if !path.exists() {
         write_default_config(&path)?;
     }
+
+    let previous_listen_port = if is_listen_port_field(&section, &key) {
+        Some(configured_listen_port(&cfg_dir)?)
+    } else {
+        None
+    };
 
     match patch_field(&path, &section, &key, &value) {
         Ok(()) => {
@@ -507,8 +531,16 @@ pub async fn update_config_field(
             {
                 apply_log_rotation(&state, &cfg_dir);
             }
-            if section == "server" && key == "listen_port" {
-                reload_config(state).await?;
+            if let Some(previous) = previous_listen_port {
+                let next = configured_listen_port(&cfg_dir)?;
+                if listen_port_changed(previous, next) {
+                    reload_config(state).await?;
+                } else {
+                    debug!(
+                        port = next,
+                        "listen port unchanged; skipping server reload"
+                    );
+                }
             }
             Ok(())
         }
@@ -2684,10 +2716,14 @@ fn default_config_template() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_configured_proxy, read_lines_before, scan_system_fonts,
-        version_gt,
+        GuiState, apply_configured_proxy, configured_listen_port,
+        is_listen_port_field, listen_port_changed, read_lines_before,
+        scan_system_fonts, version_gt,
     };
     use std::io::Write as _;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
 
     #[test]
     fn apply_configured_proxy_disabled_keeps_builder_usable() {
@@ -2700,6 +2736,58 @@ mod tests {
         )
         .expect("disabled should be ok");
         assert!(builder.build().is_ok());
+    }
+
+    #[test]
+    fn listen_port_field_is_detected_exactly() {
+        assert!(is_listen_port_field("server", "listen_port"));
+        assert!(!is_listen_port_field("server", "other"));
+        assert!(!is_listen_port_field("dev", "listen_port"));
+    }
+
+    #[test]
+    fn listen_port_change_detector_ignores_equal_ports() {
+        assert!(!listen_port_changed(58_000, 58_000));
+        assert!(listen_port_changed(58_000, 58_001));
+    }
+
+    #[test]
+    fn configured_listen_port_reads_normalized_value() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[server]\nlisten_port = 70000\n")
+            .expect("write config");
+
+        let port = configured_listen_port(dir.path()).expect("port");
+        assert_eq!(port, u16::MAX);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_lock_serializes_concurrent_port_work() {
+        let state = Arc::new(GuiState::default());
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let mut tasks = Vec::new();
+
+        for _ in 0..8 {
+            let state = Arc::clone(&state);
+            let active = Arc::clone(&active);
+            let max_active = Arc::clone(&max_active);
+            tasks.push(tokio::spawn(async move {
+                let _guard = state.lifecycle_lock.lock().await;
+                let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                max_active.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                active.fetch_sub(1, Ordering::SeqCst);
+            }));
+        }
+
+        for task in tasks {
+            task.await.expect("task");
+        }
+
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
     }
 
     #[test]
