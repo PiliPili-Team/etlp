@@ -40,7 +40,7 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 ttf-parser = "0.25"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-window-vibrancy = "0.7"
+window-vibrancy = "0.6"
 sys-locale = "0.3"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
