@@ -151,6 +151,11 @@ export const zhCN = {
     sys_autostart_desc: "登录后自动启动应用",
     sys_silent_start: "静默启动",
     sys_silent_start_desc: "启动时不弹出主窗口，仅在托盘运行（配合开机自启更安静）",
+    sys_service: "本地服务",
+    sys_listen_port: "监听端口",
+    sys_listen_port_desc:
+        "浏览器油猴脚本连接本机服务使用的端口；修改后会自动重启服务，需与油猴脚本端口保持一致",
+    sys_listen_port_invalid: "端口必须在 1–65535 之间，已自动修正",
     sys_logs_title: "日志",
     sys_log_level: "日志级别",
     sys_log_level_desc: "调试时可设置为「调试」获取更多信息",

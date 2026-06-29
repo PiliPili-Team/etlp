@@ -157,6 +157,11 @@ export const ko: typeof zhCN = {
     sys_silent_start: "조용히 시작",
     sys_silent_start_desc:
         "메인 창을 표시하지 않고 트레이에 숨긴 채 시작합니다 (로그인 시 실행과 함께 사용하면 더 조용합니다)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "로그",
     sys_log_level: "로그 레벨",
     sys_log_level_desc: "문제 해결 시 더 자세한 출력을 위해 Debug로 설정합니다",

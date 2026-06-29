@@ -157,6 +157,11 @@ export const he: typeof zhCN = {
     sys_silent_start: "הפעלה שקטה",
     sys_silent_start_desc:
         "הפעל מוסתר בסל המערכת ללא הצגת החלון הראשי (שקט יותר עם הפעלה בכניסה)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "יומנים",
     sys_log_level: "רמת יומן",
     sys_log_level_desc: "הגדר Debug לפלט מפורט יותר בניפוי שגיאות",

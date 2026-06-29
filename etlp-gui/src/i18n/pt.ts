@@ -160,6 +160,11 @@ export const pt: typeof zhCN = {
     sys_silent_start: "Arranque silencioso",
     sys_silent_start_desc:
         "Iniciar oculto na bandeja sem mostrar a janela principal (mais discreto com o arranque ao iniciar sessão)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "Registos",
     sys_log_level: "Nível de registo",
     sys_log_level_desc:

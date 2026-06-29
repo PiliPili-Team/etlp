@@ -161,6 +161,11 @@ export const de: typeof zhCN = {
     sys_silent_start: "Stiller Start",
     sys_silent_start_desc:
         "Versteckt im Infobereich starten, ohne das Hauptfenster anzuzeigen (in Kombination mit Autostart unauffälliger)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "Protokolle",
     sys_log_level: "Protokollstufe",
     sys_log_level_desc: "Für ausführlichere Ausgabe bei der Fehlersuche auf Debug setzen",

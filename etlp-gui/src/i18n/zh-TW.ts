@@ -154,6 +154,11 @@ export const zhTW: typeof zhCN = {
     sys_autostart_desc: "登入後自動啟動應用",
     sys_silent_start: "靜默啟動",
     sys_silent_start_desc: "啟動時不彈出主視窗，僅在系統匣執行（搭配開機自動啟動更安靜）",
+    sys_service: "本機服務",
+    sys_listen_port: "監聽連接埠",
+    sys_listen_port_desc:
+        "瀏覽器油猴腳本連接本機服務使用的連接埠；修改後會自動重新啟動服務，需與油猴腳本連接埠保持一致",
+    sys_listen_port_invalid: "連接埠必須在 1–65535 之間，已自動修正",
     sys_logs_title: "日誌",
     sys_log_level: "日誌級別",
     sys_log_level_desc: "除錯時可設定為「除錯」取得更多資訊",

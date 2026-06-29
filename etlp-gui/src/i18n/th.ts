@@ -158,6 +158,11 @@ export const th: typeof zhCN = {
     sys_silent_start: "เริ่มต้นแบบเงียบ",
     sys_silent_start_desc:
         "เริ่มซ่อนอยู่ใน system tray โดยไม่แสดงหน้าต่างหลัก (เงียบกว่าเมื่อใช้กับการเริ่มเมื่อเข้าสู่ระบบ)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "บันทึก",
     sys_log_level: "ระดับบันทึก",
     sys_log_level_desc:

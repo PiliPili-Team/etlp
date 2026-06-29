@@ -159,6 +159,11 @@ export const ru: typeof zhCN = {
     sys_silent_start: "Тихий запуск",
     sys_silent_start_desc:
         "Запускать скрыто в трее, не показывая главное окно (тише в сочетании с запуском при входе)",
+    sys_service: "Local Service",
+    sys_listen_port: "Listen Port",
+    sys_listen_port_desc:
+        "Port used by the browser userscript to reach the local service. Changing it restarts the service automatically and must match the userscript port.",
+    sys_listen_port_invalid: "Port must be between 1 and 65535; corrected automatically",
     sys_logs_title: "Журналы",
     sys_log_level: "Уровень журнала",
     sys_log_level_desc:

@@ -75,6 +75,32 @@ pub const LOG_MAX_SIZE_MB_MAX: u64 = 200;
 pub const LOG_MAX_FILES_MIN: usize = 1;
 pub const LOG_MAX_FILES_MAX: usize = 14;
 
+/// Default local HTTP listen port. Kept at the historical value so existing
+/// userscripts and installations continue to work after migration.
+pub const DEFAULT_LISTEN_PORT: u32 = 58_000;
+
+/// Smallest valid TCP port accepted for the local HTTP server.
+pub const LISTEN_PORT_MIN: u32 = 1;
+
+/// Largest valid TCP port accepted for the local HTTP server.
+pub const LISTEN_PORT_MAX: u32 = u16::MAX as u32;
+
+/// `[server]` section — local HTTP service options.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ServerSection {
+    /// Local HTTP listen port for the browser userscript and callbacks.
+    pub listen_port: u32,
+}
+
+impl Default for ServerSection {
+    fn default() -> Self {
+        Self {
+            listen_port: DEFAULT_LISTEN_PORT,
+        }
+    }
+}
+
 /// `[dev]` section — developer / advanced options.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -468,6 +494,7 @@ pub struct PathMapEntry {
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 struct RawConfig {
+    server: ServerSection,
     emby: EmbySection,
     dev: DevSection,
     playlist: PlaylistSection,
@@ -487,6 +514,7 @@ struct RawConfig {
 /// silently fall back to the documented defaults.
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub server: ServerSection,
     pub emby: EmbySection,
     pub dev: DevSection,
     pub playlist: PlaylistSection,
@@ -613,6 +641,10 @@ impl Config {
         // entry points (file, reload, in-memory defaults) funnel through, so a
         // hand-edited config can never bypass a GUI-enforced limit: the stored
         // values the rest of the app and the GUI observe are always in range.
+        let mut server = raw.server;
+        server.listen_port =
+            server.listen_port.clamp(LISTEN_PORT_MIN, LISTEN_PORT_MAX);
+
         let mut dev = raw.dev;
         dev.log_max_size_mb = dev
             .log_max_size_mb
@@ -634,6 +666,7 @@ impl Config {
             .max(MIN_BANGUMI_THROTTLE_SECS);
 
         Self {
+            server,
             emby: raw.emby,
             dev,
             playlist,
@@ -657,6 +690,9 @@ const DEFAULT_CONFIG_TOML: &str = "\
 # player = \"mpv\"
 # fullscreen = false
 # disable_audio = false
+
+[server]
+# listen_port = 58000
 
 [dev]
 # log_level = \"info\"
@@ -724,6 +760,7 @@ speed_dummy = 1.5
         assert!(cfg.dev.kill_process_at_start);
         assert_eq!(cfg.playlist.item_limit, 0);
         assert_eq!(cfg.dandan.port, 8080);
+        assert_eq!(cfg.server.listen_port, DEFAULT_LISTEN_PORT);
         assert_eq!(cfg.gui.speed_limit_mb, 0);
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
@@ -807,13 +844,16 @@ speed_dummy = 1.5
         write_config(
             dir.path(),
             "config.toml",
-            "[dev]\n\
+            "[server]\n\
+             listen_port = 99999\n\
+             [dev]\n\
              log_max_size_mb = 99999\n\
              log_max_files = 0\n\
              [playlist]\n\
              item_limit = 5000\n",
         );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.server.listen_port, LISTEN_PORT_MAX);
         assert_eq!(cfg.dev.log_max_size_mb, LOG_MAX_SIZE_MB_MAX);
         assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
         // item_limit has no upper cap; value is stored as-is.

@@ -18,6 +18,7 @@ import type { I18nKey } from "../i18n";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface ConfigDto {
+    listen_port: number;
     player: string;
     fullscreen: boolean;
     disable_audio: boolean;
@@ -285,6 +286,8 @@ function InputRow({
 // Log-rotation bounds, mirroring etlp_logging::rotate (the backend clamps to
 // the same range as a defensive backstop for a hand-edited config).
 const DUP_THROTTLE_MIN = 120;
+const LISTEN_PORT_MIN = 1;
+const LISTEN_PORT_MAX = 65535;
 const LOG_MAX_SIZE_MIN = 20;
 const LOG_MAX_SIZE_MAX = 200;
 const LOG_MAX_FILES_MAX = 14;
@@ -1051,10 +1054,15 @@ export default function Settings({
                 // both shapes so optimistic UI (e.g. toggles bound directly to
                 // cfg) reflects immediately regardless of the field's naming.
                 const flat = key.replace(/\./g, "_");
+                const direct =
+                    sec === "server" && flat === "listen_port"
+                        ? { listen_port: value }
+                        : {};
                 setCfg((prev) =>
                     prev
                         ? ({
                               ...prev,
+                              ...direct,
                               [flat]: value,
                               [`${sec}_${flat}`]: value,
                           } as ConfigDto)
@@ -2130,6 +2138,20 @@ function SystemSection({
                     desc={t("sys_silent_start_desc")}
                     checked={cfg.silent_start}
                     onChange={(v) => update("gui", "silent_start", v)}
+                />
+            </div>
+
+            {/* Local service */}
+            <div className="settings-group-title">{t("sys_service")}</div>
+            <div className="settings-group">
+                <NumberRow
+                    label={t("sys_listen_port")}
+                    desc={t("sys_listen_port_desc")}
+                    value={cfg.listen_port}
+                    min={LISTEN_PORT_MIN}
+                    max={LISTEN_PORT_MAX}
+                    onCommit={(v) => update("server", "listen_port", v)}
+                    onClamp={() => addToast(t("sys_listen_port_invalid"), true)}
                 />
             </div>
 
@@ -3419,23 +3441,31 @@ const TMDB_EXAMPLE_KEY = "C2ZNPRRG8GPQXMKB9MUOHO2NWIPPLJSJ";
 
 // ── Trakt ──────────────────────────────────────────────────────────────────────
 
-/** Redirect URI the user must register on their Trakt application. Must match
- *  the `/trakt_auth` callback the local server serves on the default port. */
-const TRAKT_REDIRECT_URI = "http://localhost:58000/trakt_auth";
 const TRAKT_APPS_URL = "https://trakt.tv/oauth/applications";
 const TRAKT_DASHBOARD_URL = "https://trakt.tv/dashboard";
+
+function traktRedirectUri(port: number): string {
+    const safePort =
+        Number.isInteger(port) && port >= LISTEN_PORT_MIN && port <= LISTEN_PORT_MAX
+            ? port
+            : 58000;
+    return `http://localhost:${safePort}/trakt_auth`;
+}
 
 /** Inline setup instructions for creating a Trakt application: a link to the
  *  Trakt apps page and the redirect URI to register, with a copy button. */
 function TraktSetupGuide({
+    port,
     addToast,
 }: {
+    port: number;
     addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
+    const redirectUri = traktRedirectUri(port);
     const copyRedirect = async () => {
         try {
-            await navigator.clipboard.writeText(TRAKT_REDIRECT_URI);
+            await navigator.clipboard.writeText(redirectUri);
             addToast(t("sys_trakt_setup_copied"));
         } catch {
             addToast(t("sys_trakt_setup_copy_failed"), true);
@@ -3459,7 +3489,7 @@ function TraktSetupGuide({
                 <li>{t("sys_trakt_setup_step2")}</li>
             </ol>
             <div className="settings-note-copy">
-                <code>{TRAKT_REDIRECT_URI}</code>
+                <code>{redirectUri}</code>
                 <button className="btn" onClick={() => void copyRedirect()}>
                     {t("sys_trakt_setup_copy")}
                 </button>
@@ -3518,7 +3548,7 @@ function TraktSection({
                 {t("sys_trakt_setup_title")}
             </div>
             <div className="settings-group">
-                <TraktSetupGuide addToast={addToast} />
+                <TraktSetupGuide port={cfg.listen_port} addToast={addToast} />
             </div>
 
             <div className="settings-group">
