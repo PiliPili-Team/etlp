@@ -141,7 +141,7 @@ pub async fn update_progress(
 
 /// Mark an item as fully played on the originating server.
 ///
-/// Called when `disable_progress_report = true` but the user watched past 90 %
+/// Called when `disable_progress_report = true` but the completion threshold
 /// of the runtime, so the item should still be recorded as seen.  Only Emby
 /// and Jellyfin support this endpoint; Plex is skipped silently.
 pub async fn mark_as_played(

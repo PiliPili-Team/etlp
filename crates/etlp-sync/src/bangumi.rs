@@ -51,6 +51,13 @@ const PATH_ME: &str = "me";
 /// Capacity of the in-process BGM read cache (number of distinct keys).
 const BGM_CACHE_CAPACITY: u64 = 2048;
 
+/// Minimum title score for an aired candidate without rank/rating to survive
+/// API pre-screening.
+const UNRANKED_AIRED_TITLE_SIMILARITY: f64 = 0.9;
+
+/// Minimum title score required after the wider fuzzy premiere-date retry.
+const FUZZY_RETRY_TITLE_MIN_SCORE: f64 = 0.9;
+
 /// Raw JSON cache for BGM read-only API responses.
 ///
 /// Keyed by an opaque string (`"search:{kw}:{from}"`, `"subject:{id}"`, …).
@@ -1010,9 +1017,9 @@ impl BangumiApi {
                 // content that has not yet aired and should not intercept a
                 // genuine search result.
                 // Exception: when the air_date is today-or-earlier AND the
-                // title similarity is very high (≥ 0.9), the entry is a rare
-                // or newly-aired title that simply hasn't accumulated ratings
-                // yet — allow it through.
+                // title similarity is very high, the entry is a rare or
+                // newly-aired title that simply hasn't accumulated ratings yet
+                // — allow it through.
                 let has_rank = e.rank.is_some();
                 let has_score =
                     e.rating.as_ref().is_some_and(|r| r.score > 0.0);
@@ -1022,8 +1029,7 @@ impl BangumiApi {
                         .as_deref()
                         .zip(today.as_deref())
                         .is_some_and(|(ad, td)| ad <= td);
-                    const HIGH_SIM: f64 = 0.9;
-                    if !(is_aired && sim >= HIGH_SIM) {
+                    if !(is_aired && sim >= UNRANKED_AIRED_TITLE_SIMILARITY) {
                         debug!(
                             subject_id = e.id,
                             name = %name,
@@ -1674,8 +1680,8 @@ fn select_by_title(
 
 /// Fuzzy variant of [`select_subject_by_start_date`] used in Stage 2.4.
 ///
-/// Identical logic, but enforces a **0.9 title-similarity minimum** on the
-/// final winner to compensate for the wider ±15-day premiere-date window that
+/// Identical logic, but enforces a strict title-similarity minimum on the final
+/// winner to compensate for the wider ±15-day premiere-date window that
 /// produces the candidate pool.  A low-similarity winner from a tight date
 /// window is usually correct; from a 15-day window it is more likely a false
 /// positive, so the stricter gate is justified.
@@ -1686,8 +1692,6 @@ fn select_subject_by_start_date_fuzzy(
     anchor_date: &str,
     details: &[crate::bangumi_web::SubjectDetail],
 ) -> Option<u64> {
-    const FUZZY_TITLE_MIN_SCORE: f64 = 0.9;
-
     let with_dates: Vec<(&crate::bangumi_web::SubjectDetail, i64)> = details
         .iter()
         .filter_map(|d| {
@@ -1747,12 +1751,12 @@ fn select_subject_by_start_date_fuzzy(
     });
 
     let &(best, best_id) = scored.first()?;
-    if best < FUZZY_TITLE_MIN_SCORE {
+    if best < FUZZY_RETRY_TITLE_MIN_SCORE {
         warn!(
             series,
             best_score = best,
-            min_required = FUZZY_TITLE_MIN_SCORE,
-            "bangumi: fuzzy retry — title similarity below 0.9 threshold, \
+            min_required = FUZZY_RETRY_TITLE_MIN_SCORE,
+            "bangumi: fuzzy retry — title similarity below threshold, \
              add an ID mapping in Settings → Bangumi"
         );
         return None;
@@ -1849,7 +1853,7 @@ pub async fn resolve_by_web_scrape_with_chain(
     // nothing, widen the premiere lower-bound from −2 days to −15 days and
     // repeat with a fresh per-call cache (the existing cache would serve the
     // previous empty v0 result and bypass the retry).  The title similarity
-    // threshold is raised to 0.9 to compensate for the wider date window.
+    // threshold is raised to compensate for the wider date window.
     if details.is_empty() {
         // Selection anchor stays the current season's premiere (falling back to
         // the floor); only the search window is widened, floor − 15 days.

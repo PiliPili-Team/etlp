@@ -1258,14 +1258,12 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             && !allow_duplicate
             && state.sync_recently_done(&key, trakt_throttle);
 
-        // Two APIs, split by progress so each does its own job and a watch is
-        // never recorded twice:
-        // - Finished (≥ the completion threshold): add to `/sync/history`, the
-        //   reliable "watched" mark (matches the reference implementation).
-        // - Not finished: a single `scrobble/stop` at the real progress, which
-        //   `/sync/history` cannot express — Trakt still scrobbles it watched
-        //   at ≥ 80 %, or saves the resume position between 1 % and 79 %.
-        //   Progress is floored to 1 % so Trakt does not reject it (HTTP 422).
+        // Two APIs, split by the shared completion threshold so each does its
+        // own job and a watch is never recorded twice:
+        // - Finished: add to `/sync/history`, the reliable "watched" mark.
+        // - Not finished: send one `scrobble/stop` at the real progress so
+        //   Trakt saves the resume position. Progress is floored to 1 % so
+        //   Trakt does not reject it (HTTP 422).
         // build_trakt_item logs the reason when it yields None.
         if throttled {
             debug!(item = %data.media_title, "trakt: throttled, current skip");
@@ -1338,12 +1336,6 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
 /// Minimum watched percentage for the current episode to be marked watched on
 /// Bangumi.
 ///
-/// Bangumi has no per-episode progress, so an episode is either marked watched
-/// or not at all. Only playback that passes this threshold counts as finished;
-/// below it the current episode is left unmarked rather than recorded on a
-/// partial view.
-const BANGUMI_WATCHED_PERCENT: f64 = 80.0;
-
 /// Sync all completed entries to Bangumi (bgm.tv) when configured.
 ///
 /// Reads `[bangumi]` from the config. Silently skips when `access_token` is
@@ -1579,13 +1571,14 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // view of an episode: the current episode is marked watched only once
         // playback passes the completion threshold, and left unmarked below it
         // rather than recorded on a brief sample.
-        let current_watched = entry.progress >= BANGUMI_WATCHED_PERCENT;
+        let current_watched = entry.completed;
         if !current_watched {
             info!(
                 item = %data.media_title,
                 progress = entry.progress as i64,
-                "bangumi: progress below {BANGUMI_WATCHED_PERCENT:.0}%, \
-                 current episode not marked"
+                threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
+                "bangumi: progress below completion threshold, current episode \
+                 not marked"
             );
         }
 

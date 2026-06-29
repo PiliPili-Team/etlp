@@ -420,10 +420,11 @@ pub struct BangumiSection {
     /// highest-priority subject resolver (see `etlp-sync::bangumi_map`).
     #[serde(default)]
     pub subject_map: Vec<String>,
-    /// When enabled (default), a partial view (progress < 80 %) still registers
-    /// the subject as "watching" so it appears in the user's collection. When
-    /// disabled, the "watching" mark is skipped for partial views; the subject
-    /// is only collected once an episode crosses the 80 % watched threshold.
+    /// When enabled (default), a partial view below the shared completion
+    /// threshold still registers the subject as "watching" so it appears in
+    /// the user's collection. When disabled, the "watching" mark is skipped
+    /// for partial views; the subject is only collected once an episode
+    /// crosses the completion threshold.
     #[serde(default = "default_true")]
     pub mark_watching: bool,
     /// When enabled, automatically upgrade a subject's collection state from

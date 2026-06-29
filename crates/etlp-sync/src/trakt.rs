@@ -122,9 +122,9 @@ pub enum ScrobbleAction {
     /// `POST /scrobble/pause` — save the playback position without ever marking
     /// the item watched, regardless of progress.
     Pause,
-    /// `POST /scrobble/stop` — Trakt decides by progress: at ≥ 80 % it marks the
-    /// item watched and writes history; between 1 % and 79 % it saves the
-    /// position to `/sync/playback` for resume; below 1 % it returns 422.
+    /// `POST /scrobble/stop` — report the final progress to Trakt's scrobble
+    /// endpoint. etlp sends completed items to history instead, and uses this
+    /// action for in-progress items so Trakt can save the resume position.
     Stop,
 }
 
@@ -582,9 +582,9 @@ impl TraktApi {
     /// Report playback for one movie/episode via the scrobble API.
     ///
     /// `progress` is the watched percentage (`0.0..=100.0`).
-    /// [`ScrobbleAction::Stop`] at ≥ 80 % makes Trakt mark the item watched and
-    /// add it to history; [`ScrobbleAction::Pause`] always leaves it in the
-    /// in-progress / "currently watching" state so it surfaces under Up Next.
+    /// [`ScrobbleAction::Stop`] reports final progress to Trakt;
+    /// [`ScrobbleAction::Pause`] always leaves it in the in-progress /
+    /// "currently watching" state so it surfaces under Up Next.
     ///
     /// A `409 Conflict` (an identical scrobble still in flight) is treated as a
     /// successful no-op rather than an error.

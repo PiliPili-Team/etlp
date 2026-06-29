@@ -11,6 +11,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{IntroMarkers, Server, Subtitle};
 
+/// Fraction of a media item's runtime required to treat playback as complete.
+pub const PLAYBACK_COMPLETION_RATIO: f64 = 0.8;
+
+/// Playback completion threshold expressed as a percentage.
+pub const PLAYBACK_COMPLETION_PERCENT: f64 = PLAYBACK_COMPLETION_RATIO * 100.0;
+
 /// A full playback context for one media item.
 ///
 /// Connection/identity fields drive progress write-back; media fields drive
@@ -166,6 +172,24 @@ impl PlaybackData {
             stop_sec as f64 / self.total_sec as f64
         }
     }
+
+    /// Watched percentage in `[0, 100]`, guarding against a zero runtime.
+    #[must_use]
+    pub fn progress_percent(&self, stop_sec: i64) -> f64 {
+        (self.progress_fraction(stop_sec) * 100.0).clamp(0.0, 100.0)
+    }
+
+    /// Whether `stop_sec` reaches the shared completion threshold.
+    #[must_use]
+    pub fn is_complete_at(&self, stop_sec: i64) -> bool {
+        self.progress_fraction(stop_sec) >= PLAYBACK_COMPLETION_RATIO
+    }
+
+    /// Whether a watched percentage reaches the shared completion threshold.
+    #[must_use]
+    pub fn is_complete_percent(progress: f64) -> bool {
+        progress >= PLAYBACK_COMPLETION_PERCENT
+    }
 }
 
 #[cfg(test)]
@@ -196,6 +220,19 @@ mod tests {
         assert!((d.progress_fraction(100) - 0.0).abs() < 1e-9);
         d.total_sec = 200;
         assert!((d.progress_fraction(100) - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn completion_threshold_is_eighty_percent() {
+        let d = PlaybackData {
+            total_sec: 100,
+            ..PlaybackData::default()
+        };
+        assert!(!d.is_complete_at(79));
+        assert!(d.is_complete_at(80));
+        assert_eq!(PLAYBACK_COMPLETION_PERCENT, 80.0);
+        assert!(!PlaybackData::is_complete_percent(79.9));
+        assert!(PlaybackData::is_complete_percent(80.0));
     }
 
     #[test]

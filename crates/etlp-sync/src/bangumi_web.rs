@@ -20,6 +20,9 @@ pub const BANGUMI_DATE_WINDOW_DAYS: i64 = 5;
 /// Keeps obviously unrelated results out of the expensive detail fetch.
 pub(crate) const BANGUMI_CANDIDATE_PRESCREEN_SCORE: f64 = 0.3;
 
+/// Score assigned when one normalized title contains the other exactly.
+const TITLE_CONTAINS_MATCH_SCORE: f64 = 0.9;
+
 // ── Domain types ───────────────────────────────────────────────────────────────
 
 /// One episode entry within a [`SubjectDetail`].
@@ -127,7 +130,7 @@ pub(crate) fn base_match_score(
         title_similarity(keyword, name).max(title_similarity(keyword, name_jp));
     for cand in [name, name_jp] {
         if title_contains(cand, keyword) || title_contains(keyword, cand) {
-            best = best.max(0.9);
+            best = best.max(TITLE_CONTAINS_MATCH_SCORE);
         }
     }
     best

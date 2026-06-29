@@ -129,7 +129,7 @@ pub struct PlayerManager {
     /// this to avoid sending a redundant Start when the loop already ran.
     realtime_started: Arc<AtomicBool>,
     /// When `true`, skip realtime progress reports and `update_progress`; only
-    /// call `mark_as_played` when the user watched past 90 % of the runtime.
+    /// call `mark_as_played` after the completion threshold is reached.
     pub disable_progress_report: bool,
 }
 
@@ -156,19 +156,13 @@ impl PlayerManager {
         self.playlist.insert(key, ep);
     }
 
-    /// Fraction of an episode's runtime a viewer must reach for a *later*
-    /// playlist episode to count as watched (and thus be written back / synced).
-    /// Matches the `mark_as_played` threshold so a skipped-over episode is not
-    /// marked, while one played to the end is.
-    const COMPLETION_RATIO: f64 = 0.9;
-
     /// Wait for the player to exit, then collect every watched episode's stop
     /// time.
     ///
     /// For mpv playlists, [`playlist_completion_loop`] records each episode's
     /// last position live; this method merges those: the opened (primary)
     /// episode is always included, and any *later* episode is included only when
-    /// watched past [`Self::COMPLETION_RATIO`] so skipped entries are ignored.
+    /// watched past [`PLAYBACK_COMPLETION_RATIO`] so skipped entries are ignored.
     /// For single-file playback (no playlist loop) it falls back to the precise
     /// final position reported by the player backend, keyed by the primary
     /// episode's `media_title`.
@@ -189,11 +183,7 @@ impl PlayerManager {
             let completed = self
                 .playlist
                 .get(&title)
-                .map(|ep| {
-                    ep.total_sec > 0
-                        && pos as f64 / ep.total_sec as f64
-                            >= Self::COMPLETION_RATIO
-                })
+                .map(|ep| ep.is_complete_at(pos))
                 .unwrap_or(false);
             if is_primary || completed {
                 self.stop_times.insert(title, pos);
@@ -239,13 +229,8 @@ impl PlayerManager {
             }
 
             if self.disable_progress_report {
-                let ratio = if ep.total_sec > 0 {
-                    stop_sec as f64 / ep.total_sec as f64
-                } else {
-                    0.0
-                };
-                if ratio >= 0.8 {
-                    // Watched ≥ 80 %: mark as played.
+                if ep.is_complete_at(stop_sec) {
+                    // Watched past the completion threshold: mark as played.
                     match mark_as_played(http, ep).await {
                         Ok(()) => info!(
                             "marked as played: {:?} @ {stop_sec}s",
@@ -257,7 +242,7 @@ impl PlayerManager {
                         ),
                     }
                 } else {
-                    // Watched < 80 %: report final position once.
+                    // Below the completion threshold: report final position.
                     match update_progress(http, ep, stop_sec, false).await {
                         Ok(()) => info!(
                             "progress written (dpr): {:?} @ {stop_sec}s",
@@ -286,7 +271,7 @@ impl PlayerManager {
     /// Return a [`SyncEntry`] for every episode whose stop time was collected.
     ///
     /// Used by the Trakt/Bangumi sync layer after `write_progress`. Each entry
-    /// carries the watched percentage and a `completed` flag (≥ 90 %) so the
+    /// carries the watched percentage and a `completed` flag so the
     /// sync layer can distinguish "watched" from merely "in-progress".
     #[must_use]
     pub fn completed_entries(&self) -> Vec<SyncEntry<'_>> {
@@ -295,16 +280,11 @@ impl PlayerManager {
             .map(|(key, &stop_sec)| {
                 // Fall back to primary data for single-episode playback.
                 let ep = self.playlist.get(key).unwrap_or(&self.data);
-                let progress = if ep.total_sec > 0 {
-                    (stop_sec as f64 / ep.total_sec as f64 * 100.0)
-                        .clamp(0.0, 100.0)
-                } else {
-                    0.0
-                };
+                let progress = ep.progress_percent(stop_sec);
                 SyncEntry {
                     stop_sec,
                     progress,
-                    completed: progress >= Self::COMPLETION_RATIO * 100.0,
+                    completed: PlaybackData::is_complete_percent(progress),
                     data: ep,
                 }
             })
@@ -316,7 +296,7 @@ impl PlayerManager {
 /// layer after playback ends.
 ///
 /// `completed` mirrors the `mark_as_played` threshold: when the viewer reached
-/// at least 90 % of the runtime the item is marked watched, otherwise it is
+/// the completion threshold the item is marked watched, otherwise it is
 /// reported as in-progress ("watching" / "Up Next") only.
 #[derive(Debug, Clone, Copy)]
 pub struct SyncEntry<'a> {
@@ -324,7 +304,7 @@ pub struct SyncEntry<'a> {
     pub stop_sec: i64,
     /// Watched percentage in the range `0.0..=100.0`.
     pub progress: f64,
-    /// Whether `progress` reached the completion threshold (≥ 90 %).
+    /// Whether `progress` reached the completion threshold.
     pub completed: bool,
     /// The episode/movie metadata.
     pub data: &'a PlaybackData,
@@ -983,7 +963,8 @@ mod tests {
 
     #[tokio::test]
     async fn collect_merges_completed_playlist_episodes() {
-        // total_sec is 3600 for dummy episodes; 90 % = 3240 s.
+        let completion_sec =
+            (3600.0 * etlp_core::PLAYBACK_COMPLETION_RATIO).round() as i64;
         let mut mgr = make_mgr(dummy_data("Anime S01E01", 0));
         mgr.register_playlist(
             "Anime S01E01".into(),
@@ -1001,8 +982,8 @@ mod tests {
         {
             let mut stops = mgr.playlist_stops.lock().unwrap();
             stops.insert("Anime S01E01".into(), 1000); // primary: kept regardless
-            stops.insert("Anime S01E02".into(), 3300); // ≥ 90 %: completed, kept
-            stops.insert("Anime S01E03".into(), 600); // < 90 %: skipped, dropped
+            stops.insert("Anime S01E02".into(), completion_sec);
+            stops.insert("Anime S01E03".into(), completion_sec - 1);
         }
 
         // The Stub handle returns None from stop_sec(), so only the merged
@@ -1010,10 +991,10 @@ mod tests {
         mgr.collect_stop_times().await;
 
         assert_eq!(mgr.stop_times.get("Anime S01E01"), Some(&1000));
-        assert_eq!(mgr.stop_times.get("Anime S01E02"), Some(&3300));
+        assert_eq!(mgr.stop_times.get("Anime S01E02"), Some(&completion_sec));
         assert!(
             !mgr.stop_times.contains_key("Anime S01E03"),
-            "a later episode watched < 90 % must not be marked"
+            "a later episode below the threshold must not be marked"
         );
     }
 
@@ -1021,7 +1002,8 @@ mod tests {
 
     #[test]
     fn completed_entries_flags_watched_vs_in_progress() {
-        // total_sec is 3600 for dummy episodes; 90 % = 3240 s.
+        let completion_sec =
+            (3600.0 * etlp_core::PLAYBACK_COMPLETION_RATIO).round() as i64;
         let mut mgr = make_mgr(dummy_data("Anime S01E01", 0));
         mgr.register_playlist(
             "Anime S01E01".into(),
@@ -1032,7 +1014,7 @@ mod tests {
             dummy_data("Anime S01E02", 0),
         );
         mgr.stop_times.insert("Anime S01E01".into(), 1800); // 50 %: watching
-        mgr.stop_times.insert("Anime S01E02".into(), 3400); // ≥ 90 %: watched
+        mgr.stop_times.insert("Anime S01E02".into(), completion_sec);
 
         let entries = mgr.completed_entries();
         let by_title = |title: &str| {
@@ -1048,8 +1030,11 @@ mod tests {
         assert!((e1.progress - 50.0).abs() < 0.001);
 
         let e2 = by_title("Anime S01E02");
-        assert!(e2.completed, "≥ 90 % must report as watched");
-        assert!(e2.progress > 90.0);
+        assert!(e2.completed, "completion threshold must report as watched");
+        assert!(
+            (e2.progress - etlp_core::PLAYBACK_COMPLETION_PERCENT).abs()
+                < 0.001
+        );
     }
 
     #[test]
