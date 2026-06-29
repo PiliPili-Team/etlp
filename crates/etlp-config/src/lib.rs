@@ -299,6 +299,9 @@ fn default_duplicate_throttle_secs() -> u64 {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct TraktSection {
+    /// Master switch for Trakt synchronization. Defaults to enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     pub client_id: String,
     pub client_secret: String,
     /// Trakt username (not the display nickname) used for history lookups.
@@ -338,6 +341,7 @@ impl TraktSection {
 impl Default for TraktSection {
     fn default() -> Self {
         Self {
+            enabled: true,
             client_id: String::new(),
             client_secret: String::new(),
             user_name: String::new(),
@@ -398,6 +402,9 @@ fn default_bangumi_throttle_secs() -> u64 {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct BangumiSection {
+    /// Master switch for Bangumi synchronization. Defaults to enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     /// Comma-separated host keywords that enable the sync; empty disables it.
     pub enable_host: String,
     /// bgm.tv username or UID used to read the user's own collection.
@@ -465,6 +472,7 @@ impl BangumiSection {
 impl Default for BangumiSection {
     fn default() -> Self {
         Self {
+            enabled: true,
             enable_host: String::new(),
             username: String::new(),
             access_token: String::new(),
@@ -765,6 +773,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.gui.speed_limit_mb, 0);
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(cfg.trakt.redirect_uri, "http://localhost:58000/trakt_auth");
+        assert!(cfg.trakt.enabled);
         assert!(cfg.trakt.user_name.is_empty());
         // A config predating the field migrates to the default window.
         assert_eq!(
@@ -772,6 +781,7 @@ speed_dummy = 1.5
             DEFAULT_DUPLICATE_THROTTLE_SECS
         );
         // bangumi defaults
+        assert!(cfg.bangumi.enabled);
         assert!(cfg.bangumi.enable_host.is_empty());
         assert!(cfg.bangumi.access_token.is_empty());
         assert!(cfg.bangumi.private);
@@ -901,11 +911,13 @@ speed_dummy = 1.5
              enable_host = \"localhost, 192.168.\"\n\
              username = \"tester\"\n\
              access_token = \"tok\"\n\
+             enabled = false\n\
              private = false\n\
              genres = \"动画\"\n",
         );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg.bangumi.enable_host, "localhost, 192.168.");
+        assert!(!cfg.bangumi.enabled);
         assert_eq!(cfg.bangumi.username, "tester");
         assert_eq!(cfg.bangumi.access_token, "tok");
         assert!(!cfg.bangumi.private);
@@ -997,6 +1009,7 @@ speed_dummy = 1.5
         let dir = tempdir().expect("tempdir");
         write_config(dir.path(), "config.toml", "[bangumi]\n");
         let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert!(cfg.bangumi.enabled);
         assert!(!cfg.bangumi.allow_duplicate);
         // History backfill defaults to per-collection scope (false).
         assert!(!cfg.bangumi.history_follow_media_server);
@@ -1008,6 +1021,25 @@ speed_dummy = 1.5
             cfg.bangumi.duplicate_throttle().as_secs(),
             DEFAULT_BANGUMI_THROTTLE_SECS
         );
+    }
+
+    #[test]
+    fn sync_master_switches_default_on_and_parse_false() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[trakt]\nenabled = false\n[bangumi]\nenabled = false\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert!(!cfg.trakt.enabled);
+        assert!(!cfg.bangumi.enabled);
+
+        let dir2 = tempdir().expect("tempdir");
+        write_config(dir2.path(), "config.toml", "[trakt]\n[bangumi]\n");
+        let cfg2 = Config::load_from_dir(dir2.path()).expect("load");
+        assert!(cfg2.trakt.enabled);
+        assert!(cfg2.bangumi.enabled);
     }
 
     #[test]

@@ -206,6 +206,9 @@ export const sk: typeof zhCN = {
     sys_trakt_sync_note:
         "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Trakt: dosiahnutie približne 80 % alebo viac označí epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste už dokončili na svojom mediálnom serveri, bez duplikovania už existujúcich. Pod 80 % sa vaša pozícia zapamätá, aby ste mohli pokračovať neskôr, a ďalšia epizóda sa zobrazí v sekcii „Pokračovať v sledovaní”; opätovné pozretie tej istej epizódy ju zaznamená znova — či je povolený krátky časový odstup, riadi prepínač „povoliť duplikáty” nižšie.",
     sys_trakt_dashboard: "Otvoriť panel Trakt",
+    sys_trakt_enabled: "Povoliť synchronizáciu Trakt",
+    sys_trakt_enabled_desc:
+        "Po vypnutí sa žiadne údaje o sledovaní nebudú synchronizovať do Trakt",
     sys_trakt_setup_title: "Nastavenie",
     sys_trakt_setup_step1: "1. Vytvorte aplikáciu na Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -239,6 +242,9 @@ export const sk: typeof zhCN = {
     sys_bangumi: "Sledovanie Bangumi.tv",
     sys_bangumi_sync_note:
         "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie ≥ 80 % označí aktuálnu epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste ukončili na médiaserveri, bez duplikovania. Keď nie je čo označiť (< 80 % a žiadna história), dielo sa nastaví na „pozerám” len ak efektívna doba prehrávania je ≥ 20 sekúnd, inak sa preskočí, aby sa predišlo náhodným zápisom.",
+    sys_bangumi_enabled: "Povoliť synchronizáciu Bangumi",
+    sys_bangumi_enabled_desc:
+        "Po vypnutí sa žiadne údaje o sledovaní nebudú synchronizovať do Bangumi",
     sys_bangumi_host: "Povoliť hostiteľa",
     sys_bangumi_host_desc:
         'Kľúčové slová hostiteľov oddelené čiarkami, nechajte prázdne na zakázanie；napr. emby.local, 192.168.1；zadajte "." pre povolenie všetkých',

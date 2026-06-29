@@ -208,6 +208,9 @@ export const fr: typeof zhCN = {
     sys_trakt_sync_note:
         "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Trakt : atteindre environ 80 % ou plus marque l'épisode comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également marqués, sans dupliquer ceux déjà présents. En dessous de 80 %, votre position est mémorisée pour reprendre plus tard, et l'épisode suivant apparaît dans « Continuer à regarder » ; revoir le même épisode l'enregistre à nouveau — l'autorisation d'un court intervalle est contrôlée par le commutateur « autoriser les doublons » ci-dessous.",
     sys_trakt_dashboard: "Ouvrir le tableau de bord Trakt",
+    sys_trakt_enabled: "Activer la synchro Trakt",
+    sys_trakt_enabled_desc:
+        "Désactivé, aucune donnée de visionnage n’est synchronisée vers Trakt",
     sys_trakt_setup_title: "Configuration",
     sys_trakt_setup_step1: "1. Créez une application sur Trakt : ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -243,6 +246,9 @@ export const fr: typeof zhCN = {
     sys_bangumi: "Suivi Bangumi.tv",
     sys_bangumi_sync_note:
         "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Bangumi : atteindre ≥ 80 % marque l'épisode en cours comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également ajoutés, sans doublon. S'il n'y a rien à marquer (< 80 % et aucun historique), l'œuvre est mise en « en cours de visionnage » uniquement si la durée de lecture effective est ≥ 20 secondes, sinon elle est ignorée pour éviter les ajouts accidentels.",
+    sys_bangumi_enabled: "Activer la synchro Bangumi",
+    sys_bangumi_enabled_desc:
+        "Désactivé, aucune donnée de visionnage n’est synchronisée vers Bangumi",
     sys_bangumi_host: "Activer l'hôte",
     sys_bangumi_host_desc:
         'Mots-clés d\'hôtes séparés par des virgules, vide pour désactiver；ex. emby.local, 192.168.1；entrez "." pour tout activer',

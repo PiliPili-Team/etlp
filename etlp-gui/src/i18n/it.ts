@@ -206,6 +206,9 @@ export const it: typeof zhCN = {
     sys_trakt_sync_note:
         "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Trakt: raggiungendo circa l'80% o più l'episodio viene contrassegnato come visto, al di sotto resta non contrassegnato; vengono contrassegnati anche gli altri episodi della stessa stagione già completati nel tuo media server, senza duplicare quelli già presenti. Sotto l'80% la tua posizione viene memorizzata per riprendere più tardi e l'episodio successivo appare in «Continua a guardare»; riguardare lo stesso episodio lo registra di nuovo — se sia consentito un breve intervallo è controllato dall'interruttore «consenti duplicati» qui sotto.",
     sys_trakt_dashboard: "Apri la dashboard di Trakt",
+    sys_trakt_enabled: "Abilita sincronizzazione Trakt",
+    sys_trakt_enabled_desc:
+        "Se disattivato, nessun dato di visione viene sincronizzato con Trakt",
     sys_trakt_setup_title: "Configurazione",
     sys_trakt_setup_step1: "1. Crea un'app su Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -240,6 +243,9 @@ export const it: typeof zhCN = {
     sys_bangumi: "Tracciamento Bangumi.tv",
     sys_bangumi_sync_note:
         "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Bangumi: raggiungere ≥ 80% contrassegna l'episodio corrente come visto, al di sotto non viene contrassegnato; vengono aggiunti anche gli altri episodi della stessa stagione già completati nel tuo server multimediale, senza duplicati. Se non c'è nulla da contrassegnare (< 80% e nessuna cronologia), l'opera viene impostata su «in visione» solo se il tempo di riproduzione effettivo è ≥ 20 secondi, altrimenti viene saltata per evitare aggiunte accidentali.",
+    sys_bangumi_enabled: "Abilita sincronizzazione Bangumi",
+    sys_bangumi_enabled_desc:
+        "Se disattivato, nessun dato di visione viene sincronizzato con Bangumi",
     sys_bangumi_host: "Abilita host",
     sys_bangumi_host_desc:
         'Parole chiave host separate da virgole, vuoto per disabilitare；es. emby.local, 192.168.1；inserisci "." per abilitare tutti',

@@ -192,6 +192,8 @@ export const zhCN = {
     sys_trakt_sync_note:
         "播放结束后自动同步到 Trakt：进度约 80% 以上才标记为「已看」，不足 80% 则不标记；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。不足 80% 时会记住播放位置方便下次接着看，并在「继续观看」里显示同剧下一集；重看同一集会再记录一次，是否受时间间隔限制由下方的「允许重复标记」开关控制",
     sys_trakt_dashboard: "打开 Trakt 面板",
+    sys_trakt_enabled: "启用 Trakt 同步",
+    sys_trakt_enabled_desc: "关闭后不再同步任何观看数据到 Trakt",
     sys_trakt_setup_title: "配置步骤",
     sys_trakt_setup_step1: "1. 在 Trakt 创建应用：",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -222,6 +224,8 @@ export const zhCN = {
     sys_bangumi: "Bangumi.tv 追番记录同步",
     sys_bangumi_sync_note:
         "播放结束后自动同步到 Bangumi：进度 ≥ 80% 才将当前集标记为「看过」，不足 80% 则不标记当前集；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。",
+    sys_bangumi_enabled: "启用 Bangumi 同步",
+    sys_bangumi_enabled_desc: "关闭后不再同步任何观看数据到 Bangumi",
     sys_bangumi_host: "启用域名",
     sys_bangumi_host_desc:
         '逗号分隔的域名关键词，匹配任意一项则启用同步；留空则不同步任何服务器。若要对所有服务器启用，在输入框中填入英文句点 "." 并点击添加即可。',

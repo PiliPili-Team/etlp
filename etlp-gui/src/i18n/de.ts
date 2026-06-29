@@ -206,6 +206,9 @@ export const de: typeof zhCN = {
     sys_trakt_sync_note:
         "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Trakt synchronisiert: Ab etwa 80 % wird die Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere Episoden derselben Staffel, die Sie in Ihrem Medienserver bereits beendet haben, werden ebenfalls markiert, ohne bereits vorhandene zu duplizieren. Unter 80 % wird Ihre Position gemerkt, damit Sie später fortfahren können, und die nächste Episode erscheint unter „Weiter ansehen”; erneutes Ansehen derselben Episode wird wieder aufgezeichnet – ob ein kurzer Zeitabstand zulässig ist, steuert der Schalter „Duplikate zulassen” unten.",
     sys_trakt_dashboard: "Trakt-Dashboard öffnen",
+    sys_trakt_enabled: "Trakt-Sync aktivieren",
+    sys_trakt_enabled_desc:
+        "Wenn deaktiviert, werden keine Wiedergabedaten an Trakt synchronisiert",
     sys_trakt_setup_title: "Einrichtung",
     sys_trakt_setup_step1: "1. Eine App auf Trakt erstellen: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -241,6 +244,9 @@ export const de: typeof zhCN = {
     sys_bangumi: "Bangumi.tv-Verfolgung",
     sys_bangumi_sync_note:
         "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Bangumi synchronisiert: Ab ≥ 80 % wird die aktuelle Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere bereits abgeschlossene Episoden derselben Staffel im Medienserver werden ebenfalls nachgetragen, ohne Duplikate. Wenn nichts zu markieren ist (< 80 % und keine Verlaufseinträge), wird das Werk nur als „schaue gerade” eingetragen, sofern die effektive Wiedergabezeit ≥ 20 Sekunden beträgt – andernfalls wird der Eintrag übersprungen, um Fehlauslöser zu vermeiden.",
+    sys_bangumi_enabled: "Bangumi-Sync aktivieren",
+    sys_bangumi_enabled_desc:
+        "Wenn deaktiviert, werden keine Wiedergabedaten an Bangumi synchronisiert",
     sys_bangumi_host: "Host aktivieren",
     sys_bangumi_host_desc:
         'Kommagetrennte Host-Schlüsselwörter, leer lassen zum Deaktivieren；z. B. emby.local, 192.168.1；"." eingeben um alle zu aktivieren',

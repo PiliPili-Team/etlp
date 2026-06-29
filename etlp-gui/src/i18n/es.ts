@@ -208,6 +208,9 @@ export const es: typeof zhCN = {
     sys_trakt_sync_note:
         "Cuando termina la reproducción, tu visionado se sincroniza automáticamente con Trakt: alcanzar alrededor del 80 % o más marca el episodio como visto, por debajo permanece sin marcar; también se marcan otros episodios de la misma temporada que ya completaste en tu servidor multimedia, sin duplicar los ya presentes. Por debajo del 80 % se recuerda tu posición para retomar más tarde, y el siguiente episodio aparece en «Continuar viendo»; volver a ver el mismo episodio lo registra de nuevo: el interruptor «permitir duplicados» de abajo controla si se admite un intervalo breve.",
     sys_trakt_dashboard: "Abrir el panel de Trakt",
+    sys_trakt_enabled: "Activar sincronización de Trakt",
+    sys_trakt_enabled_desc:
+        "Al desactivarlo, no se sincronizan datos de visualización con Trakt",
     sys_trakt_setup_title: "Configuración",
     sys_trakt_setup_step1: "1. Crea una app en Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -242,6 +245,9 @@ export const es: typeof zhCN = {
     sys_bangumi: "Seguimiento de Bangumi.tv",
     sys_bangumi_sync_note:
         "Cuando termina la reproducción, tu visionado se sincroniza automáticamente con Bangumi: alcanzar ≥ 80% marca el episodio actual como visto, por debajo no se marca; también se añaden los episodios de la misma temporada ya completados en tu servidor multimedia, sin duplicar los existentes. Si no hay nada que marcar (< 80% y sin historial), la obra se establece como «viendo» solo si la duración de reproducción efectiva es ≥ 20 segundos, de lo contrario se omite para evitar adiciones accidentales.",
+    sys_bangumi_enabled: "Activar sincronización de Bangumi",
+    sys_bangumi_enabled_desc:
+        "Al desactivarlo, no se sincronizan datos de visualización con Bangumi",
     sys_bangumi_host: "Activar host",
     sys_bangumi_host_desc:
         'Palabras clave de host separadas por comas, vacío para desactivar；ej. emby.local, 192.168.1；ingresa "." para activar todos',

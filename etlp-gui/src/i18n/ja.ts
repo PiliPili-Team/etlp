@@ -201,6 +201,8 @@ export const ja: typeof zhCN = {
     sys_trakt_sync_note:
         "再生が終わると、視聴状況が自動で Trakt に同期されます。約 80% 以上に達するとエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンの他のエピソードでメディアサーバー上ですでに視聴済みのものもマークされますが、既存のものは重複しません。80% 未満では再生位置が記憶され、後で続きから再生でき、次のエピソードが「視聴中」に表示されます。同じエピソードを見直すと再度記録されます。短い間隔を許可するかは下の「重複を許可」スイッチで制御します。",
     sys_trakt_dashboard: "Trakt ダッシュボードを開く",
+    sys_trakt_enabled: "Trakt同期を有効化",
+    sys_trakt_enabled_desc: "オフにすると、視聴データはTraktへ同期されません",
     sys_trakt_setup_title: "セットアップ",
     sys_trakt_setup_step1: "1. Trakt でアプリを作成します：",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -232,6 +234,8 @@ export const ja: typeof zhCN = {
     sys_bangumi: "Bangumi.tv トラッキング",
     sys_bangumi_sync_note:
         "再生が終わると、視聴状況が自動で Bangumi に同期されます。≥ 80% に達すると現在のエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンのメディアサーバー上ですでに視聴済みの他のエピソードも追加されますが、既存のものは重複しません。マークすべきものがない場合（< 80% かつ履歴なし）、実際の視聴時間が ≥ 20 秒のときのみ作品を「観てる」に設定し、それ以外はスキップして誤った追加を防ぎます。",
+    sys_bangumi_enabled: "Bangumi同期を有効化",
+    sys_bangumi_enabled_desc: "オフにすると、視聴データはBangumiへ同期されません",
     sys_bangumi_host: "有効にするホスト",
     sys_bangumi_host_desc:
         'カンマ区切りのホストキーワード、空で無効；例 emby.local, 192.168.1；"." のみで全ホスト有効',

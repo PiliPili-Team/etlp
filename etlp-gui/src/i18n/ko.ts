@@ -201,6 +201,8 @@ export const ko: typeof zhCN = {
     sys_trakt_sync_note:
         '재생이 끝나면 시청 기록이 자동으로 Trakt에 동기화됩니다. 약 80% 이상에 도달하면 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 같은 시즌에서 미디어 서버에 이미 시청 완료된 다른 에피소드도 표시되며, 이미 있는 항목은 중복되지 않습니다. 80% 미만이면 위치가 기억되어 나중에 이어 볼 수 있고 다음 에피소드가 "계속 시청"에 표시됩니다. 같은 에피소드를 다시 보면 다시 기록됩니다 — 짧은 간격을 허용할지는 아래 "중복 허용" 스위치로 제어합니다.',
     sys_trakt_dashboard: "Trakt 대시보드 열기",
+    sys_trakt_enabled: "Trakt 동기화 켜기",
+    sys_trakt_enabled_desc: "끄면 시청 데이터가 Trakt로 동기화되지 않습니다",
     sys_trakt_setup_title: "설정",
     sys_trakt_setup_step1: "1. Trakt에서 앱을 만듭니다: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -232,6 +234,8 @@ export const ko: typeof zhCN = {
     sys_bangumi: "Bangumi.tv 추적",
     sys_bangumi_sync_note:
         '재생이 끝나면 시청 기록이 자동으로 Bangumi에 동기화됩니다. ≥ 80%에 도달하면 현재 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 미디어 서버에 이미 시청 완료된 같은 시즌의 다른 에피소드도 추가되며, 기존 항목은 중복되지 않습니다. 표시할 항목이 없는 경우(< 80% 및 기록 없음) 실제 재생 시간이 ≥ 20초일 때만 작품을 "보는 중"으로 설정하고, 그렇지 않으면 건너뜁니다.',
+    sys_bangumi_enabled: "Bangumi 동기화 켜기",
+    sys_bangumi_enabled_desc: "끄면 시청 데이터가 Bangumi로 동기화되지 않습니다",
     sys_bangumi_host: "호스트 활성화",
     sys_bangumi_host_desc:
         '쉼표로 구분된 호스트 키워드, 비우면 비활성화；예: emby.local, 192.168.1；"." 만 입력하면 전체 활성화',

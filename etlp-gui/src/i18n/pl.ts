@@ -207,6 +207,9 @@ export const pl: typeof zhCN = {
     sys_trakt_sync_note:
         "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Trakt: osiągnięcie około 80% lub więcej oznacza odcinek jako obejrzany, mniej pozostaje nieoznaczone; inne odcinki tego samego sezonu, które ukończyłeś na serwerze multimediów, są również oznaczane, bez duplikowania istniejących. Poniżej 80% Twoja pozycja jest zapamiętywana do wznowienia później, a następny odcinek pojawia się w 'Kontynuuj oglądanie'; ponowne odtworzenie tego samego odcinka zapisuje go ponownie — czy dozwolony jest krótki interwał kontrolowany jest przez przełącznik 'zezwalaj na duplikaty' poniżej.",
     sys_trakt_dashboard: "Otwórz pulpit Trakt",
+    sys_trakt_enabled: "Włącz synchronizację Trakt",
+    sys_trakt_enabled_desc:
+        "Po wyłączeniu żadne dane oglądania nie będą synchronizowane z Trakt",
     sys_trakt_setup_title: "Konfiguracja",
     sys_trakt_setup_step1: "1. Utwórz aplikację na Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -241,6 +244,9 @@ export const pl: typeof zhCN = {
     sys_bangumi: "Śledzenie Bangumi.tv",
     sys_bangumi_sync_note:
         "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Bangumi: osiągnięcie ≥ 80% oznacza bieżący odcinek jako obejrzany, poniżej pozostaje nieoznaczony; inne odcinki tego samego sezonu ukończone na serwerze multimediów są również dodawane bez duplikatów. Jeśli nie ma nic do oznaczenia (< 80% i brak historii), dzieło jest ustawiane jako 'oglądam' tylko jeśli efektywny czas odtwarzania wynosi ≥ 20 sekund, w przeciwnym razie jest pomijane, aby zapobiec przypadkowym wpisom.",
+    sys_bangumi_enabled: "Włącz synchronizację Bangumi",
+    sys_bangumi_enabled_desc:
+        "Po wyłączeniu żadne dane oglądania nie będą synchronizowane z Bangumi",
     sys_bangumi_host: "Włącz hosta",
     sys_bangumi_host_desc:
         'Słowa kluczowe hosta oddzielone przecinkami, puste aby wyłączyć；np. emby.local, 192.168.1；wpisz "." by włączyć wszystkich',

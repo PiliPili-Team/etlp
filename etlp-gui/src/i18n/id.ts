@@ -204,6 +204,9 @@ export const id: typeof zhCN = {
     sys_trakt_sync_note:
         "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Trakt: mencapai sekitar 80% atau lebih menandai episode sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditandai, tanpa menduplikasi yang sudah ada. Di bawah 80% posisi Anda disimpan untuk dilanjutkan nanti, dan episode berikutnya muncul di 'Lanjutkan Menonton'; memutar ulang episode yang sama mencatatnya lagi — apakah interval singkat diizinkan dikendalikan oleh toggle 'izinkan duplikat' di bawah.",
     sys_trakt_dashboard: "Buka Dashboard Trakt",
+    sys_trakt_enabled: "Aktifkan Sinkronisasi Trakt",
+    sys_trakt_enabled_desc:
+        "Jika mati, tidak ada data tontonan yang disinkronkan ke Trakt",
     sys_trakt_setup_title: "Pengaturan",
     sys_trakt_setup_step1: "1. Buat aplikasi di Trakt: ",
     sys_trakt_setup_link: "trakt.tv/oauth/applications",
@@ -237,6 +240,9 @@ export const id: typeof zhCN = {
     sys_bangumi: "Pelacakan Bangumi.tv",
     sys_bangumi_sync_note:
         "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Bangumi: mencapai ≥ 80% menandai episode saat ini sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditambahkan, tanpa menduplikasi yang sudah ada. Jika tidak ada yang ditandai (< 80% dan tidak ada riwayat), karya diatur ke status 'sedang menonton' hanya jika durasi pemutaran efektif ≥ 20 detik, jika tidak dilewati untuk mencegah penambahan tidak sengaja.",
+    sys_bangumi_enabled: "Aktifkan Sinkronisasi Bangumi",
+    sys_bangumi_enabled_desc:
+        "Jika mati, tidak ada data tontonan yang disinkronkan ke Bangumi",
     sys_bangumi_host: "Aktifkan Host",
     sys_bangumi_host_desc:
         'Kata kunci host yang dipisahkan koma, kosong untuk menonaktifkan；mis. emby.local, 192.168.1；masukkan "." untuk mengaktifkan semua',
