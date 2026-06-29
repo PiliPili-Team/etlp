@@ -264,7 +264,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
                         title="Greasy Fork (Tampermonkey)"
                         onClick={() =>
                             void openLink(
-                                "https://greasyfork.org/zh-CN/scripts/448648-embytolocalplayer",
+                                "https://greasyfork.org/zh-CN/scripts/584775-etlp",
                             )
                         }
                     >
