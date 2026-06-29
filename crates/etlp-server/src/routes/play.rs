@@ -249,6 +249,12 @@ async fn run_player_chain(
                 .unwrap_or(&episode_list[..]);
 
             let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
+            debug!(
+                path = %m3u8_path.display(),
+                entries = windowed.len(),
+                cur_idx = windowed_cur_idx,
+                "M3U8 playlist path for launch"
+            );
             let mut m3u8 = String::from("#EXTM3U\n");
             for ep in windowed {
                 let title = ep.media_title.replace(['\n', '\r'], " ");
@@ -436,6 +442,11 @@ async fn run_player_chain(
             );
 
             let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
+            debug!(
+                path = %m3u8_path.display(),
+                entries = after.len(),
+                "M3U8 fallback playlist path"
+            );
             let mut m3u8 = String::from("#EXTM3U\n");
             for ep in &after {
                 let title = ep.media_title.replace(['\n', '\r'], " ");
