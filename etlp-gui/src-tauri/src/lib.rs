@@ -10,7 +10,8 @@ use std::sync::Once;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    LogicalSize, Manager, PhysicalPosition, PhysicalSize, WindowEvent,
+    LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl,
+    WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -337,11 +338,40 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
-fn show_about_modal(app: &tauri::AppHandle) {
-    use tauri::Emitter as _;
+fn show_about_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("about") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
 
-    show_main_window(app);
-    let _ = app.emit("show-about", ());
+    let labels = TrayLabels::detect();
+    let window = tauri::WebviewWindowBuilder::new(
+        app,
+        "about",
+        WebviewUrl::App("index.html?window=about".into()),
+    )
+    .title(labels.tooltip)
+    .inner_size(380.0, 450.0)
+    .min_inner_size(380.0, 450.0)
+    .max_inner_size(380.0, 450.0)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .skip_taskbar(true)
+    .transparent(true)
+    .center()
+    .build();
+
+    match window {
+        Ok(window) => {
+            apply_window_material(&window);
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        Err(e) => eprintln!("[etlp] about window: {e}"),
+    }
 }
 
 fn window_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
@@ -472,7 +502,7 @@ fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{
         NSAutoresizingMaskOptions, NSColor, NSGlassEffectView,
-        NSGlassEffectViewStyle, NSView, NSWindowOrderingMode,
+        NSGlassEffectViewStyle, NSView,
     };
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -494,13 +524,19 @@ fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
 
     unsafe {
         let view: &NSView = handle.ns_view.cast().as_ref();
+        let ns_window = view.window().ok_or_else(|| {
+            "Liquid Glass requires an attached NSWindow".to_string()
+        })?;
+        let content_view = ns_window.contentView().ok_or_else(|| {
+            "Liquid Glass requires an NSWindow content view".to_string()
+        })?;
         let glass =
-            NSGlassEffectView::initWithFrame(mtm.alloc(), view.bounds());
+            NSGlassEffectView::initWithFrame(mtm.alloc(), content_view.frame());
         let tint = NSColor::colorWithRed_green_blue_alpha(
             18.0 / 255.0,
             32.0 / 255.0,
             40.0 / 255.0,
-            0.42,
+            0.18,
         );
 
         glass.setStyle(NSGlassEffectViewStyle::Regular);
@@ -510,12 +546,18 @@ fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
             NSAutoresizingMaskOptions::ViewWidthSizable
                 | NSAutoresizingMaskOptions::ViewHeightSizable,
         );
-        view.addSubview_positioned_relativeTo(
-            &glass,
-            NSWindowOrderingMode::Below,
-            None,
+        content_view.setFrame(glass.bounds());
+        content_view.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
         );
+        glass.setContentView(Some(&content_view));
+        ns_window.setOpaque(false);
+        ns_window.setBackgroundColor(Some(&NSColor::clearColor()));
+        ns_window.setContentView(Some(&glass));
     }
+
+    tracing::info!("liquid glass applied");
 
     Ok(())
 }
@@ -784,7 +826,10 @@ pub fn run() {
                         });
                     }
                     "about" => {
-                        show_about_modal(app);
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            show_about_window(&app);
+                        });
                     }
                     "quit" => app.exit(0),
                     _ => {}

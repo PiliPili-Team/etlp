@@ -49,9 +49,8 @@
     --teal-soft: rgba(90, 200, 250, 0.12);
     --toggle-on: var(--accent);
     --toggle-off: rgba(84, 91, 99, 0.28);
-    --shadow-sm:
-        0 12px 28px rgba(31, 38, 45, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.16) inset;
-    --shadow-md: 0 18px 38px rgba(31, 38, 45, 0.14), 0 1px 4px rgba(31, 38, 45, 0.06);
+    --shadow-sm: none;
+    --shadow-md: 0 14px 30px rgba(31, 38, 45, 0.12);
 
     font-family:
         var(--app-font, system-ui), system-ui, BlinkMacSystemFont, "SF Pro Text",
@@ -67,16 +66,16 @@
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --window-bg: rgba(28, 31, 40, 0.9);
-        --window-tint: rgba(31, 35, 45, 0.74);
-        --pane-bg: rgba(27, 30, 38, 0.86);
-        --sidebar-bg: rgba(38, 43, 55, 0.9);
-        --pane-border: rgba(216, 238, 245, 0.022);
+        --window-bg: rgba(31, 35, 45, 0.64);
+        --window-tint: rgba(31, 35, 45, 0.46);
+        --pane-bg: rgba(38, 43, 55, 0.58);
+        --sidebar-bg: rgba(38, 43, 55, 0.58);
+        --pane-border: rgba(216, 238, 245, 0.03);
         --bg: var(--window-bg);
-        --surface: rgba(26, 29, 37, 0.84);
-        --surface-alt: rgba(30, 34, 43, 0.7);
+        --surface: rgba(30, 34, 43, 0.56);
+        --surface-alt: rgba(36, 41, 52, 0.5);
         --surface-hover: rgba(255, 255, 255, 0.062);
-        --surface-strong: rgba(27, 30, 38, 0.9);
+        --surface-strong: rgba(31, 35, 45, 0.62);
         --bg-2: var(--surface-alt);
         --bg-hover: var(--surface-hover);
         --bg-input: rgba(10, 16, 22, 0.36);
@@ -100,25 +99,24 @@
         --teal-soft: rgba(90, 200, 250, 0.15);
         --toggle-on: var(--accent);
         --toggle-off: rgba(140, 151, 160, 0.2);
-        --shadow-sm:
-            0 8px 20px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.016) inset;
-        --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.08);
+        --shadow-sm: none;
+        --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.18);
     }
 }
 
 /* ── Dark theme (explicit override) ────────────────────────────────── */
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --window-bg: rgba(28, 31, 40, 0.9);
-    --window-tint: rgba(31, 35, 45, 0.74);
-    --pane-bg: rgba(27, 30, 38, 0.86);
-    --sidebar-bg: rgba(38, 43, 55, 0.9);
-    --pane-border: rgba(216, 238, 245, 0.022);
+    --window-bg: rgba(31, 35, 45, 0.64);
+    --window-tint: rgba(31, 35, 45, 0.46);
+    --pane-bg: rgba(38, 43, 55, 0.58);
+    --sidebar-bg: rgba(38, 43, 55, 0.58);
+    --pane-border: rgba(216, 238, 245, 0.03);
     --bg: var(--window-bg);
-    --surface: rgba(26, 29, 37, 0.84);
-    --surface-alt: rgba(30, 34, 43, 0.7);
+    --surface: rgba(30, 34, 43, 0.56);
+    --surface-alt: rgba(36, 41, 52, 0.5);
     --surface-hover: rgba(255, 255, 255, 0.062);
-    --surface-strong: rgba(27, 30, 38, 0.9);
+    --surface-strong: rgba(31, 35, 45, 0.62);
     --bg-2: var(--surface-alt);
     --bg-hover: var(--surface-hover);
     --bg-input: rgba(10, 16, 22, 0.36);
@@ -142,9 +140,8 @@
     --teal-soft: rgba(90, 200, 250, 0.15);
     --toggle-on: var(--accent);
     --toggle-off: rgba(140, 151, 160, 0.2);
-    --shadow-sm:
-        0 8px 20px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.016) inset;
-    --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.08);
+    --shadow-sm: none;
+    --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
@@ -186,16 +183,16 @@ body.platform-macos .app {
 }
 
 .app.window-focused {
-    --window-bg: rgba(28, 31, 40, 0.92);
-    --window-tint: rgba(31, 35, 45, 0.76);
-    --pane-bg: rgba(27, 30, 38, 0.88);
+    --window-bg: rgba(31, 35, 45, 0.66);
+    --window-tint: rgba(31, 35, 45, 0.48);
+    --pane-bg: rgba(38, 43, 55, 0.6);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.02);
 }
 
 .app.window-blurred {
-    --window-bg: rgba(24, 27, 35, 0.94);
-    --window-tint: rgba(27, 30, 39, 0.78);
-    --pane-bg: rgba(24, 27, 35, 0.9);
+    --window-bg: rgba(28, 31, 40, 0.66);
+    --window-tint: rgba(28, 31, 40, 0.5);
+    --pane-bg: rgba(34, 39, 50, 0.62);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.012);
     filter: brightness(0.93) saturate(0.92);
 }
@@ -330,8 +327,8 @@ body:not(.platform-macos) .titlebar {
     flex: 1;
     min-height: 0;
     background: var(--sidebar-bg);
-    backdrop-filter: blur(38px);
-    -webkit-backdrop-filter: blur(38px);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────── */
@@ -1759,20 +1756,37 @@ body.platform-windows .content {
 }
 
 .modal-card {
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface-strong) 84%, var(--window-bg) 16%);
+    border: 1px solid var(--pane-border);
     border-radius: 14px;
     padding: 36px 32px 28px;
     width: 340px;
     max-width: 90vw;
-    box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.35),
-        0 0 0 1px rgba(255, 255, 255, 0.06);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0;
     text-align: center;
     animation: slide-up 0.18s ease;
+}
+
+.about-window-shell {
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--window-bg);
+    color: var(--text);
+}
+
+.about-window-shell .modal-card {
+    width: 340px;
+    max-width: 100%;
+    animation: none;
 }
 
 @keyframes slide-up {
