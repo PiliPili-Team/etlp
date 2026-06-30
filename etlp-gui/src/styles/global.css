@@ -66,16 +66,16 @@
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --window-bg: rgba(31, 35, 45, 0.64);
-        --window-tint: rgba(31, 35, 45, 0.46);
-        --pane-bg: rgba(38, 43, 55, 0.58);
-        --sidebar-bg: rgba(38, 43, 55, 0.58);
+        --window-bg: rgba(18, 21, 29, 0.72);
+        --window-tint: rgba(13, 16, 22, 0.36);
+        --pane-bg: rgba(32, 37, 49, 0.74);
+        --sidebar-bg: var(--pane-bg);
         --pane-border: rgba(216, 238, 245, 0.03);
         --bg: var(--window-bg);
-        --surface: rgba(30, 34, 43, 0.56);
-        --surface-alt: rgba(36, 41, 52, 0.5);
+        --surface: rgba(24, 27, 35, 0.7);
+        --surface-alt: rgba(36, 41, 52, 0.56);
         --surface-hover: rgba(255, 255, 255, 0.062);
-        --surface-strong: rgba(31, 35, 45, 0.62);
+        --surface-strong: rgba(21, 24, 31, 0.8);
         --bg-2: var(--surface-alt);
         --bg-hover: var(--surface-hover);
         --bg-input: rgba(10, 16, 22, 0.36);
@@ -107,16 +107,16 @@
 /* ── Dark theme (explicit override) ────────────────────────────────── */
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --window-bg: rgba(31, 35, 45, 0.64);
-    --window-tint: rgba(31, 35, 45, 0.46);
-    --pane-bg: rgba(38, 43, 55, 0.58);
-    --sidebar-bg: rgba(38, 43, 55, 0.58);
+    --window-bg: rgba(18, 21, 29, 0.72);
+    --window-tint: rgba(13, 16, 22, 0.36);
+    --pane-bg: rgba(32, 37, 49, 0.74);
+    --sidebar-bg: var(--pane-bg);
     --pane-border: rgba(216, 238, 245, 0.03);
     --bg: var(--window-bg);
-    --surface: rgba(30, 34, 43, 0.56);
-    --surface-alt: rgba(36, 41, 52, 0.5);
+    --surface: rgba(24, 27, 35, 0.7);
+    --surface-alt: rgba(36, 41, 52, 0.56);
     --surface-hover: rgba(255, 255, 255, 0.062);
-    --surface-strong: rgba(31, 35, 45, 0.62);
+    --surface-strong: rgba(21, 24, 31, 0.8);
     --bg-2: var(--surface-alt);
     --bg-hover: var(--surface-hover);
     --bg-input: rgba(10, 16, 22, 0.36);
@@ -183,18 +183,20 @@ body.platform-macos .app {
 }
 
 .app.window-focused {
-    --window-bg: rgba(31, 35, 45, 0.66);
-    --window-tint: rgba(31, 35, 45, 0.48);
-    --pane-bg: rgba(38, 43, 55, 0.6);
+    --window-bg: rgba(18, 21, 29, 0.74);
+    --window-tint: rgba(13, 16, 22, 0.38);
+    --pane-bg: rgba(32, 37, 49, 0.76);
+    --sidebar-bg: var(--pane-bg);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.02);
 }
 
 .app.window-blurred {
-    --window-bg: rgba(28, 31, 40, 0.66);
-    --window-tint: rgba(28, 31, 40, 0.5);
-    --pane-bg: rgba(34, 39, 50, 0.62);
+    --window-bg: rgba(16, 19, 26, 0.76);
+    --window-tint: rgba(12, 14, 20, 0.42);
+    --pane-bg: rgba(28, 32, 42, 0.76);
+    --sidebar-bg: var(--pane-bg);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.012);
-    filter: brightness(0.93) saturate(0.92);
+    filter: brightness(0.94) saturate(0.94);
 }
 
 body.platform-macos .app.window-focused,
@@ -327,8 +329,8 @@ body:not(.platform-macos) .titlebar {
     flex: 1;
     min-height: 0;
     background: var(--sidebar-bg);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────── */
@@ -2007,6 +2009,12 @@ body.platform-macos .sidebar,
 body.platform-macos .content,
 body.platform-windows .sidebar,
 body.platform-windows .content {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+body.platform-macos .body,
+body.platform-windows .body {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
 }
