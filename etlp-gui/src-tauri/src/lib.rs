@@ -349,7 +349,9 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
     // Match the macOS translucent sidebar treatment with native Windows
     // acrylic. Blur is a compatibility fallback for older Windows builds.
     window_vibrancy::apply_acrylic(window, Some((242, 242, 247, 160)))
-        .or_else(|_| window_vibrancy::apply_blur(window, Some((242, 242, 247, 120))))
+        .or_else(|_| {
+            window_vibrancy::apply_blur(window, Some((242, 242, 247, 120)))
+        })
         .unwrap_or_else(|e| eprintln!("[etlp] acrylic: {e}"));
 }
 

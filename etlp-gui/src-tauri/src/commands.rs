@@ -2266,7 +2266,10 @@ fn shell_execute_runas(
     if result.0.addr() > 32 {
         Ok(())
     } else {
-        Err(format!("runas failed with ShellExecuteW code {}", result.0.addr()))
+        Err(format!(
+            "runas failed with ShellExecuteW code {}",
+            result.0.addr()
+        ))
     }
 }
 
