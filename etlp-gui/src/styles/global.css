@@ -1527,12 +1527,47 @@ body.platform-windows .content {
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     gap: 10px;
+    flex-wrap: wrap;
 }
 
-.log-toolbar-title {
+.log-toolbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 190px;
+    min-width: 0;
+}
+
+.log-toolbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    flex: 1 1 360px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.log-toolbar-btn {
+    padding: 4px 10px;
     font-size: 12px;
-    font-weight: 600;
-    color: var(--text-2);
+    min-height: 28px;
+    white-space: nowrap;
+}
+
+.log-line-count {
+    font-size: 11px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+.log-filter-input {
+    flex: 1 1 120px;
+    min-width: 86px;
+    max-width: 260px;
+    height: 28px;
+    padding: 3px 10px;
+    font-size: 12px;
 }
 
 .log-source-tabs {
@@ -1547,11 +1582,13 @@ body.platform-windows .content {
     padding: 4px 12px;
     font-size: 12px;
     font-weight: 500;
+    line-height: 1.4;
     cursor: pointer;
     color: var(--text-2);
     background: var(--surface-alt);
     border: none;
     font-family: inherit;
+    white-space: nowrap;
     transition:
         background 0.12s,
         color 0.12s;
@@ -1584,6 +1621,11 @@ body.platform-windows .content {
     background: transparent;
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+.log-empty {
+    color: var(--text-3);
+    font-family: var(--app-font, system-ui), system-ui, sans-serif;
 }
 
 /* Older-page hint shown at the top of the log body while paginating. */

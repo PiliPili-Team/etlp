@@ -441,15 +441,7 @@ export default function Logs({ active }: { active: boolean }) {
             <div className="page-title">{t("page_logs")}</div>
             <div className="log-container">
                 <div className="log-toolbar">
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            flex: 1,
-                            minWidth: 0,
-                        }}
-                    >
+                    <div className="log-toolbar-leading">
                         <div className="log-source-tabs">
                             <button
                                 className={`log-source-tab${source === "app" ? " active" : ""}`}
@@ -466,30 +458,16 @@ export default function Logs({ active }: { active: boolean }) {
                             </button>
                         </div>
                         {lines.length > 0 && (
-                            <span
-                                style={{
-                                    fontSize: 11,
-                                    color: "var(--text-3)",
-                                    flexShrink: 0,
-                                }}
-                            >
+                            <span className="log-line-count">
                                 {lines.length} {t("logs_lines")}
                             </span>
                         )}
                     </div>
 
-                    <div
-                        style={{
-                            display: "flex",
-                            gap: 7,
-                            alignItems: "center",
-                            flexShrink: 0,
-                        }}
-                    >
+                    <div className="log-toolbar-actions">
                         {source === "mpv" && mpvCustomPath && (
                             <button
-                                className="btn"
-                                style={{ padding: "4px 10px", fontSize: 12 }}
+                                className="btn log-toolbar-btn"
                                 onClick={handleResetMpvLog}
                                 title={t("logs_reset_mpv_title")}
                             >
@@ -498,8 +476,7 @@ export default function Logs({ active }: { active: boolean }) {
                         )}
                         {source === "mpv" && (
                             <button
-                                className="btn"
-                                style={{ padding: "4px 10px", fontSize: 12 }}
+                                className="btn log-toolbar-btn"
                                 onClick={() => void handlePickMpvLog()}
                                 title={effectiveMpvPath ?? undefined}
                             >
@@ -507,27 +484,19 @@ export default function Logs({ active }: { active: boolean }) {
                             </button>
                         )}
                         <button
-                            className="btn"
-                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            className="btn log-toolbar-btn"
                             onClick={() => void handleOpenLogFolder()}
                         >
                             {t("logs_open_folder")}
                         </button>
                         <input
-                            className="input"
-                            style={{
-                                minWidth: 110,
-                                height: 28,
-                                padding: "3px 10px",
-                                fontSize: 12,
-                            }}
+                            className="input log-filter-input"
                             placeholder={t("logs_filter")}
                             value={filter}
                             onChange={(e) => setFilter(e.target.value)}
                         />
                         <button
-                            className={`btn${anon ? " btn-primary" : ""}`}
-                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            className={`btn log-toolbar-btn${anon ? " btn-primary" : ""}`}
                             title={t("logs_anon_title")}
                             onClick={() => {
                                 const next = !anon;
@@ -538,16 +507,14 @@ export default function Logs({ active }: { active: boolean }) {
                             {t("logs_anon")}
                         </button>
                         <button
-                            className="btn"
-                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            className="btn log-toolbar-btn"
                             onClick={() => void clearLog()}
                         >
                             {t("logs_clear")}
                         </button>
                         {!autoScroll && (
                             <button
-                                className="btn btn-primary"
-                                style={{ padding: "4px 10px", fontSize: 12 }}
+                                className="btn btn-primary log-toolbar-btn"
                                 onClick={() => {
                                     if (bodyRef.current)
                                         bodyRef.current.scrollTop =
@@ -563,7 +530,7 @@ export default function Logs({ active }: { active: boolean }) {
 
                 <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
                     {displayed.length === 0 ? (
-                        <span style={{ color: "var(--text-3)" }}>
+                        <span className="log-empty">
                             {source === "mpv" && !hasMpv
                                 ? t("logs_no_mpv")
                                 : t("logs_empty")}
