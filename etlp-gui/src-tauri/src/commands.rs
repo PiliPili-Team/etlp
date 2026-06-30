@@ -2150,7 +2150,7 @@ fi
 hdiutil detach "$MOUNT" >/dev/null 2>&1 || true
 rmdir "$MOUNT" 2>/dev/null || true
 
-open "$TARGET"
+open -a "$TARGET"
 "#
     );
 
@@ -2182,37 +2182,128 @@ fn open_dmg_fallback(dest: &std::path::Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
+fn quote_windows_arg(arg: &str) -> String {
+    if arg.is_empty()
+        || arg
+            .chars()
+            .any(|c| c.is_ascii_whitespace() || matches!(c, '"' | '\\'))
+    {
+        let mut quoted = String::from("\"");
+        let mut backslashes = 0usize;
+        for ch in arg.chars() {
+            match ch {
+                '\\' => backslashes += 1,
+                '"' => {
+                    quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
+                    quoted.push('"');
+                    backslashes = 0;
+                }
+                _ => {
+                    quoted.push_str(&"\\".repeat(backslashes));
+                    quoted.push(ch);
+                    backslashes = 0;
+                }
+            }
+        }
+        quoted.push_str(&"\\".repeat(backslashes * 2));
+        quoted.push('"');
+        quoted
+    } else {
+        arg.to_owned()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_execute_runas(
+    exe: &std::path::Path,
+    args: &[String],
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{PCWSTR, w};
+
+    let mut exe_wide: Vec<u16> = exe.as_os_str().encode_wide().collect();
+    exe_wide.push(0);
+
+    let arg_line = args
+        .iter()
+        .map(|arg| quote_windows_arg(arg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut arg_wide: Vec<u16> = arg_line.encode_utf16().collect();
+    arg_wide.push(0);
+
+    // SAFETY: all UTF-16 buffers are null-terminated and outlive the call.
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("runas"),
+            PCWSTR(exe_wide.as_ptr()),
+            if args.is_empty() {
+                PCWSTR::null()
+            } else {
+                PCWSTR(arg_wide.as_ptr())
+            },
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    if result.0.addr() > 32 {
+        Ok(())
+    } else {
+        Err(format!("runas failed with ShellExecuteW code {}", result.0.addr()))
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn apply_installer_inner(
     app: &tauri::AppHandle,
     dest: &std::path::Path,
 ) -> Result<(), String> {
     // Silent NSIS install. Exit the app immediately so the installer can
     // replace the locked executable without a file-lock conflict.
-    let installer = std::process::Command::new(dest)
-        .arg("/S")
-        .spawn()
-        .map_err(|e| format!("launch NSIS installer: {e}"))?;
-
-    // Relaunch the app once the installer finishes. A detached PowerShell waiter
-    // keyed on the installer PID is robust against the file-swap race: it starts
-    // the freshly written executable only after NSIS exits, not merely after we
-    // do. Failure here is non-fatal — the user can relaunch manually.
-    let exe = std::env::current_exe().ok();
-    if let Some(exe_str) = exe.as_deref().and_then(|p| p.to_str()) {
-        let escaped = exe_str.replace('\'', "''");
-        let cmd = format!(
-            "Wait-Process -Id {} -ErrorAction SilentlyContinue; \
-             Start-Sleep -Seconds 1; Start-Process '{}'",
-            installer.id(),
-            escaped,
-        );
-        let _ = std::process::Command::new("powershell")
-            .args(["-WindowStyle", "Hidden", "-Command", &cmd])
-            .spawn();
-    }
+    shell_execute_runas(dest, &[String::from("/S")])?;
 
     app.exit(0);
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn launch_portable_updater(
+    updater_exe: &std::path::Path,
+    pid: u32,
+    tmp_dir: &std::path::Path,
+    install_dir: &std::path::Path,
+    current_exe: &std::path::Path,
+) -> Result<(), String> {
+    let args = vec![
+        "--pid".to_owned(),
+        pid.to_string(),
+        "--update-dir".to_owned(),
+        tmp_dir
+            .to_str()
+            .ok_or("update tmp dir contains non-UTF-8 path")?
+            .to_owned(),
+        "--install-dir".to_owned(),
+        install_dir
+            .to_str()
+            .ok_or("install dir contains non-UTF-8 path")?
+            .to_owned(),
+        "--exe".to_owned(),
+        current_exe
+            .to_str()
+            .ok_or("exe path contains non-UTF-8 path")?
+            .to_owned(),
+    ];
+
+    match std::process::Command::new(updater_exe).args(&args).spawn() {
+        Ok(_) => Ok(()),
+        Err(e) if matches!(e.kind(), std::io::ErrorKind::PermissionDenied) => {
+            shell_execute_runas(updater_exe, &args)
+        }
+        Err(e) => Err(format!("launch updater.exe: {e}")),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -2377,29 +2468,13 @@ pub async fn download_and_apply_update(
         }
 
         let pid = std::process::id();
-        std::process::Command::new(&updater_exe)
-            .arg("--pid")
-            .arg(pid.to_string())
-            .arg("--update-dir")
-            .arg(
-                tmp_dir
-                    .to_str()
-                    .ok_or("update tmp dir contains non-UTF-8 path")?,
-            )
-            .arg("--install-dir")
-            .arg(
-                install_dir
-                    .to_str()
-                    .ok_or("install dir contains non-UTF-8 path")?,
-            )
-            .arg("--exe")
-            .arg(
-                current_exe
-                    .to_str()
-                    .ok_or("exe path contains non-UTF-8 path")?,
-            )
-            .spawn()
-            .map_err(|e| format!("launch updater.exe: {e}"))?;
+        launch_portable_updater(
+            &updater_exe,
+            pid,
+            &tmp_dir,
+            install_dir,
+            &current_exe,
+        )?;
 
         info!("updater.exe launched; exiting to allow file swap");
         app.exit(0);
