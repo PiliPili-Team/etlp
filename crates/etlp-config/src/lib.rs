@@ -258,6 +258,9 @@ pub struct GuiSection {
     pub silent_start: bool,
     /// Periodically check GitHub for a newer release and surface an update hint.
     pub check_update: bool,
+    /// Enable the experimental macOS 26 Liquid Glass window material when the
+    /// runtime supports it. Unsupported platforms ignore this value.
+    pub liquid_glass: bool,
     /// Legacy launch-at-login flag. The OS registration (LaunchAgent) is now the
     /// source of truth; this field is read only once, to carry an old AppleScript
     /// preference forward, after which the migration strips it from the config.
@@ -272,6 +275,7 @@ impl Default for GuiSection {
             download_dir: None,
             silent_start: false,
             check_update: true,
+            liquid_glass: true,
             autostart: false,
         }
     }
@@ -777,6 +781,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.dandan.port, 8080);
         assert_eq!(cfg.server.listen_port, DEFAULT_LISTEN_PORT);
         assert_eq!(cfg.gui.speed_limit_mb, 0);
+        assert!(cfg.gui.liquid_glass);
         assert!(cfg.dev.version_prefer.is_empty());
         assert_eq!(
             cfg.trakt.redirect_uri,

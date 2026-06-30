@@ -13,6 +13,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LangMode, DisplaySettings, AccentColor } from "../display";
 import { ACCENT_PALETTES } from "../display";
+import { usePlatform } from "../hooks/usePlatform";
 import { useI18n } from "../i18n";
 import type { I18nKey } from "../i18n";
 
@@ -47,6 +48,7 @@ interface ConfigDto {
     download_dir: string;
     silent_start: boolean;
     check_update: boolean;
+    liquid_glass: boolean;
     disable_progress_report: boolean;
     trakt_client_id: string;
     trakt_client_secret: string;
@@ -87,6 +89,13 @@ interface Props {
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
     onAbout: () => void;
+    onLiquidGlassChange: (enabled: boolean) => void;
+}
+
+interface LiquidGlassSupport {
+    supported: boolean;
+    macos26_or_newer: boolean;
+    appkit_supported: boolean;
 }
 
 // ── Delta patch ────────────────────────────────────────────────────────────────
@@ -266,11 +275,13 @@ function ToggleRow({
     label,
     desc,
     checked,
+    disabled,
     onChange,
 }: {
     label: string;
     desc?: string;
     checked: boolean;
+    disabled?: boolean;
     onChange: (v: boolean) => void;
 }) {
     return (
@@ -284,6 +295,7 @@ function ToggleRow({
                     <input
                         type="checkbox"
                         checked={checked}
+                        disabled={disabled}
                         onChange={(e) => onChange(e.target.checked)}
                     />
                     <span className="toggle-track">
@@ -1111,6 +1123,7 @@ export default function Settings({
     display,
     onDisplayChange,
     onAbout,
+    onLiquidGlassChange,
 }: Props) {
     const t = useI18n();
     const [cfg, setCfg] = useState<ConfigDto | null>(null);
@@ -1159,11 +1172,14 @@ export default function Settings({
                           } as ConfigDto)
                         : prev,
                 );
+                if (sec === "gui" && key === "liquid_glass") {
+                    onLiquidGlassChange(Boolean(value));
+                }
             } catch (e) {
                 addToast(mapBackendError(e, t), true);
             }
         },
-        [addToast, t],
+        [addToast, onLiquidGlassChange, t],
     );
 
     const handleAutostart = useCallback(
@@ -2063,9 +2079,28 @@ function SystemSection({
     onAbout: () => void;
 }) {
     const t = useI18n();
+    const platform = usePlatform();
 
     const dpr =
         typeof window !== "undefined" ? window.devicePixelRatio.toFixed(1) : "1.0";
+    const [liquidGlassSupport, setLiquidGlassSupport] = useState<LiquidGlassSupport>({
+        supported: false,
+        macos26_or_newer: false,
+        appkit_supported: false,
+    });
+
+    useEffect(() => {
+        if (platform !== "macos") return;
+        invoke<LiquidGlassSupport>("get_liquid_glass_support")
+            .then(setLiquidGlassSupport)
+            .catch(() =>
+                setLiquidGlassSupport({
+                    supported: false,
+                    macos26_or_newer: false,
+                    appkit_supported: false,
+                }),
+            );
+    }, [platform]);
 
     // ── Cache ────────────────────────────────────────────────────────────────
     const [cacheSize, setCacheSize] = useState<number | null>(null);
@@ -2234,6 +2269,19 @@ function SystemSection({
                     checked={display.centerNav ?? false}
                     onChange={(v) => onDisplayChange({ centerNav: v })}
                 />
+                {platform === "macos" && (
+                    <ToggleRow
+                        label={t("sys_liquid_glass")}
+                        desc={
+                            liquidGlassSupport.supported
+                                ? t("sys_liquid_glass_desc")
+                                : t("sys_liquid_glass_unavailable")
+                        }
+                        checked={cfg.liquid_glass && liquidGlassSupport.supported}
+                        disabled={!liquidGlassSupport.supported}
+                        onChange={(v) => update("gui", "liquid_glass", v)}
+                    />
+                )}
             </div>
 
             {/* Display */}

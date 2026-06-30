@@ -146,6 +146,11 @@ export const sk: typeof zhCN = {
     sys_theme_light: "Svetlý",
     sys_theme_dark: "Tmavý",
     sys_lang_system: "Systém",
+    sys_liquid_glass: "Liquid Glass (experimentálne)",
+    sys_liquid_glass_desc:
+        "Použiť materiál okna Liquid Glass z macOS 26; zmeny sa prejavia po reštarte aplikácie",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass nie je v tomto systéme podporovaný, preto je táto možnosť vypnutá",
     sys_display: "Zobrazenie",
     sys_font_size: "Veľkosť písma",
     sys_font_size_desc: "Upraviť veľkosť textu rozhrania",

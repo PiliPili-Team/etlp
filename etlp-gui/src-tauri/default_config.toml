@@ -128,3 +128,7 @@ silent_start = false
 
 # Periodically check GitHub for a newer release and show an update hint.
 check_update = true
+
+# Enable the experimental macOS 26 Liquid Glass window material when supported.
+# Unsupported platforms always fall back to the regular translucent material.
+liquid_glass = true

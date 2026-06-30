@@ -146,6 +146,11 @@ export const id: typeof zhCN = {
     sys_theme_light: "Terang",
     sys_theme_dark: "Gelap",
     sys_lang_system: "Sistem",
+    sys_liquid_glass: "Liquid Glass (Eksperimental)",
+    sys_liquid_glass_desc:
+        "Gunakan material jendela Liquid Glass macOS 26; mulai ulang aplikasi untuk menerapkan perubahan",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass tidak didukung di sistem ini, jadi opsi ini dinonaktifkan",
     sys_display: "Layar",
     sys_font_size: "Ukuran Font",
     sys_font_size_desc: "Sesuaikan ukuran teks antarmuka",

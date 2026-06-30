@@ -387,6 +387,11 @@ export interface UpdateInfo {
     url: string;
 }
 
+interface ShellConfig {
+    check_update: boolean;
+    liquid_glass: boolean;
+}
+
 // Stores the version the user dismissed so the banner stays hidden until a
 // newer release appears.
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
@@ -498,6 +503,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const [showAbout, setShowAbout] = useState(false);
     const [update, setUpdate] = useState<UpdateInfo | null>(null);
     const [windowFocused, setWindowFocused] = useState(true);
+    const [liquidGlassEnabled, setLiquidGlassEnabled] = useState(false);
     const toastIdRef = useRef(0);
 
     // Auto update check: runs once per app launch (independent of the active
@@ -515,7 +521,8 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             if (autoUpdateChecked) return;
             autoUpdateChecked = true;
             try {
-                const cfg = await invoke<{ check_update: boolean }>("get_config");
+                const cfg = await invoke<ShellConfig>("get_config");
+                if (!cancelled) setLiquidGlassEnabled(cfg.liquid_glass);
                 if (!cfg.check_update) return;
                 const info = await invoke<UpdateInfo>("check_update");
                 if (cancelled || !info.has_update) return;
@@ -534,6 +541,18 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         return () => {
             cancelled = true;
             clearTimeout(id);
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        invoke<ShellConfig>("get_config")
+            .then((cfg) => {
+                if (!cancelled) setLiquidGlassEnabled(cfg.liquid_glass);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
         };
     }, []);
 
@@ -656,7 +675,11 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     ];
 
     return (
-        <div className={`app ${windowFocused ? "window-focused" : "window-blurred"}`}>
+        <div
+            className={`app ${windowFocused ? "window-focused" : "window-blurred"}${
+                liquidGlassEnabled ? " liquid-glass-enabled" : ""
+            }`}
+        >
             {isMac && (
                 // data-tauri-drag-region activates Tauri's JS drag API
                 // (core:window:allow-start-dragging) on mousedown, bypassing
@@ -709,6 +732,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                             display={display}
                             onDisplayChange={onDisplayChange}
                             onAbout={() => setShowAbout(true)}
+                            onLiquidGlassChange={setLiquidGlassEnabled}
                         />
                     )}
                     {/* Logs stays mounted so its buffer survives tab switches;

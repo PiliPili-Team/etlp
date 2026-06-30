@@ -143,6 +143,11 @@ export const ko: typeof zhCN = {
     sys_theme_light: "밝게",
     sys_theme_dark: "어둡게",
     sys_lang_system: "시스템",
+    sys_liquid_glass: "Liquid Glass (실험적)",
+    sys_liquid_glass_desc:
+        "macOS 26 Liquid Glass 창 소재를 사용합니다. 변경 사항을 적용하려면 앱을 다시 시작하세요",
+    sys_liquid_glass_unavailable:
+        "이 시스템은 Liquid Glass를 지원하지 않아 이 옵션이 비활성화되었습니다",
     sys_display: "디스플레이",
     sys_font_size: "글꼴 크기",
     sys_font_size_desc: "UI 텍스트 크기를 조정합니다",

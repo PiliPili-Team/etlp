@@ -144,6 +144,11 @@ export const ar: typeof zhCN = {
     sys_theme_light: "فاتح",
     sys_theme_dark: "داكن",
     sys_lang_system: "النظام",
+    sys_liquid_glass: "Liquid Glass (تجريبي)",
+    sys_liquid_glass_desc:
+        "استخدم مادة نافذة Liquid Glass في macOS 26؛ أعد تشغيل التطبيق لتطبيق التغييرات",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass غير مدعوم على هذا النظام، لذلك تم تعطيل هذا الخيار",
     sys_display: "العرض",
     sys_font_size: "حجم الخط",
     sys_font_size_desc: "ضبط حجم نص الواجهة",

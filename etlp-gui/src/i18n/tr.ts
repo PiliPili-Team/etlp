@@ -145,6 +145,11 @@ export const tr: typeof zhCN = {
     sys_theme_light: "Açık",
     sys_theme_dark: "Koyu",
     sys_lang_system: "Sistem",
+    sys_liquid_glass: "Liquid Glass (deneysel)",
+    sys_liquid_glass_desc:
+        "macOS 26 Liquid Glass pencere malzemesini kullan; değişikliklerin uygulanması için uygulamayı yeniden başlat",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass bu sistemde desteklenmiyor, bu nedenle seçenek devre dışı",
     sys_display: "Ekran",
     sys_font_size: "Yazı Tipi Boyutu",
     sys_font_size_desc: "Arayüz metin boyutunu ayarla",

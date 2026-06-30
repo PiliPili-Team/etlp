@@ -144,6 +144,11 @@ export const sr: typeof zhCN = {
     sys_theme_light: "Светла",
     sys_theme_dark: "Тамна",
     sys_lang_system: "Системски",
+    sys_liquid_glass: "Liquid Glass (експериментално)",
+    sys_liquid_glass_desc:
+        "Користи Liquid Glass материјал прозора из macOS 26; поново покрените апликацију да би се измене примениле",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass није подржан на овом систему, па је ова опција онемогућена",
     sys_display: "Екран",
     sys_font_size: "Величина фонта",
     sys_font_size_desc: "Подеси величину текста интерфејса",

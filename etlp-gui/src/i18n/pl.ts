@@ -146,6 +146,11 @@ export const pl: typeof zhCN = {
     sys_theme_light: "Jasny",
     sys_theme_dark: "Ciemny",
     sys_lang_system: "Systemowy",
+    sys_liquid_glass: "Liquid Glass (eksperymentalne)",
+    sys_liquid_glass_desc:
+        "Użyj materiału okna Liquid Glass z macOS 26; uruchom aplikację ponownie, aby zastosować zmiany",
+    sys_liquid_glass_unavailable:
+        "Liquid Glass nie jest obsługiwany w tym systemie, więc ta opcja jest wyłączona",
     sys_display: "Wyświetlacz",
     sys_font_size: "Rozmiar czcionki",
     sys_font_size_desc: "Dostosuj rozmiar tekstu interfejsu",

@@ -144,6 +144,10 @@ export const th: typeof zhCN = {
     sys_theme_light: "สว่าง",
     sys_theme_dark: "มืด",
     sys_lang_system: "ระบบ",
+    sys_liquid_glass: "Liquid Glass (ทดลอง)",
+    sys_liquid_glass_desc:
+        "ใช้วัสดุหน้าต่าง Liquid Glass ของ macOS 26; รีสตาร์ตแอปเพื่อใช้การเปลี่ยนแปลง",
+    sys_liquid_glass_unavailable: "ระบบนี้ไม่รองรับ Liquid Glass จึงปิดใช้งานตัวเลือกนี้",
     sys_display: "การแสดงผล",
     sys_font_size: "ขนาดตัวอักษร",
     sys_font_size_desc: "ปรับขนาดข้อความของส่วนติดต่อ",

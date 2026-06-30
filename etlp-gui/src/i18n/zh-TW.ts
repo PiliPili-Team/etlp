@@ -141,6 +141,10 @@ export const zhTW: typeof zhCN = {
     sys_theme_light: "亮色",
     sys_theme_dark: "暗色",
     sys_lang_system: "跟隨系統",
+    sys_liquid_glass: "液態玻璃（實驗性）",
+    sys_liquid_glass_desc:
+        "啟用 macOS 26 的液態玻璃視窗材質；修改後需重新啟動應用程式才會生效",
+    sys_liquid_glass_unavailable: "目前系統不支援液態玻璃，已停用",
     sys_display: "顯示",
     sys_font_size: "字體大小",
     sys_font_size_desc: "調整介面文字大小",

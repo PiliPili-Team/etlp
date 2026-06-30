@@ -447,6 +447,13 @@ fn is_macos_26_or_newer() -> bool {
         .is_some_and(|major| major >= 26)
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LiquidGlassSupport {
+    pub supported: bool,
+    pub macos26_or_newer: bool,
+    pub appkit_supported: bool,
+}
+
 #[cfg(target_os = "macos")]
 fn appkit_supports_liquid_glass() -> bool {
     use objc2_app_kit::NSAppKitVersionNumber;
@@ -457,11 +464,32 @@ fn appkit_supports_liquid_glass() -> bool {
 }
 
 #[cfg(target_os = "macos")]
+pub fn liquid_glass_support() -> LiquidGlassSupport {
+    let macos26_or_newer = is_macos_26_or_newer();
+    let appkit_supported = appkit_supports_liquid_glass();
+    LiquidGlassSupport {
+        supported: macos26_or_newer && appkit_supported,
+        macos26_or_newer,
+        appkit_supported,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn liquid_glass_support() -> LiquidGlassSupport {
+    LiquidGlassSupport {
+        supported: false,
+        macos26_or_newer: false,
+        appkit_supported: false,
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn log_liquid_glass_support() {
     LIQUID_GLASS_LOG_ONCE.call_once(|| {
+        let support = liquid_glass_support();
         tracing::info!(
-            macos26_or_newer = is_macos_26_or_newer(),
-            appkit_supported = appkit_supports_liquid_glass(),
+            macos26_or_newer = support.macos26_or_newer,
+            appkit_supported = support.appkit_supported,
             "liquid glass support"
         );
     });
@@ -533,11 +561,22 @@ fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn apply_window_material(window: &tauri::WebviewWindow) {
+fn apply_window_material(
+    window: &tauri::WebviewWindow,
+    liquid_glass_requested: bool,
+) {
     use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
 
     log_liquid_glass_support();
-    if is_macos_26_or_newer() {
+    let support = liquid_glass_support();
+    let liquid_glass_enabled = liquid_glass_requested && support.supported;
+    tracing::info!(
+        requested = liquid_glass_requested,
+        enabled = liquid_glass_enabled,
+        supported = support.supported,
+        "liquid glass material decision"
+    );
+    if liquid_glass_enabled && support.supported {
         match apply_liquid_glass(window) {
             Ok(()) => return,
             Err(e) => eprintln!("[etlp] liquid glass: {e}"),
@@ -549,7 +588,10 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
 }
 
 #[cfg(target_os = "windows")]
-fn apply_window_material(window: &tauri::WebviewWindow) {
+fn apply_window_material(
+    window: &tauri::WebviewWindow,
+    _liquid_glass_requested: bool,
+) {
     // Keep Windows acrylic in the same cool dark material family as the CSS
     // shell. Blur is a compatibility fallback for older Windows builds.
     window_vibrancy::apply_acrylic(window, Some((10, 20, 27, 118)))
@@ -570,7 +612,11 @@ fn apply_window_frame(window: &tauri::WebviewWindow) {
 fn apply_window_frame(_window: &tauri::WebviewWindow) {}
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn apply_window_material(_window: &tauri::WebviewWindow) {}
+fn apply_window_material(
+    _window: &tauri::WebviewWindow,
+    _liquid_glass_requested: bool,
+) {
+}
 
 // ── Windows UAC elevation ─────────────────────────────────────────────────────
 
@@ -701,6 +747,10 @@ pub fn run() {
         .as_ref()
         .map(|c| c.gui.autostart)
         .unwrap_or(false);
+    let liquid_glass_requested = initial_config
+        .as_ref()
+        .map(|c| c.gui.liquid_glass)
+        .unwrap_or(true);
 
     let rotation = initial_config
         .as_ref()
@@ -827,7 +877,7 @@ pub fn run() {
                 // hit-testing and breaks the custom drag region. On macOS 26+
                 // this applies NSGlassEffectView, falling back to vibrancy on
                 // older systems or when the runtime rejects Liquid Glass.
-                apply_window_material(&window);
+                apply_window_material(&window, liquid_glass_requested);
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
                 // When silent start is enabled the window stays hidden and the
@@ -913,6 +963,7 @@ pub fn run() {
             commands::list_system_fonts,
             commands::set_autostart,
             commands::get_autostart,
+            commands::get_liquid_glass_support,
             commands::validate_bangumi_mapping,
             commands::export_bangumi_map,
             commands::import_bangumi_map,
