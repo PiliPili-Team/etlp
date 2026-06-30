@@ -6,7 +6,7 @@ pub mod config_patch;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{Emitter, LogicalSize, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 use commands::GuiState;
@@ -362,10 +362,10 @@ fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
         let glass =
             NSGlassEffectView::initWithFrame(mtm.alloc(), view.bounds());
         let tint = NSColor::colorWithRed_green_blue_alpha(
-            242.0 / 255.0,
-            242.0 / 255.0,
-            247.0 / 255.0,
-            0.50,
+            18.0 / 255.0,
+            32.0 / 255.0,
+            40.0 / 255.0,
+            0.42,
         );
 
         glass.setStyle(NSGlassEffectViewStyle::Regular);
@@ -402,11 +402,11 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
 
 #[cfg(target_os = "windows")]
 fn apply_window_material(window: &tauri::WebviewWindow) {
-    // Match the macOS translucent sidebar treatment with native Windows
-    // acrylic. Blur is a compatibility fallback for older Windows builds.
-    window_vibrancy::apply_acrylic(window, Some((242, 242, 247, 160)))
+    // Keep Windows acrylic in the same cool dark material family as the CSS
+    // shell. Blur is a compatibility fallback for older Windows builds.
+    window_vibrancy::apply_acrylic(window, Some((10, 20, 27, 118)))
         .or_else(|_| {
-            window_vibrancy::apply_blur(window, Some((242, 242, 247, 120)))
+            window_vibrancy::apply_blur(window, Some((10, 20, 27, 108)))
         })
         .unwrap_or_else(|e| eprintln!("[etlp] acrylic: {e}"));
 }
@@ -670,6 +670,7 @@ pub fn run() {
                 .build(app)?;
 
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_size(LogicalSize::new(1200.0, 675.0));
                 // Windows owns the frame in React; macOS keeps native traffic
                 // lights and Linux keeps the native frame.
                 apply_window_frame(&window);

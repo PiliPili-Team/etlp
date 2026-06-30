@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type MouseEvent } from "react";
 import { usePlatform } from "./hooks/usePlatform";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "./i18n";
@@ -501,6 +502,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [showAbout, setShowAbout] = useState(false);
     const [update, setUpdate] = useState<UpdateInfo | null>(null);
+    const [windowFocused, setWindowFocused] = useState(true);
     const toastIdRef = useRef(0);
 
     // Auto update check: runs once per app launch (independent of the active
@@ -551,13 +553,36 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         document.body.className = platform !== "unknown" ? `platform-${platform}` : "";
     }, [platform]);
 
+    useEffect(() => {
+        const win = getCurrentWindow();
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+
+        win.isFocused()
+            .then((focused) => {
+                if (!cancelled) setWindowFocused(focused);
+            })
+            .catch(() => {});
+
+        win.onFocusChanged(({ payload }) => {
+            setWindowFocused(payload);
+        })
+            .then((fn) => {
+                unlisten = fn;
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, []);
+
     // Listen for tray "About" event
     useEffect(() => {
         let unlisten: (() => void) | undefined;
-        import("@tauri-apps/api/event").then(({ listen }) => {
-            listen("show-about", () => setShowAbout(true)).then((fn) => {
-                unlisten = fn;
-            });
+        listen("show-about", () => setShowAbout(true)).then((fn) => {
+            unlisten = fn;
         });
         return () => {
             unlisten?.();
@@ -635,7 +660,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     ];
 
     return (
-        <div className="app">
+        <div className={`app ${windowFocused ? "window-focused" : "window-blurred"}`}>
             {isMac && (
                 // data-tauri-drag-region activates Tauri's JS drag API
                 // (core:window:allow-start-dragging) on mousedown, bypassing

@@ -16,21 +16,21 @@
     --sidebar-w: 188px;
     --titlebar-h: 68px;
 
-    --window-bg: rgba(238, 239, 243, 0.72);
-    --window-tint: rgba(248, 248, 251, 0.52);
-    --pane-bg: rgba(248, 248, 251, 0.64);
-    --pane-border: rgba(35, 39, 47, 0.1);
+    --window-bg: rgba(218, 226, 231, 0.72);
+    --window-tint: rgba(224, 232, 236, 0.56);
+    --pane-bg: rgba(224, 232, 236, 0.44);
+    --pane-border: rgba(40, 49, 56, 0.045);
     --bg: var(--window-bg);
     --sidebar-bg: var(--pane-bg);
-    --surface: rgba(255, 255, 255, 0.78);
-    --surface-alt: rgba(243, 244, 247, 0.72);
-    --surface-hover: rgba(231, 233, 238, 0.82);
-    --surface-strong: rgba(255, 255, 255, 0.9);
+    --surface: rgba(242, 247, 249, 0.7);
+    --surface-alt: rgba(224, 232, 236, 0.58);
+    --surface-hover: rgba(255, 255, 255, 0.34);
+    --surface-strong: rgba(246, 250, 252, 0.78);
     --bg-2: var(--surface-alt);
     --bg-hover: var(--surface-hover);
     --bg-input: rgba(255, 255, 255, 0.72);
     --border: var(--pane-border);
-    --border-row: rgba(0, 0, 0, 0.055);
+    --border-row: rgba(40, 49, 56, 0.032);
     --text: #1c1c1e;
     --text-1: var(--text);
     --text-2: rgba(60, 60, 67, 0.75);
@@ -47,10 +47,11 @@
     --purple-soft: rgba(159, 122, 234, 0.12);
     --teal: #5ac8fa;
     --teal-soft: rgba(90, 200, 250, 0.12);
-    --toggle-on: #34c759;
-    --toggle-off: #e5e5ea;
-    --shadow-sm: 0 1px 8px rgba(31, 35, 40, 0.06), 0 0 0 1px rgba(31, 35, 40, 0.04);
-    --shadow-md: 0 8px 24px rgba(31, 35, 40, 0.11), 0 1px 4px rgba(31, 35, 40, 0.05);
+    --toggle-on: var(--accent);
+    --toggle-off: rgba(84, 91, 99, 0.28);
+    --shadow-sm:
+        0 12px 28px rgba(31, 38, 45, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+    --shadow-md: 0 18px 38px rgba(31, 38, 45, 0.14), 0 1px 4px rgba(31, 38, 45, 0.06);
 
     font-family:
         var(--app-font, system-ui), system-ui, BlinkMacSystemFont, "SF Pro Text",
@@ -66,27 +67,27 @@
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --window-bg: rgba(18, 19, 21, 0.72);
-        --window-tint: rgba(32, 34, 37, 0.36);
-        --pane-bg: rgba(29, 31, 34, 0.54);
-        --pane-border: rgba(255, 255, 255, 0.09);
+        --window-bg: rgba(8, 16, 22, 0.78);
+        --window-tint: rgba(8, 17, 23, 0.62);
+        --pane-bg: rgba(12, 24, 32, 0.52);
+        --pane-border: rgba(216, 238, 245, 0.026);
         --bg: var(--window-bg);
         --sidebar-bg: var(--pane-bg);
-        --surface: rgba(37, 39, 42, 0.78);
-        --surface-alt: rgba(49, 51, 55, 0.58);
-        --surface-hover: rgba(66, 69, 74, 0.66);
-        --surface-strong: rgba(42, 44, 48, 0.88);
+        --surface: rgba(3, 8, 12, 0.72);
+        --surface-alt: rgba(10, 20, 27, 0.58);
+        --surface-hover: rgba(255, 255, 255, 0.062);
+        --surface-strong: rgba(4, 10, 14, 0.84);
         --bg-2: var(--surface-alt);
         --bg-hover: var(--surface-hover);
-        --bg-input: rgba(28, 30, 33, 0.66);
+        --bg-input: rgba(10, 16, 22, 0.36);
         --border: var(--pane-border);
-        --border-row: rgba(255, 255, 255, 0.05);
+        --border-row: rgba(216, 238, 245, 0.018);
         --text: #ffffff;
         --text-1: var(--text);
         --text-2: rgba(255, 255, 255, 0.6);
         --text-3: rgba(255, 255, 255, 0.3);
-        --accent: #0a84ff;
-        --accent-soft: rgba(10, 132, 255, 0.15);
+        --accent: #2f8cff;
+        --accent-soft: rgba(47, 140, 255, 0.16);
         --green: #30d158;
         --green-soft: rgba(48, 209, 88, 0.15);
         --red: #ff453a;
@@ -97,37 +98,38 @@
         --purple-soft: rgba(191, 128, 255, 0.15);
         --teal: #5ac8fa;
         --teal-soft: rgba(90, 200, 250, 0.15);
-        --toggle-on: #30d158;
-        --toggle-off: #3a3a3c;
-        --shadow-sm: 0 1px 8px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.04);
-        --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.4);
+        --toggle-on: var(--accent);
+        --toggle-off: rgba(140, 151, 160, 0.2);
+        --shadow-sm:
+            0 8px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.018) inset;
+        --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.1);
     }
 }
 
 /* ── Dark theme (explicit override) ────────────────────────────────── */
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --window-bg: rgba(18, 19, 21, 0.72);
-    --window-tint: rgba(32, 34, 37, 0.36);
-    --pane-bg: rgba(29, 31, 34, 0.54);
-    --pane-border: rgba(255, 255, 255, 0.09);
+    --window-bg: rgba(8, 16, 22, 0.78);
+    --window-tint: rgba(8, 17, 23, 0.62);
+    --pane-bg: rgba(12, 24, 32, 0.52);
+    --pane-border: rgba(216, 238, 245, 0.026);
     --bg: var(--window-bg);
     --sidebar-bg: var(--pane-bg);
-    --surface: rgba(37, 39, 42, 0.78);
-    --surface-alt: rgba(49, 51, 55, 0.58);
-    --surface-hover: rgba(66, 69, 74, 0.66);
-    --surface-strong: rgba(42, 44, 48, 0.88);
+    --surface: rgba(3, 8, 12, 0.72);
+    --surface-alt: rgba(10, 20, 27, 0.58);
+    --surface-hover: rgba(255, 255, 255, 0.062);
+    --surface-strong: rgba(4, 10, 14, 0.84);
     --bg-2: var(--surface-alt);
     --bg-hover: var(--surface-hover);
-    --bg-input: rgba(28, 30, 33, 0.66);
+    --bg-input: rgba(10, 16, 22, 0.36);
     --border: var(--pane-border);
-    --border-row: rgba(255, 255, 255, 0.05);
+    --border-row: rgba(216, 238, 245, 0.018);
     --text: #ffffff;
     --text-1: var(--text);
     --text-2: rgba(255, 255, 255, 0.6);
     --text-3: rgba(255, 255, 255, 0.3);
-    --accent: #0a84ff;
-    --accent-soft: rgba(10, 132, 255, 0.15);
+    --accent: #2f8cff;
+    --accent-soft: rgba(47, 140, 255, 0.16);
     --green: #30d158;
     --green-soft: rgba(48, 209, 88, 0.15);
     --red: #ff453a;
@@ -138,10 +140,11 @@
     --purple-soft: rgba(191, 128, 255, 0.15);
     --teal: #5ac8fa;
     --teal-soft: rgba(90, 200, 250, 0.15);
-    --toggle-on: #30d158;
-    --toggle-off: #3a3a3c;
-    --shadow-sm: 0 1px 8px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    --shadow-md: 0 8px 26px rgba(0, 0, 0, 0.4);
+    --toggle-on: var(--accent);
+    --toggle-off: rgba(140, 151, 160, 0.2);
+    --shadow-sm:
+        0 8px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.018) inset;
+    --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
@@ -173,11 +176,32 @@ body.platform-linux {
     background: var(--window-bg);
     overflow: hidden;
     border-radius: 12px;
-    border: 1px solid var(--pane-border);
+    border: none;
+    box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.02);
 }
 
 /* macOS: remove solid background so vibrancy shows through */
 body.platform-macos .app {
+    background: var(--window-tint);
+}
+
+.app.window-focused {
+    --window-bg: rgba(8, 16, 22, 0.8);
+    --window-tint: rgba(8, 17, 23, 0.64);
+    --pane-bg: rgba(12, 24, 32, 0.54);
+    box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.02);
+}
+
+.app.window-blurred {
+    --window-bg: rgba(6, 13, 18, 0.84);
+    --window-tint: rgba(6, 14, 19, 0.68);
+    --pane-bg: rgba(10, 20, 27, 0.56);
+    box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.012);
+    filter: brightness(0.93) saturate(0.92);
+}
+
+body.platform-macos .app.window-focused,
+body.platform-macos .app.window-blurred {
     background: var(--window-tint);
 }
 
@@ -197,7 +221,7 @@ body.platform-windows .app {
     -webkit-app-region: drag;
     user-select: none;
     flex-shrink: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: none;
     background: var(--sidebar-bg);
     gap: 9px;
 }
@@ -312,9 +336,9 @@ body:not(.platform-macos) .titlebar {
     width: var(--sidebar-w);
     flex-shrink: 0;
     background: var(--sidebar-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-inline-end: 1px solid var(--border);
+    backdrop-filter: blur(38px);
+    -webkit-backdrop-filter: blur(38px);
+    border-inline-end: none;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -368,14 +392,13 @@ html[data-center-nav="true"] .sidebar {
 }
 
 .nav-item:hover {
-    background: var(--surface-hover);
+    background: rgba(255, 255, 255, 0.062);
     color: var(--text);
 }
 
-/* Active: soft accent background, accent-colored label */
 .nav-item.active {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.92);
     font-weight: 600;
 }
 
@@ -423,8 +446,8 @@ html[data-center-nav="true"] .sidebar {
     padding: 24px 26px 36px;
     min-width: 0;
     background: var(--pane-bg);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(38px);
+    -webkit-backdrop-filter: blur(38px);
 }
 
 body.platform-windows .content {
@@ -459,7 +482,7 @@ body.platform-windows .content {
     height: 32px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.055);
     color: var(--text-2);
     cursor: pointer;
     transition:
@@ -488,9 +511,9 @@ body.platform-windows .content {
 
 /* ── Settings card ────────────────────────────────────────────────────── */
 .settings-group {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    background: var(--surface-strong);
+    border: 1px solid rgba(216, 238, 245, 0.018);
+    border-radius: 16px;
     box-shadow: var(--shadow-sm);
     overflow: hidden;
     margin-bottom: 14px;
@@ -532,7 +555,7 @@ body.platform-windows .content {
     min-width: 0;
     padding: 7px 10px;
     border-radius: 8px;
-    background: var(--surface-alt);
+    background: rgba(255, 255, 255, 0.055);
     font-family: "SF Mono", "Cascadia Code", monospace;
     font-size: 12px;
     color: var(--text);
@@ -550,7 +573,7 @@ body.platform-windows .content {
     align-items: center;
     min-height: 54px;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border-row);
+    border-bottom: 1px solid rgba(216, 238, 245, 0.022);
     gap: 12px;
 }
 
@@ -608,7 +631,7 @@ body.platform-windows .content {
     gap: 8px;
     padding: 7px 10px;
     border-radius: 8px;
-    background: var(--surface-alt);
+    background: rgba(255, 255, 255, 0.055);
 }
 
 .map-item-text {
@@ -872,11 +895,17 @@ body.platform-windows .content {
     inset: 0;
     border-radius: 16px;
     background: var(--toggle-off);
-    transition: background 0.2s;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+    transition:
+        background 0.2s,
+        box-shadow 0.2s;
 }
 
 .toggle input:checked ~ .toggle-track {
     background: var(--toggle-on);
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--toggle-on) 55%, #fff 12%),
+        0 0 16px color-mix(in srgb, var(--toggle-on) 24%, transparent);
 }
 
 .toggle-thumb {
@@ -886,10 +915,10 @@ body.platform-windows .content {
     width: 25px;
     height: 25px;
     border-radius: 50%;
-    background: #fff;
+    background: rgba(245, 248, 250, 0.94);
     box-shadow:
-        0 2px 4px rgba(0, 0, 0, 0.2),
-        0 0 1px rgba(0, 0, 0, 0.1);
+        0 2px 5px rgba(0, 0, 0, 0.24),
+        0 0 0 1px rgba(255, 255, 255, 0.18);
     transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
     pointer-events: none;
 }
@@ -900,8 +929,8 @@ body.platform-windows .content {
 
 /* ── Input ────────────────────────────────────────────────────────────── */
 .input {
-    background: var(--surface-alt);
-    border: 1.5px solid var(--border);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(216, 238, 245, 0.065);
     border-radius: 8px;
     padding: 6px 10px;
     font-size: 13px;
@@ -938,8 +967,8 @@ body.platform-windows .content {
 
 /* ── Select ────────────────────────────────────────────────────────────── */
 .select {
-    background: var(--surface-alt);
-    border: 1.5px solid var(--border);
+    background-color: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(216, 238, 245, 0.065);
     border-radius: 8px;
     padding: 6px 28px 6px 10px;
     font-size: 13px;
@@ -979,7 +1008,7 @@ body.platform-windows .content {
     display: flex;
     border-radius: 8px;
     overflow: hidden;
-    border: 1.5px solid var(--border);
+    border: 1px solid rgba(216, 238, 245, 0.065);
     flex-shrink: 0;
 }
 
@@ -989,7 +1018,7 @@ body.platform-windows .content {
     font-family: "SF Mono", "Cascadia Code", ui-monospace, monospace;
     border: none;
     border-right: 1px solid var(--border);
-    background: var(--surface-alt);
+    background: rgba(255, 255, 255, 0.045);
     color: var(--text-2);
     cursor: pointer;
     -webkit-app-region: no-drag;
@@ -1091,8 +1120,8 @@ body.platform-windows .content {
 
 .tag-input {
     flex: 1;
-    background: var(--surface-alt);
-    border: 1.5px solid var(--border);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(216, 238, 245, 0.065);
     border-radius: 8px;
     padding: 5px 10px;
     font-size: 12px;
@@ -1121,7 +1150,7 @@ body.platform-windows .content {
     color: var(--green);
 }
 .status-badge.stopped {
-    background: var(--surface-alt);
+    background: rgba(255, 255, 255, 0.055);
     color: var(--text-2);
 }
 
@@ -1156,8 +1185,8 @@ body.platform-windows .content {
     gap: 6px;
     padding: 7px 16px;
     border-radius: 8px;
-    border: 1.5px solid var(--border);
-    background: var(--surface-alt);
+    border: 1px solid rgba(216, 238, 245, 0.065);
+    background: rgba(255, 255, 255, 0.055);
     color: var(--text);
     font-size: 13px;
     font-weight: 500;
@@ -1170,7 +1199,7 @@ body.platform-windows .content {
     -webkit-app-region: no-drag;
 }
 .btn:hover {
-    background: var(--surface-hover);
+    background: rgba(255, 255, 255, 0.1);
 }
 .btn:active {
     transform: scale(0.97);
@@ -1189,7 +1218,7 @@ body.platform-windows .content {
     padding: 10px 14px;
     margin-bottom: 14px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface) 28%);
+    background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface) 52%);
     border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border) 66%);
 }
 .update-banner-dot {
@@ -1396,9 +1425,9 @@ body.platform-windows .content {
 
 /* ── Overview card ─────────────────────────────────────────────────────── */
 .overview-hero {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
+    background: var(--surface-strong);
+    border: 1px solid rgba(216, 238, 245, 0.026);
+    border-radius: 16px;
     padding: 22px;
     box-shadow: var(--shadow-sm);
     margin-bottom: 16px;
@@ -1430,8 +1459,8 @@ body.platform-windows .content {
 
 .meta-item {
     background: var(--surface-alt);
-    border: 1px solid var(--border-row);
-    border-radius: 10px;
+    border: 1px solid rgba(216, 238, 245, 0.022);
+    border-radius: 12px;
     padding: 14px 16px;
 }
 
@@ -1459,9 +1488,9 @@ body.platform-windows .content {
 
 /* ── Log viewer ─────────────────────────────────────────────────────────── */
 .log-container {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    background: var(--surface-strong);
+    border: 1px solid rgba(216, 238, 245, 0.026);
+    border-radius: 16px;
     overflow: hidden;
     box-shadow: var(--shadow-sm);
     display: flex;
@@ -1532,7 +1561,7 @@ body.platform-windows .content {
     font-size: 14.5px;
     line-height: 1.65;
     color: var(--text);
-    background: var(--surface);
+    background: transparent;
     white-space: pre-wrap;
     word-break: break-all;
 }

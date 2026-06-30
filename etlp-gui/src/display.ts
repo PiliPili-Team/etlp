@@ -85,7 +85,7 @@ export interface DisplaySettings {
 
 /** [light-hex, dark-hex, soft-rgba] */
 export const ACCENT_PALETTES: Record<AccentColor, [string, string, string]> = {
-    blue: ["#007aff", "#0a84ff", "rgba(0,122,255,0.14)"],
+    blue: ["#1677ff", "#2f8cff", "rgba(47,140,255,0.16)"],
     indigo: ["#5856d6", "#6065d3", "rgba(88,86,214,0.14)"],
     purple: ["#af52de", "#bf5af2", "rgba(175,82,222,0.14)"],
     pink: ["#ff2d78", "#ff375f", "rgba(255,45,120,0.14)"],

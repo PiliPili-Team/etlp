@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { LangMode, DisplaySettings, AccentColor } from "../display";
@@ -2116,16 +2117,14 @@ function SystemSection({
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         let installToasted = false;
-        import("@tauri-apps/api/event").then(({ listen }) => {
-            listen<UpdateProgressEvent>("update-progress", (e) => {
-                setUpdateProgress(e.payload);
-                if (e.payload.phase === "install" && !installToasted) {
-                    installToasted = true;
-                    addToast(t("ov_update_installing"));
-                }
-            }).then((fn) => {
-                unlisten = fn;
-            });
+        listen<UpdateProgressEvent>("update-progress", (e) => {
+            setUpdateProgress(e.payload);
+            if (e.payload.phase === "install" && !installToasted) {
+                installToasted = true;
+                addToast(t("ov_update_installing"));
+            }
+        }).then((fn) => {
+            unlisten = fn;
         });
         return () => {
             unlisten?.();

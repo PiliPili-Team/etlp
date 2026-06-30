@@ -16,7 +16,7 @@
         "label": "main",
         "title": "Genshin",
         "width": 1200,
-        "height": 825,
+        "height": 675,
         "minWidth": 900,
         "minHeight": 650,
         "visible": false,

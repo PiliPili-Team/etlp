@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import type { UpdateInfo } from "../App";
 
@@ -63,16 +64,14 @@ export default function Overview({ addToast, update, onDismissUpdate }: Props) {
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         let installToasted = false;
-        import("@tauri-apps/api/event").then(({ listen }) => {
-            listen<UpdateProgressEvent>("update-progress", (e) => {
-                setProgress(e.payload);
-                if (e.payload.phase === "install" && !installToasted) {
-                    installToasted = true;
-                    addToast(t("ov_update_installing"));
-                }
-            }).then((fn) => {
-                unlisten = fn;
-            });
+        listen<UpdateProgressEvent>("update-progress", (e) => {
+            setProgress(e.payload);
+            if (e.payload.phase === "install" && !installToasted) {
+                installToasted = true;
+                addToast(t("ov_update_installing"));
+            }
+        }).then((fn) => {
+            unlisten = fn;
         });
         return () => {
             unlisten?.();
