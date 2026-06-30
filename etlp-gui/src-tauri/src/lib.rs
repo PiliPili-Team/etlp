@@ -330,17 +330,73 @@ fn is_macos_26_or_newer() -> bool {
 }
 
 #[cfg(target_os = "macos")]
+fn apply_liquid_glass(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{
+        NSAppKitVersionNumber, NSAutoresizingMaskOptions, NSColor,
+        NSGlassEffectView, NSGlassEffectViewStyle, NSView,
+        NSWindowOrderingMode,
+    };
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    // SAFETY: AppKit exports this process-wide read-only version number.
+    let appkit_version = unsafe { NSAppKitVersionNumber };
+    if appkit_version < 2685.0 {
+        return Err("Liquid Glass requires macOS 26.0 or newer".into());
+    }
+
+    let RawWindowHandle::AppKit(handle) = window
+        .window_handle()
+        .map_err(|e| format!("window handle: {e}"))?
+        .as_raw()
+    else {
+        return Err("Liquid Glass requires an AppKit window".into());
+    };
+
+    let mtm = MainThreadMarker::new().ok_or_else(|| {
+        "Liquid Glass must be applied on the main thread".to_string()
+    })?;
+
+    unsafe {
+        let view: &NSView = handle.ns_view.cast().as_ref();
+        let glass =
+            NSGlassEffectView::initWithFrame(mtm.alloc(), view.bounds());
+        let tint = NSColor::colorWithRed_green_blue_alpha(
+            242.0 / 255.0,
+            242.0 / 255.0,
+            247.0 / 255.0,
+            0.50,
+        );
+
+        glass.setStyle(NSGlassEffectViewStyle::Regular);
+        glass.setCornerRadius(12.0);
+        glass.setTintColor(Some(&tint));
+        glass.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        view.addSubview_positioned_relativeTo(
+            &glass,
+            NSWindowOrderingMode::Below,
+            None,
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
 fn apply_window_material(window: &tauri::WebviewWindow) {
     use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
 
-    // macOS Tahoe 26's Liquid Glass is applied by the system to semantic
-    // materials. Keep older systems on Sidebar to preserve the current look.
-    let material = if is_macos_26_or_newer() {
-        NSVisualEffectMaterial::HeaderView
-    } else {
-        NSVisualEffectMaterial::Sidebar
-    };
-    apply_vibrancy(window, material, None, Some(12.0))
+    if is_macos_26_or_newer() {
+        match apply_liquid_glass(window) {
+            Ok(()) => return,
+            Err(e) => eprintln!("[etlp] liquid glass: {e}"),
+        }
+    }
+
+    apply_vibrancy(window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
         .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
 }
 
@@ -605,11 +661,11 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 // ── Window material ───────────────────────────────────────────
-                // Pin to window-vibrancy 0.6 (same version bundled in tauri
-                // 2.11.3) so Cargo deduplicates to a single copy — no multiply-
-                // defined symbol. On macOS we keep using window-vibrancy instead
-                // of Tauri's set_effects(): Tauri's NSVisualEffectView setup
-                // changes hit-testing and breaks the custom drag region.
+                // macOS uses window-vibrancy directly instead of Tauri's
+                // set_effects(): Tauri's NSVisualEffectView setup changes
+                // hit-testing and breaks the custom drag region. On macOS 26+
+                // this applies NSGlassEffectView, falling back to vibrancy on
+                // older systems or when the runtime rejects Liquid Glass.
                 apply_window_material(&window);
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
