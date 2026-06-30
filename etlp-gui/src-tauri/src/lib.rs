@@ -10,8 +10,7 @@ use std::sync::Once;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl,
-    WindowEvent,
+    LogicalSize, Manager, PhysicalPosition, PhysicalSize, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -338,40 +337,11 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
-fn show_about_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("about") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        return;
-    }
+fn show_about_modal(app: &tauri::AppHandle) {
+    use tauri::Emitter as _;
 
-    let labels = TrayLabels::detect();
-    let window = tauri::WebviewWindowBuilder::new(
-        app,
-        "about",
-        WebviewUrl::App("index.html?window=about".into()),
-    )
-    .title(labels.tooltip)
-    .inner_size(380.0, 450.0)
-    .min_inner_size(380.0, 450.0)
-    .max_inner_size(380.0, 450.0)
-    .resizable(false)
-    .maximizable(false)
-    .minimizable(false)
-    .skip_taskbar(true)
-    .transparent(true)
-    .center()
-    .build();
-
-    match window {
-        Ok(window) => {
-            apply_window_material(&window);
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-        Err(e) => eprintln!("[etlp] about window: {e}"),
-    }
+    show_main_window(app);
+    let _ = app.emit("show-about", ());
 }
 
 fn window_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
@@ -826,10 +796,7 @@ pub fn run() {
                         });
                     }
                     "about" => {
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            show_about_window(&app);
-                        });
+                        show_about_modal(app);
                     }
                     "quit" => app.exit(0),
                     _ => {}

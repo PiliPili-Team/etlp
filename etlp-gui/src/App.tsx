@@ -234,7 +234,7 @@ export interface Toast {
 // the brief placeholder flash. (No freshness concern: it never changes.)
 let cachedVersion: string | null = null;
 
-function AboutCard({ onClose }: { onClose?: () => void }) {
+function AboutCard({ onClose }: { onClose: () => void }) {
     const t = useI18n();
     const [version, setVersion] = useState(cachedVersion ?? "0.1.0");
 
@@ -262,11 +262,9 @@ function AboutCard({ onClose }: { onClose?: () => void }) {
             onClick={(e) => e.stopPropagation()}
             style={{ position: "relative" }}
         >
-            {onClose && (
-                <button className="modal-close" onClick={onClose}>
-                    ✕
-                </button>
-            )}
+            <button className="modal-close" onClick={onClose}>
+                ✕
+            </button>
 
             <img
                 className="about-icon"
@@ -339,24 +337,6 @@ function AboutModal({ onClose }: { onClose: () => void }) {
         <div className="modal-overlay" onClick={onClose}>
             <AboutCard onClose={onClose} />
         </div>
-    );
-}
-
-function AboutWindow() {
-    const [display] = useState<DisplaySettings>(loadDisplay);
-
-    useEffect(() => {
-        applyDisplay(display);
-    }, [display]);
-
-    return (
-        <I18nProvider lang={display.lang}>
-            <ErrorBoundary>
-                <div className="about-window-shell">
-                    <AboutCard />
-                </div>
-            </ErrorBoundary>
-        </I18nProvider>
     );
 }
 
@@ -755,8 +735,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 // ── Root ─────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-    const isAboutWindow =
-        new URLSearchParams(window.location.search).get("window") === "about";
     const [display, setDisplay] = useState<DisplaySettings>(loadDisplay);
 
     useEffect(() => {
@@ -768,9 +746,7 @@ export default function App() {
         setDisplay((prev) => ({ ...prev, ...patch }));
     }, []);
 
-    return isAboutWindow ? (
-        <AboutWindow />
-    ) : (
+    return (
         <I18nProvider lang={display.lang}>
             <ErrorBoundary>
                 <AppInner display={display} onDisplayChange={updateDisplay} />
