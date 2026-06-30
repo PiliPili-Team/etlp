@@ -544,7 +544,7 @@ fn apply_window_material(window: &tauri::WebviewWindow) {
         }
     }
 
-    apply_vibrancy(window, NSVisualEffectMaterial::Sidebar, None, Some(12.0))
+    apply_vibrancy(window, NSVisualEffectMaterial::Sidebar, None, Some(7.0))
         .unwrap_or_else(|e| eprintln!("[etlp] vibrancy: {e}"));
 }
 
