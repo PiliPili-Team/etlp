@@ -141,24 +141,6 @@ function IconConfig() {
     );
 }
 
-function IconDownload() {
-    return (
-        <svg
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            width="18"
-            height="18"
-        >
-            <path d="M10 3v9M6.5 8.5L10 12l3.5-3.5" />
-            <path d="M3 14.5h14" />
-        </svg>
-    );
-}
-
 // Brand glyphs (bgm.tv / Trakt). Rendered in currentColor so they inherit the
 // nav item color exactly like the line-art icons above; the source artwork is
 // monochrome so only the fill needs normalizing.
@@ -328,7 +310,6 @@ const SETTINGS_TABS = new Set<TabId>([
     "player",
     "version-prefer",
     "network",
-    "download",
     "config",
     "system",
     "bangumi",
@@ -340,7 +321,6 @@ const VALID_TABS: TabId[] = [
     "player",
     "version-prefer",
     "network",
-    "download",
     "config",
     "system",
     "bangumi",
@@ -519,11 +499,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                     id: "network" as TabId,
                     icon: <IconNetwork />,
                     label: t("nav_network"),
-                },
-                {
-                    id: "download" as TabId,
-                    icon: <IconDownload />,
-                    label: t("nav_download"),
                 },
                 {
                     id: "config" as TabId,
