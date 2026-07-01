@@ -395,6 +395,7 @@ interface ShellConfig {
 // Stores the version the user dismissed so the banner stays hidden until a
 // newer release appears.
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
+const AUTO_UPDATE_CHECK_DELAY_MS = 120_000;
 
 function BrandBlock() {
     const t = useI18n();
@@ -507,10 +508,12 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const toastIdRef = useRef(0);
 
     // Auto update check: runs once per app launch (independent of the active
-    // tab), gated by the user's `check_update` setting (default on). A version
-    // the user dismissed stays hidden until a newer one appears. The
-    // module-level `autoUpdateChecked` guard ensures the network call happens at
-    // most once even if this component mounts more than once.
+    // tab), gated by the user's `check_update` setting (default on). It is
+    // intentionally delayed so launch-at-login proxy clients can finish their
+    // own startup before we hit GitHub. A version the user dismissed stays
+    // hidden until a newer one appears. The module-level `autoUpdateChecked`
+    // guard ensures the network call happens at most once even if this
+    // component mounts more than once.
     useEffect(() => {
         if (autoUpdateChecked) return;
         let cancelled = false;
@@ -537,7 +540,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 /* offline or rate-limited — silently skip */
             }
         };
-        const id = setTimeout(run, 0);
+        const id = setTimeout(run, AUTO_UPDATE_CHECK_DELAY_MS);
         return () => {
             cancelled = true;
             clearTimeout(id);
