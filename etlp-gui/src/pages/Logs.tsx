@@ -1,5 +1,4 @@
 import {
-    Profiler,
     memo,
     useState,
     useEffect,
@@ -7,7 +6,6 @@ import {
     useCallback,
     useDeferredValue,
     useMemo,
-    type ProfilerOnRenderCallback,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -41,7 +39,6 @@ interface LogClearFailure {
     };
 }
 type LogSource = "app" | "mpv";
-type PerfDetails = Record<string, string | number | boolean | null>;
 
 // localStorage key holding the last user-picked mpv log path, so a manual
 // choice is remembered and preferred over the config default on next launch.
@@ -53,10 +50,6 @@ const PAGE_SIZE = 200;
 // Hard cap on rendered lines so the DOM stays bounded even after live tailing
 // and several older pages; trimming only happens at the bottom (live append).
 const MAX_LINES = 3000;
-const PERF_LOG_MIN_INTERVAL_MS = 1000;
-const SCROLL_STORM_WINDOW_MS = 1000;
-const SCROLL_STORM_THRESHOLD = 45;
-const LONG_FRAME_MS = 34;
 
 // Parse a tracing/log4rs formatted line.
 // Expected formats:
@@ -196,20 +189,6 @@ const LogLineView = memo(function LogLineView({ raw }: { raw: string }) {
     );
 });
 
-function recordFrontendPerf(
-    scope: string,
-    metric: string,
-    value: number,
-    details: PerfDetails,
-) {
-    void invoke("record_frontend_perf", {
-        scope,
-        metric,
-        value,
-        details,
-    }).catch(() => {});
-}
-
 export default function Logs({
     active,
     addToast,
@@ -248,38 +227,6 @@ export default function Logs({
     const loadingOlderRef = useRef(false);
     const loadEpochRef = useRef(0);
     const scrollRafRef = useRef<number | null>(null);
-    const lastPerfLogRef = useRef<Record<string, number>>({});
-    const scrollStatsRef = useRef({
-        windowStart: 0,
-        events: 0,
-        frames: 0,
-    });
-    const prevRenderStatsRef = useRef({
-        lines: 0,
-        displayed: 0,
-        source: "app" as LogSource,
-    });
-
-    const recordPerf = useCallback(
-        (
-            metric: string,
-            value: number,
-            details: PerfDetails = {},
-            minInterval = PERF_LOG_MIN_INTERVAL_MS,
-        ) => {
-            if (!active) return;
-            const now = performance.now();
-            const last = lastPerfLogRef.current[metric] ?? 0;
-            if (now - last < minInterval) return;
-            lastPerfLogRef.current[metric] = now;
-            recordFrontendPerf("logs", metric, value, {
-                source,
-                lineCount: lines.length,
-                ...details,
-            });
-        },
-        [active, lines.length, source],
-    );
 
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
@@ -310,24 +257,10 @@ export default function Logs({
     const fetchTail = useCallback(
         async (since: number, path: string | null): Promise<number> => {
             try {
-                const started = performance.now();
                 const resp = await invoke<LogResponse>("get_log_lines", {
                     sinceBytes: since,
                     path,
                 });
-                const elapsed = performance.now() - started;
-                if (elapsed > 20 || resp.lines.length > 0) {
-                    recordPerf(
-                        "tail_ipc_ms",
-                        Math.round(elapsed * 10) / 10,
-                        {
-                            newLines: resp.lines.length,
-                            sinceBytes: since,
-                            nextBytes: resp.next_bytes,
-                        },
-                        1500,
-                    );
-                }
                 if (resp.lines.length > 0) {
                     setLines((prev) => {
                         const merged = [...prev, ...resp.lines];
@@ -341,66 +274,52 @@ export default function Logs({
                 return since;
             }
         },
-        [recordPerf],
+        [],
     );
 
     // Load an older page (scroll-up), preserving the visual scroll position by
     // restoring the distance from the bottom after the prepend.
-    const loadOlder = useCallback(
-        async (path: string | null) => {
-            if (loadingOlderRef.current || oldestRef.current <= 0) {
-                setHasOlder(oldestRef.current > 0);
-                return;
-            }
-            loadingOlderRef.current = true;
-            setLoadingOlder(true);
-            const epoch = loadEpochRef.current;
-            const el = bodyRef.current;
-            const prevHeight = el?.scrollHeight ?? 0;
-            const prevTop = el?.scrollTop ?? 0;
-            try {
-                const started = performance.now();
-                const resp = await invoke<BeforeResponse>("read_log_before", {
-                    beforeBytes: oldestRef.current,
-                    maxLines: PAGE_SIZE,
-                    path,
+    const loadOlder = useCallback(async (path: string | null) => {
+        if (loadingOlderRef.current || oldestRef.current <= 0) {
+            setHasOlder(oldestRef.current > 0);
+            return;
+        }
+        loadingOlderRef.current = true;
+        setLoadingOlder(true);
+        const epoch = loadEpochRef.current;
+        const el = bodyRef.current;
+        const prevHeight = el?.scrollHeight ?? 0;
+        const prevTop = el?.scrollTop ?? 0;
+        try {
+            const resp = await invoke<BeforeResponse>("read_log_before", {
+                beforeBytes: oldestRef.current,
+                maxLines: PAGE_SIZE,
+                path,
+            });
+            if (epoch !== loadEpochRef.current) return;
+            if (resp.lines.length > 0) {
+                oldestRef.current = resp.start_bytes;
+                setHasOlder(resp.start_bytes > 0);
+                setLines((prev) => [...resp.lines, ...prev]);
+                // Restore scroll so the viewport stays on the same lines.
+                requestAnimationFrame(() => {
+                    const node = bodyRef.current;
+                    if (node) {
+                        node.scrollTop = node.scrollHeight - prevHeight + prevTop;
+                    }
                 });
-                recordPerf(
-                    "older_ipc_ms",
-                    Math.round((performance.now() - started) * 10) / 10,
-                    {
-                        olderLines: resp.lines.length,
-                        beforeBytes: oldestRef.current,
-                        startBytes: resp.start_bytes,
-                    },
-                    800,
-                );
-                if (epoch !== loadEpochRef.current) return;
-                if (resp.lines.length > 0) {
-                    oldestRef.current = resp.start_bytes;
-                    setHasOlder(resp.start_bytes > 0);
-                    setLines((prev) => [...resp.lines, ...prev]);
-                    // Restore scroll so the viewport stays on the same lines.
-                    requestAnimationFrame(() => {
-                        const node = bodyRef.current;
-                        if (node) {
-                            node.scrollTop = node.scrollHeight - prevHeight + prevTop;
-                        }
-                    });
-                } else {
-                    setHasOlder(false);
-                }
-            } catch {
-                /* ignore: paging is best-effort */
-            } finally {
-                if (epoch === loadEpochRef.current) {
-                    loadingOlderRef.current = false;
-                    setLoadingOlder(false);
-                }
+            } else {
+                setHasOlder(false);
             }
-        },
-        [recordPerf],
-    );
+        } catch {
+            /* ignore: paging is best-effort */
+        } finally {
+            if (epoch === loadEpochRef.current) {
+                loadingOlderRef.current = false;
+                setLoadingOlder(false);
+            }
+        }
+    }, []);
 
     // Empty the active log file on disk, then reset the view to match. The live
     // poll keeps running and will pick up anything written afterwards.
@@ -516,10 +435,7 @@ export default function Logs({
         const needle = deferredFilter.toLowerCase();
         return base.filter((l) => l.toLowerCase().includes(needle));
     }, [lines, deferredFilter, anon]);
-    const displayedCount = displayed.length;
-
     const handleScrollFrame = useCallback(() => {
-        const frameStarted = performance.now();
         scrollRafRef.current = null;
         const el = bodyRef.current;
         if (!el) return;
@@ -529,48 +445,12 @@ export default function Logs({
             const logPath = source === "mpv" ? effectiveMpvPath : null;
             void loadOlder(logPath);
         }
-        const frameCost = performance.now() - frameStarted;
-        scrollStatsRef.current.frames += 1;
-        if (frameCost > LONG_FRAME_MS) {
-            recordPerf(
-                "scroll_frame_ms",
-                Math.round(frameCost * 10) / 10,
-                {
-                    scrollTop: Math.round(el.scrollTop),
-                    scrollHeight: el.scrollHeight,
-                    clientHeight: el.clientHeight,
-                    hasOlder,
-                    loadingOlder: loadingOlderRef.current,
-                },
-                800,
-            );
-        }
-    }, [effectiveMpvPath, hasOlder, loadOlder, recordPerf, source]);
+    }, [effectiveMpvPath, hasOlder, loadOlder, source]);
 
     const handleScroll = useCallback(() => {
-        const now = performance.now();
-        const stats = scrollStatsRef.current;
-        if (now - stats.windowStart > SCROLL_STORM_WINDOW_MS) {
-            if (stats.events > SCROLL_STORM_THRESHOLD) {
-                recordPerf(
-                    "scroll_events_per_sec",
-                    stats.events,
-                    {
-                        rafFrames: stats.frames,
-                        displayed: displayedCount,
-                        autoScroll,
-                    },
-                    500,
-                );
-            }
-            stats.windowStart = now;
-            stats.events = 0;
-            stats.frames = 0;
-        }
-        stats.events += 1;
         if (scrollRafRef.current !== null) return;
         scrollRafRef.current = requestAnimationFrame(handleScrollFrame);
-    }, [autoScroll, displayedCount, handleScrollFrame, recordPerf]);
+    }, [handleScrollFrame]);
 
     useEffect(() => {
         return () => {
@@ -626,170 +506,125 @@ export default function Logs({
         setHasOlder(false);
     };
 
-    const handleRenderProfile = useCallback<ProfilerOnRenderCallback>(
-        (_id, phase, actualDuration, baseDuration, startTime, commitTime) => {
-            if (!active) return;
-            const prev = prevRenderStatsRef.current;
-            const changed =
-                prev.lines !== lines.length ||
-                prev.displayed !== displayedCount ||
-                prev.source !== source;
-            if (actualDuration > 12 || changed || phase === "mount") {
-                recordPerf(
-                    "render_commit_ms",
-                    Math.round(actualDuration * 10) / 10,
-                    {
-                        displayed: displayedCount,
-                        prevLines: prev.lines,
-                        prevDisplayed: prev.displayed,
-                        changed,
-                        phase,
-                        baseDuration: Math.round(baseDuration * 10) / 10,
-                        commitDelay: Math.round((commitTime - startTime) * 10) / 10,
-                        filterLength: deferredFilter.length,
-                        anonymized: anon,
-                    },
-                    1200,
-                );
-            }
-            prevRenderStatsRef.current = {
-                lines: lines.length,
-                displayed: displayedCount,
-                source,
-            };
-        },
-        [
-            active,
-            anon,
-            deferredFilter.length,
-            displayedCount,
-            lines.length,
-            recordPerf,
-            source,
-        ],
-    );
-
     // mpv view is usable when a default log exists or the user picked a file.
     const hasMpv = Boolean(effectiveMpvPath);
 
     return (
         <>
             <div className="page-title">{t("page_logs")}</div>
-            <Profiler id="logs" onRender={handleRenderProfile}>
-                <div className="log-container">
-                    <div className="log-toolbar">
-                        <div className="log-toolbar-leading">
-                            <div className="log-source-tabs">
-                                <button
-                                    className={`log-source-tab${source === "app" ? " active" : ""}`}
-                                    onClick={() => handleSourceSwitch("app")}
-                                >
-                                    {t("logs_app")}
-                                </button>
-                                <button
-                                    className={`log-source-tab${source === "mpv" ? " active" : ""}`}
-                                    onClick={() => handleSourceSwitch("mpv")}
-                                    title={t("logs_mpv")}
-                                >
-                                    {t("logs_mpv")}
-                                </button>
-                            </div>
-                            {lines.length > 0 && (
-                                <span className="log-line-count">
-                                    {lines.length} {t("logs_lines")}
-                                </span>
-                            )}
+            <div className="log-container">
+                <div className="log-toolbar">
+                    <div className="log-toolbar-leading">
+                        <div className="log-source-tabs">
+                            <button
+                                className={`log-source-tab${source === "app" ? " active" : ""}`}
+                                onClick={() => handleSourceSwitch("app")}
+                            >
+                                {t("logs_app")}
+                            </button>
+                            <button
+                                className={`log-source-tab${source === "mpv" ? " active" : ""}`}
+                                onClick={() => handleSourceSwitch("mpv")}
+                                title={t("logs_mpv")}
+                            >
+                                {t("logs_mpv")}
+                            </button>
                         </div>
-
-                        <div className="log-toolbar-actions">
-                            {source === "mpv" && mpvCustomPath && (
-                                <button
-                                    className="btn log-toolbar-btn"
-                                    onClick={handleResetMpvLog}
-                                    title={t("logs_reset_mpv_title")}
-                                >
-                                    {t("logs_reset_mpv")}
-                                </button>
-                            )}
-                            {source === "mpv" && (
-                                <button
-                                    className="btn log-toolbar-btn"
-                                    onClick={() => void handlePickMpvLog()}
-                                    title={effectiveMpvPath ?? undefined}
-                                >
-                                    {t("logs_pick_mpv")}
-                                </button>
-                            )}
-                            <button
-                                className="btn log-toolbar-btn"
-                                onClick={() => void handleOpenLogFolder()}
-                            >
-                                {t("logs_open_folder")}
-                            </button>
-                            <input
-                                className="input log-filter-input"
-                                placeholder={t("logs_filter")}
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
-                            />
-                            <button
-                                className={`btn log-toolbar-btn${anon ? " btn-primary" : ""}`}
-                                title={t("logs_anon_title")}
-                                onClick={() => {
-                                    const next = !anon;
-                                    setAnon(next);
-                                    localStorage.setItem("logs_anon", next ? "1" : "0");
-                                }}
-                            >
-                                {t("logs_anon")}
-                            </button>
-                            <button
-                                className="btn log-toolbar-btn"
-                                onClick={() => void clearLog()}
-                                disabled={clearing}
-                            >
-                                {clearing ? t("logs_clearing") : t("logs_clear")}
-                            </button>
-                            {!autoScroll && (
-                                <button
-                                    className="btn btn-primary log-toolbar-btn"
-                                    onClick={() => {
-                                        if (bodyRef.current)
-                                            bodyRef.current.scrollTop =
-                                                bodyRef.current.scrollHeight;
-                                        setAutoScroll(true);
-                                    }}
-                                >
-                                    {t("logs_bottom")}
-                                </button>
-                            )}
-                        </div>
+                        {lines.length > 0 && (
+                            <span className="log-line-count">
+                                {lines.length} {t("logs_lines")}
+                            </span>
+                        )}
                     </div>
 
-                    <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
-                        {displayed.length === 0 ? (
-                            <span className="log-empty">
-                                {source === "mpv" && !hasMpv
-                                    ? t("logs_no_mpv")
-                                    : t("logs_empty")}
-                            </span>
-                        ) : (
-                            <>
-                                {(loadingOlder || hasOlder) && (
-                                    <div className="log-older-hint">
-                                        {loadingOlder
-                                            ? t("logs_loading_older")
-                                            : t("logs_scroll_older")}
-                                    </div>
-                                )}
-                                {displayed.map((line, i) => (
-                                    <LogLineView key={i} raw={line} />
-                                ))}
-                            </>
+                    <div className="log-toolbar-actions">
+                        {source === "mpv" && mpvCustomPath && (
+                            <button
+                                className="btn log-toolbar-btn"
+                                onClick={handleResetMpvLog}
+                                title={t("logs_reset_mpv_title")}
+                            >
+                                {t("logs_reset_mpv")}
+                            </button>
+                        )}
+                        {source === "mpv" && (
+                            <button
+                                className="btn log-toolbar-btn"
+                                onClick={() => void handlePickMpvLog()}
+                                title={effectiveMpvPath ?? undefined}
+                            >
+                                {t("logs_pick_mpv")}
+                            </button>
+                        )}
+                        <button
+                            className="btn log-toolbar-btn"
+                            onClick={() => void handleOpenLogFolder()}
+                        >
+                            {t("logs_open_folder")}
+                        </button>
+                        <input
+                            className="input log-filter-input"
+                            placeholder={t("logs_filter")}
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                        />
+                        <button
+                            className={`btn log-toolbar-btn${anon ? " btn-primary" : ""}`}
+                            title={t("logs_anon_title")}
+                            onClick={() => {
+                                const next = !anon;
+                                setAnon(next);
+                                localStorage.setItem("logs_anon", next ? "1" : "0");
+                            }}
+                        >
+                            {t("logs_anon")}
+                        </button>
+                        <button
+                            className="btn log-toolbar-btn"
+                            onClick={() => void clearLog()}
+                            disabled={clearing}
+                        >
+                            {clearing ? t("logs_clearing") : t("logs_clear")}
+                        </button>
+                        {!autoScroll && (
+                            <button
+                                className="btn btn-primary log-toolbar-btn"
+                                onClick={() => {
+                                    if (bodyRef.current)
+                                        bodyRef.current.scrollTop =
+                                            bodyRef.current.scrollHeight;
+                                    setAutoScroll(true);
+                                }}
+                            >
+                                {t("logs_bottom")}
+                            </button>
                         )}
                     </div>
                 </div>
-            </Profiler>
+
+                <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
+                    {displayed.length === 0 ? (
+                        <span className="log-empty">
+                            {source === "mpv" && !hasMpv
+                                ? t("logs_no_mpv")
+                                : t("logs_empty")}
+                        </span>
+                    ) : (
+                        <>
+                            {(loadingOlder || hasOlder) && (
+                                <div className="log-older-hint">
+                                    {loadingOlder
+                                        ? t("logs_loading_older")
+                                        : t("logs_scroll_older")}
+                                </div>
+                            )}
+                            {displayed.map((line, i) => (
+                                <LogLineView key={i} raw={line} />
+                            ))}
+                        </>
+                    )}
+                </div>
+            </div>
         </>
     );
 }

@@ -1,12 +1,4 @@
-import {
-    Profiler,
-    useState,
-    useEffect,
-    useCallback,
-    useRef,
-    type MouseEvent,
-    type ProfilerOnRenderCallback,
-} from "react";
+import { useState, useEffect, useCallback, useRef, type MouseEvent } from "react";
 import { usePlatform } from "./hooks/usePlatform";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -424,27 +416,6 @@ interface CustomIconInfo {
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
 const AUTO_UPDATE_CHECK_DELAY_MS = 120_000;
 const DEFAULT_APP_ICON = "/app-icon.png";
-const PERF_LOG_MIN_INTERVAL_MS = 1000;
-const SCROLL_STORM_WINDOW_MS = 1000;
-const SCROLL_STORM_THRESHOLD = 45;
-const LONG_FRAME_MS = 34;
-const LONG_TASK_MS = 50;
-
-type PerfDetails = Record<string, string | number | boolean | null>;
-
-function recordFrontendPerf(
-    scope: string,
-    metric: string,
-    value: number,
-    details: PerfDetails,
-) {
-    void invoke("record_frontend_perf", {
-        scope,
-        metric,
-        value,
-        details,
-    }).catch(() => {});
-}
 
 function BrandBlock({ brandName, iconUrl }: { brandName: string; iconUrl: string }) {
     return (
@@ -552,18 +523,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const [update, setUpdate] = useState<UpdateInfo | null>(null);
     const [windowFocused, setWindowFocused] = useState(true);
     const [customIconUrl, setCustomIconUrl] = useState<string | null>(null);
-    const contentRef = useRef<HTMLElement>(null);
     const toastIdRef = useRef(0);
-    const scrollRafRef = useRef<number | null>(null);
-    const lastPerfLogRef = useRef<Record<string, number>>({});
-    const scrollStatsRef = useRef({
-        windowStart: 0,
-        events: 0,
-        frames: 0,
-        rafRequestedAt: 0,
-        maxRafDelay: 0,
-        maxScrollHandlerMs: 0,
-    });
     const brandName = display.customBrandName.trim() || t("app_name");
     const appIconUrl = customIconUrl ?? DEFAULT_APP_ICON;
 
@@ -571,61 +531,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         const id = ++toastIdRef.current;
         setToasts((prev) => [...prev, { id, message, error }]);
         setTimeout(() => setToasts((prev) => prev.filter((tst) => tst.id !== id)), 3000);
-    }, []);
-
-    const recordPerf = useCallback(
-        (
-            metric: string,
-            value: number,
-            details: PerfDetails = {},
-            minInterval = PERF_LOG_MIN_INTERVAL_MS,
-        ) => {
-            const now = performance.now();
-            const last = lastPerfLogRef.current[metric] ?? 0;
-            if (now - last < minInterval) return;
-            lastPerfLogRef.current[metric] = now;
-            recordFrontendPerf("app", metric, value, {
-                tab,
-                platform,
-                liveBackdropBlur: display.liveBackdropBlur,
-                materialOpacity: display.materialOpacity,
-                materialBlur: display.materialBlur,
-                ...details,
-            });
-        },
-        [
-            display.liveBackdropBlur,
-            display.materialBlur,
-            display.materialOpacity,
-            platform,
-            tab,
-        ],
-    );
-
-    const getScrollPerfDetails = useCallback((): PerfDetails => {
-        const content = contentRef.current;
-        if (!content) {
-            return {
-                scrollTop: null,
-                scrollHeight: null,
-                clientHeight: null,
-                childElementCount: null,
-                settingsGroups: null,
-                rows: null,
-                mapGroups: null,
-                mapItems: null,
-            };
-        }
-        return {
-            scrollTop: Math.round(content.scrollTop),
-            scrollHeight: content.scrollHeight,
-            clientHeight: content.clientHeight,
-            childElementCount: content.childElementCount,
-            settingsGroups: content.querySelectorAll(".settings-group").length,
-            rows: content.querySelectorAll(".row").length,
-            mapGroups: content.querySelectorAll(".map-group").length,
-            mapItems: content.querySelectorAll(".map-item").length,
-        };
     }, []);
 
     // Auto update check: runs once per app launch (independent of the active
@@ -690,53 +595,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         document.body.className = platform !== "unknown" ? `platform-${platform}` : "";
     }, [platform]);
 
-    const handleRenderProfile = useCallback<ProfilerOnRenderCallback>(
-        (id, phase, actualDuration, baseDuration, startTime, commitTime) => {
-            if (actualDuration <= 12 && phase !== "mount") return;
-            recordPerf(
-                "react_render_ms",
-                Math.round(actualDuration * 10) / 10,
-                {
-                    profilerId: id,
-                    phase,
-                    baseDuration: Math.round(baseDuration * 10) / 10,
-                    commitDelay: Math.round((commitTime - startTime) * 10) / 10,
-                    ...getScrollPerfDetails(),
-                },
-                1200,
-            );
-        },
-        [getScrollPerfDetails, recordPerf],
-    );
-
-    useEffect(() => {
-        if (typeof PerformanceObserver === "undefined") return;
-        let observer: PerformanceObserver | null = null;
-        try {
-            observer = new PerformanceObserver((list) => {
-                for (const entry of list.getEntries()) {
-                    if (entry.duration < LONG_TASK_MS) continue;
-                    recordPerf(
-                        "main_thread_long_task_ms",
-                        Math.round(entry.duration * 10) / 10,
-                        {
-                            name: entry.name || "unknown",
-                            entryType: entry.entryType,
-                            startTime: Math.round(entry.startTime),
-                            ...getScrollPerfDetails(),
-                        },
-                        800,
-                    );
-                }
-            });
-            observer.observe({ entryTypes: ["longtask"] });
-        } catch {
-            observer?.disconnect();
-            observer = null;
-        }
-        return () => observer?.disconnect();
-    }, [getScrollPerfDetails, recordPerf]);
-
     useEffect(() => {
         const win = getCurrentWindow();
         let cancelled = false;
@@ -771,90 +629,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             .catch(() => {});
         return () => {
             unlisten?.();
-        };
-    }, []);
-
-    const handleContentScrollFrame = useCallback(() => {
-        const frameStarted = performance.now();
-        const stats = scrollStatsRef.current;
-        const rafDelay =
-            stats.rafRequestedAt > 0 ? frameStarted - stats.rafRequestedAt : 0;
-        scrollRafRef.current = null;
-        stats.rafRequestedAt = 0;
-        stats.frames += 1;
-        stats.maxRafDelay = Math.max(stats.maxRafDelay, rafDelay);
-        if (rafDelay > LONG_FRAME_MS) {
-            recordPerf(
-                "content_scroll_raf_delay_ms",
-                Math.round(rafDelay * 10) / 10,
-                getScrollPerfDetails(),
-                800,
-            );
-        }
-    }, [getScrollPerfDetails, recordPerf]);
-
-    const handleContentScroll = useCallback(() => {
-        const handlerStarted = performance.now();
-        const now = handlerStarted;
-        const stats = scrollStatsRef.current;
-        if (now - stats.windowStart > SCROLL_STORM_WINDOW_MS) {
-            if (stats.events > 0) {
-                recordPerf(
-                    "content_scroll_summary",
-                    stats.events,
-                    {
-                        rafFrames: stats.frames,
-                        maxRafDelayMs: Math.round(stats.maxRafDelay * 10) / 10,
-                        maxScrollHandlerMs:
-                            Math.round(stats.maxScrollHandlerMs * 10) / 10,
-                        ...getScrollPerfDetails(),
-                    },
-                    0,
-                );
-            }
-            if (stats.events > SCROLL_STORM_THRESHOLD) {
-                recordPerf(
-                    "content_scroll_events_per_sec",
-                    stats.events,
-                    {
-                        rafFrames: stats.frames,
-                        maxRafDelayMs: Math.round(stats.maxRafDelay * 10) / 10,
-                        maxScrollHandlerMs:
-                            Math.round(stats.maxScrollHandlerMs * 10) / 10,
-                        ...getScrollPerfDetails(),
-                    },
-                    500,
-                );
-            }
-            stats.windowStart = now;
-            stats.events = 0;
-            stats.frames = 0;
-            stats.maxRafDelay = 0;
-            stats.maxScrollHandlerMs = 0;
-        }
-        stats.events += 1;
-        if (scrollRafRef.current === null) {
-            stats.rafRequestedAt = now;
-            scrollRafRef.current = requestAnimationFrame(handleContentScrollFrame);
-        }
-        const handlerMs = performance.now() - handlerStarted;
-        stats.maxScrollHandlerMs = Math.max(stats.maxScrollHandlerMs, handlerMs);
-        if (handlerMs > LONG_FRAME_MS) {
-            recordPerf(
-                "content_scroll_handler_ms",
-                Math.round(handlerMs * 10) / 10,
-                getScrollPerfDetails(),
-                800,
-            );
-        }
-    }, [getScrollPerfDetails, handleContentScrollFrame, recordPerf]);
-
-    useEffect(() => {
-        return () => {
-            if (scrollRafRef.current !== null) {
-                cancelAnimationFrame(scrollRafRef.current);
-                scrollRafRef.current = null;
-            }
         };
     }, []);
 
@@ -970,32 +744,30 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                     ))}
                 </nav>
 
-                <main className="content" ref={contentRef} onScroll={handleContentScroll}>
-                    <Profiler id={`content:${tab}`} onRender={handleRenderProfile}>
-                        {tab === "overview" && (
-                            <Overview
-                                addToast={addToast}
-                                update={update}
-                                onDismissUpdate={dismissUpdate}
-                            />
-                        )}
-                        {SETTINGS_TABS.has(tab) && (
-                            <Settings
-                                section={tab as SectionTab}
-                                addToast={addToast}
-                                display={display}
-                                onDisplayChange={onDisplayChange}
-                                customIconUrl={customIconUrl}
-                                onCustomIconChange={setCustomIconUrl}
-                                onAbout={() => setShowAbout(true)}
-                            />
-                        )}
-                        {/* Logs stays mounted so its buffer survives tab switches;
-                            polling pauses while hidden via the `active` prop. */}
-                        <div style={{ display: tab === "logs" ? "contents" : "none" }}>
-                            <Logs active={tab === "logs"} addToast={addToast} />
-                        </div>
-                    </Profiler>
+                <main className="content">
+                    {tab === "overview" && (
+                        <Overview
+                            addToast={addToast}
+                            update={update}
+                            onDismissUpdate={dismissUpdate}
+                        />
+                    )}
+                    {SETTINGS_TABS.has(tab) && (
+                        <Settings
+                            section={tab as SectionTab}
+                            addToast={addToast}
+                            display={display}
+                            onDisplayChange={onDisplayChange}
+                            customIconUrl={customIconUrl}
+                            onCustomIconChange={setCustomIconUrl}
+                            onAbout={() => setShowAbout(true)}
+                        />
+                    )}
+                    {/* Logs stays mounted so its buffer survives tab switches;
+                        polling pauses while hidden via the `active` prop. */}
+                    <div style={{ display: tab === "logs" ? "contents" : "none" }}>
+                        <Logs active={tab === "logs"} addToast={addToast} />
+                    </div>
                 </main>
             </div>
 

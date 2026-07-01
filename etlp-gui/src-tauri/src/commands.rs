@@ -1559,24 +1559,6 @@ pub async fn clear_log_position(
     Ok(())
 }
 
-#[tauri::command]
-pub async fn record_frontend_perf(
-    scope: String,
-    metric: String,
-    value: f64,
-    details: serde_json::Value,
-) -> Result<(), String> {
-    tracing::info!(
-        target: "etlp_gui::frontend_perf",
-        scope,
-        metric,
-        value,
-        details = %details,
-        "frontend performance sample"
-    );
-    Ok(())
-}
-
 /// Empty a log file in place (the "Clear" button in the Logs tab).
 ///
 /// `path` selects the file, matching [`tail_log`]'s resolution: absent/empty

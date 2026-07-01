@@ -824,7 +824,6 @@ pub fn run() {
             commands::read_log_before,
             commands::clear_log_position,
             commands::clear_log_file,
-            commands::record_frontend_perf,
             commands::open_log_folder,
             commands::get_log_paths,
             commands::get_cache_size,
