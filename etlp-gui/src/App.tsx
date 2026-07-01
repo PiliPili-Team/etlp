@@ -798,6 +798,20 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         const now = handlerStarted;
         const stats = scrollStatsRef.current;
         if (now - stats.windowStart > SCROLL_STORM_WINDOW_MS) {
+            if (stats.events > 0) {
+                recordPerf(
+                    "content_scroll_summary",
+                    stats.events,
+                    {
+                        rafFrames: stats.frames,
+                        maxRafDelayMs: Math.round(stats.maxRafDelay * 10) / 10,
+                        maxScrollHandlerMs:
+                            Math.round(stats.maxScrollHandlerMs * 10) / 10,
+                        ...getScrollPerfDetails(),
+                    },
+                    0,
+                );
+            }
             if (stats.events > SCROLL_STORM_THRESHOLD) {
                 recordPerf(
                     "content_scroll_events_per_sec",

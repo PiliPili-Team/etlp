@@ -1,4 +1,5 @@
 import {
+    Profiler,
     memo,
     useState,
     useEffect,
@@ -6,6 +7,7 @@ import {
     useCallback,
     useDeferredValue,
     useMemo,
+    type ProfilerOnRenderCallback,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -252,11 +254,6 @@ export default function Logs({
         events: 0,
         frames: 0,
     });
-    const renderStartRef = useRef(performance.now());
-    const perfContextRef = useRef({
-        source: "app" as LogSource,
-        lineCount: 0,
-    });
     const prevRenderStatsRef = useRef({
         lines: 0,
         displayed: 0,
@@ -276,19 +273,13 @@ export default function Logs({
             if (now - last < minInterval) return;
             lastPerfLogRef.current[metric] = now;
             recordFrontendPerf("logs", metric, value, {
-                source: perfContextRef.current.source,
-                lineCount: perfContextRef.current.lineCount,
+                source,
+                lineCount: lines.length,
                 ...details,
             });
         },
-        [active],
+        [active, lines.length, source],
     );
-
-    renderStartRef.current = performance.now();
-    perfContextRef.current = {
-        source,
-        lineCount: lines.length,
-    };
 
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
@@ -516,6 +507,17 @@ export default function Logs({
         }
     }, [lines, autoScroll]);
 
+    // Defer the filter so typing stays responsive on large buffers; the
+    // expensive filtering runs at lower priority and is memoized.
+    const deferredFilter = useDeferredValue(filter);
+    const displayed = useMemo(() => {
+        const base = anon ? lines.map(maskSensitive) : lines;
+        if (!deferredFilter) return base;
+        const needle = deferredFilter.toLowerCase();
+        return base.filter((l) => l.toLowerCase().includes(needle));
+    }, [lines, deferredFilter, anon]);
+    const displayedCount = displayed.length;
+
     const handleScrollFrame = useCallback(() => {
         const frameStarted = performance.now();
         scrollRafRef.current = null;
@@ -545,7 +547,7 @@ export default function Logs({
         }
     }, [effectiveMpvPath, hasOlder, loadOlder, recordPerf, source]);
 
-    const handleScroll = () => {
+    const handleScroll = useCallback(() => {
         const now = performance.now();
         const stats = scrollStatsRef.current;
         if (now - stats.windowStart > SCROLL_STORM_WINDOW_MS) {
@@ -555,7 +557,7 @@ export default function Logs({
                     stats.events,
                     {
                         rafFrames: stats.frames,
-                        displayed: displayed.length,
+                        displayed: displayedCount,
                         autoScroll,
                     },
                     500,
@@ -568,7 +570,7 @@ export default function Logs({
         stats.events += 1;
         if (scrollRafRef.current !== null) return;
         scrollRafRef.current = requestAnimationFrame(handleScrollFrame);
-    };
+    }, [autoScroll, displayedCount, handleScrollFrame, recordPerf]);
 
     useEffect(() => {
         return () => {
@@ -624,45 +626,48 @@ export default function Logs({
         setHasOlder(false);
     };
 
-    // Defer the filter so typing stays responsive on large buffers; the
-    // expensive filtering runs at lower priority and is memoized.
-    const deferredFilter = useDeferredValue(filter);
-    const displayed = useMemo(() => {
-        const base = anon ? lines.map(maskSensitive) : lines;
-        if (!deferredFilter) return base;
-        const needle = deferredFilter.toLowerCase();
-        return base.filter((l) => l.toLowerCase().includes(needle));
-    }, [lines, deferredFilter, anon]);
-
-    useEffect(() => {
-        if (!active) return;
-        const elapsed = performance.now() - renderStartRef.current;
-        const prev = prevRenderStatsRef.current;
-        const changed =
-            prev.lines !== lines.length ||
-            prev.displayed !== displayed.length ||
-            prev.source !== source;
-        if (elapsed > 12 || changed) {
-            recordPerf(
-                "render_commit_ms",
-                Math.round(elapsed * 10) / 10,
-                {
-                    displayed: displayed.length,
-                    prevLines: prev.lines,
-                    prevDisplayed: prev.displayed,
-                    changed,
-                    filterLength: deferredFilter.length,
-                    anonymized: anon,
-                },
-                1200,
-            );
-        }
-        prevRenderStatsRef.current = {
-            lines: lines.length,
-            displayed: displayed.length,
+    const handleRenderProfile = useCallback<ProfilerOnRenderCallback>(
+        (_id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+            if (!active) return;
+            const prev = prevRenderStatsRef.current;
+            const changed =
+                prev.lines !== lines.length ||
+                prev.displayed !== displayedCount ||
+                prev.source !== source;
+            if (actualDuration > 12 || changed || phase === "mount") {
+                recordPerf(
+                    "render_commit_ms",
+                    Math.round(actualDuration * 10) / 10,
+                    {
+                        displayed: displayedCount,
+                        prevLines: prev.lines,
+                        prevDisplayed: prev.displayed,
+                        changed,
+                        phase,
+                        baseDuration: Math.round(baseDuration * 10) / 10,
+                        commitDelay: Math.round((commitTime - startTime) * 10) / 10,
+                        filterLength: deferredFilter.length,
+                        anonymized: anon,
+                    },
+                    1200,
+                );
+            }
+            prevRenderStatsRef.current = {
+                lines: lines.length,
+                displayed: displayedCount,
+                source,
+            };
+        },
+        [
+            active,
+            anon,
+            deferredFilter.length,
+            displayedCount,
+            lines.length,
+            recordPerf,
             source,
-        };
-    });
+        ],
+    );
 
     // mpv view is usable when a default log exists or the user picked a file.
     const hasMpv = Boolean(effectiveMpvPath);
@@ -670,119 +675,121 @@ export default function Logs({
     return (
         <>
             <div className="page-title">{t("page_logs")}</div>
-            <div className="log-container">
-                <div className="log-toolbar">
-                    <div className="log-toolbar-leading">
-                        <div className="log-source-tabs">
-                            <button
-                                className={`log-source-tab${source === "app" ? " active" : ""}`}
-                                onClick={() => handleSourceSwitch("app")}
-                            >
-                                {t("logs_app")}
-                            </button>
-                            <button
-                                className={`log-source-tab${source === "mpv" ? " active" : ""}`}
-                                onClick={() => handleSourceSwitch("mpv")}
-                                title={t("logs_mpv")}
-                            >
-                                {t("logs_mpv")}
-                            </button>
+            <Profiler id="logs" onRender={handleRenderProfile}>
+                <div className="log-container">
+                    <div className="log-toolbar">
+                        <div className="log-toolbar-leading">
+                            <div className="log-source-tabs">
+                                <button
+                                    className={`log-source-tab${source === "app" ? " active" : ""}`}
+                                    onClick={() => handleSourceSwitch("app")}
+                                >
+                                    {t("logs_app")}
+                                </button>
+                                <button
+                                    className={`log-source-tab${source === "mpv" ? " active" : ""}`}
+                                    onClick={() => handleSourceSwitch("mpv")}
+                                    title={t("logs_mpv")}
+                                >
+                                    {t("logs_mpv")}
+                                </button>
+                            </div>
+                            {lines.length > 0 && (
+                                <span className="log-line-count">
+                                    {lines.length} {t("logs_lines")}
+                                </span>
+                            )}
                         </div>
-                        {lines.length > 0 && (
-                            <span className="log-line-count">
-                                {lines.length} {t("logs_lines")}
-                            </span>
-                        )}
-                    </div>
 
-                    <div className="log-toolbar-actions">
-                        {source === "mpv" && mpvCustomPath && (
+                        <div className="log-toolbar-actions">
+                            {source === "mpv" && mpvCustomPath && (
+                                <button
+                                    className="btn log-toolbar-btn"
+                                    onClick={handleResetMpvLog}
+                                    title={t("logs_reset_mpv_title")}
+                                >
+                                    {t("logs_reset_mpv")}
+                                </button>
+                            )}
+                            {source === "mpv" && (
+                                <button
+                                    className="btn log-toolbar-btn"
+                                    onClick={() => void handlePickMpvLog()}
+                                    title={effectiveMpvPath ?? undefined}
+                                >
+                                    {t("logs_pick_mpv")}
+                                </button>
+                            )}
                             <button
                                 className="btn log-toolbar-btn"
-                                onClick={handleResetMpvLog}
-                                title={t("logs_reset_mpv_title")}
+                                onClick={() => void handleOpenLogFolder()}
                             >
-                                {t("logs_reset_mpv")}
+                                {t("logs_open_folder")}
                             </button>
-                        )}
-                        {source === "mpv" && (
+                            <input
+                                className="input log-filter-input"
+                                placeholder={t("logs_filter")}
+                                value={filter}
+                                onChange={(e) => setFilter(e.target.value)}
+                            />
                             <button
-                                className="btn log-toolbar-btn"
-                                onClick={() => void handlePickMpvLog()}
-                                title={effectiveMpvPath ?? undefined}
-                            >
-                                {t("logs_pick_mpv")}
-                            </button>
-                        )}
-                        <button
-                            className="btn log-toolbar-btn"
-                            onClick={() => void handleOpenLogFolder()}
-                        >
-                            {t("logs_open_folder")}
-                        </button>
-                        <input
-                            className="input log-filter-input"
-                            placeholder={t("logs_filter")}
-                            value={filter}
-                            onChange={(e) => setFilter(e.target.value)}
-                        />
-                        <button
-                            className={`btn log-toolbar-btn${anon ? " btn-primary" : ""}`}
-                            title={t("logs_anon_title")}
-                            onClick={() => {
-                                const next = !anon;
-                                setAnon(next);
-                                localStorage.setItem("logs_anon", next ? "1" : "0");
-                            }}
-                        >
-                            {t("logs_anon")}
-                        </button>
-                        <button
-                            className="btn log-toolbar-btn"
-                            onClick={() => void clearLog()}
-                            disabled={clearing}
-                        >
-                            {clearing ? t("logs_clearing") : t("logs_clear")}
-                        </button>
-                        {!autoScroll && (
-                            <button
-                                className="btn btn-primary log-toolbar-btn"
+                                className={`btn log-toolbar-btn${anon ? " btn-primary" : ""}`}
+                                title={t("logs_anon_title")}
                                 onClick={() => {
-                                    if (bodyRef.current)
-                                        bodyRef.current.scrollTop =
-                                            bodyRef.current.scrollHeight;
-                                    setAutoScroll(true);
+                                    const next = !anon;
+                                    setAnon(next);
+                                    localStorage.setItem("logs_anon", next ? "1" : "0");
                                 }}
                             >
-                                {t("logs_bottom")}
+                                {t("logs_anon")}
                             </button>
+                            <button
+                                className="btn log-toolbar-btn"
+                                onClick={() => void clearLog()}
+                                disabled={clearing}
+                            >
+                                {clearing ? t("logs_clearing") : t("logs_clear")}
+                            </button>
+                            {!autoScroll && (
+                                <button
+                                    className="btn btn-primary log-toolbar-btn"
+                                    onClick={() => {
+                                        if (bodyRef.current)
+                                            bodyRef.current.scrollTop =
+                                                bodyRef.current.scrollHeight;
+                                        setAutoScroll(true);
+                                    }}
+                                >
+                                    {t("logs_bottom")}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
+                        {displayed.length === 0 ? (
+                            <span className="log-empty">
+                                {source === "mpv" && !hasMpv
+                                    ? t("logs_no_mpv")
+                                    : t("logs_empty")}
+                            </span>
+                        ) : (
+                            <>
+                                {(loadingOlder || hasOlder) && (
+                                    <div className="log-older-hint">
+                                        {loadingOlder
+                                            ? t("logs_loading_older")
+                                            : t("logs_scroll_older")}
+                                    </div>
+                                )}
+                                {displayed.map((line, i) => (
+                                    <LogLineView key={i} raw={line} />
+                                ))}
+                            </>
                         )}
                     </div>
                 </div>
-
-                <div className="log-body" ref={bodyRef} onScroll={handleScroll}>
-                    {displayed.length === 0 ? (
-                        <span className="log-empty">
-                            {source === "mpv" && !hasMpv
-                                ? t("logs_no_mpv")
-                                : t("logs_empty")}
-                        </span>
-                    ) : (
-                        <>
-                            {(loadingOlder || hasOlder) && (
-                                <div className="log-older-hint">
-                                    {loadingOlder
-                                        ? t("logs_loading_older")
-                                        : t("logs_scroll_older")}
-                                </div>
-                            )}
-                            {displayed.map((line, i) => (
-                                <LogLineView key={i} raw={line} />
-                            ))}
-                        </>
-                    )}
-                </div>
-            </div>
+            </Profiler>
         </>
     );
 }
