@@ -193,6 +193,11 @@ export default function Logs({ active }: { active: boolean }) {
     const oldestRef = useRef(0);
     // True until the very first tail page has been loaded for this source.
     const initializedRef = useRef(false);
+    // React state is too slow as a re-entry guard for scroll storms. Keep a
+    // synchronous gate so high-frequency wheel events cannot queue many
+    // read_log_before IPC calls before `loadingOlder` renders.
+    const loadingOlderRef = useRef(false);
+    const loadEpochRef = useRef(0);
 
     useEffect(() => {
         invoke<LogPaths>("get_log_paths")
@@ -246,11 +251,13 @@ export default function Logs({ active }: { active: boolean }) {
     // Load an older page (scroll-up), preserving the visual scroll position by
     // restoring the distance from the bottom after the prepend.
     const loadOlder = useCallback(async (path: string | null) => {
-        if (oldestRef.current <= 0) {
-            setHasOlder(false);
+        if (loadingOlderRef.current || oldestRef.current <= 0) {
+            setHasOlder(oldestRef.current > 0);
             return;
         }
+        loadingOlderRef.current = true;
         setLoadingOlder(true);
+        const epoch = loadEpochRef.current;
         const el = bodyRef.current;
         const prevHeight = el?.scrollHeight ?? 0;
         const prevTop = el?.scrollTop ?? 0;
@@ -260,6 +267,7 @@ export default function Logs({ active }: { active: boolean }) {
                 maxLines: PAGE_SIZE,
                 path,
             });
+            if (epoch !== loadEpochRef.current) return;
             if (resp.lines.length > 0) {
                 oldestRef.current = resp.start_bytes;
                 setHasOlder(resp.start_bytes > 0);
@@ -277,7 +285,10 @@ export default function Logs({ active }: { active: boolean }) {
         } catch {
             /* ignore: paging is best-effort */
         } finally {
-            setLoadingOlder(false);
+            if (epoch === loadEpochRef.current) {
+                loadingOlderRef.current = false;
+                setLoadingOlder(false);
+            }
         }
     }, []);
 
@@ -305,11 +316,14 @@ export default function Logs({ active }: { active: boolean }) {
     // polling effect restarts), so a source swap drops the old file's lines.
     useEffect(() => {
         return () => {
+            loadEpochRef.current += 1;
+            loadingOlderRef.current = false;
             posRef.current = 0;
             oldestRef.current = 0;
             initializedRef.current = false;
             setLines([]);
             setHasOlder(false);
+            setLoadingOlder(false);
         };
     }, [source, effectiveMpvPath]);
 
@@ -372,7 +386,7 @@ export default function Logs({ active }: { active: boolean }) {
         if (!el) return;
         setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
         // Near the top → page in older lines.
-        if (el.scrollTop < 60 && hasOlder && !loadingOlder) {
+        if (el.scrollTop < 60 && hasOlder && !loadingOlderRef.current) {
             const logPath = source === "mpv" ? effectiveMpvPath : null;
             void loadOlder(logPath);
         }
