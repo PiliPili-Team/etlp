@@ -79,6 +79,7 @@ export interface DisplaySettings {
     zoom: number;
     fontFamily: string;
     accentColor: AccentColor;
+    showBrandLogo: boolean;
     /** Deprecated local preference. Always coerced to false on load. */
     centerNav: boolean;
 }
@@ -103,6 +104,7 @@ export function defaultDisplay(): DisplaySettings {
         zoom: 1,
         fontFamily: "",
         accentColor: "blue",
+        showBrandLogo: true,
         centerNav: false,
     };
 }

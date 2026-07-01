@@ -377,6 +377,8 @@ export const zhCN = {
     sys_no_progress_desc: "开启后不向 Emby/Jellyfin 服务器发送播放进度",
     sys_accent: "主题颜色",
     sys_accent_desc: "界面强调色，影响按钮、激活态及徽章颜色",
+    sys_brand_logo: "显示品牌区域",
+    sys_brand_logo_desc: "关闭后隐藏 Tab 上方的品牌 Logo 和名称，菜单会自动上移",
     sys_center_nav: "侧边栏居中",
     sys_center_nav_desc: "将左侧标签作为整体在侧边栏纵向居中显示",
 

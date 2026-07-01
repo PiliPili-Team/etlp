@@ -396,6 +396,9 @@ export const pl: typeof zhCN = {
     sys_accent: "Kolor akcentu",
     sys_accent_desc:
         "Kolor wyróżnienia interfejsu — wpływa na przyciski, aktywne stany i ikony",
+    sys_brand_logo: "Pokaż obszar marki",
+    sys_brand_logo_desc:
+        "Ukrywa logo i nazwę nad kartami; menu automatycznie przesuwa się w górę",
     sys_center_nav: "Wyśrodkuj pasek boczny",
     sys_center_nav_desc: "Wyśrodkuj pionowo karty paska bocznego jako grupę",
 

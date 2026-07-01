@@ -403,6 +403,9 @@ export const fr: typeof zhCN = {
     sys_accent: "Couleur d'accentuation",
     sys_accent_desc:
         "Couleur de mise en évidence de l'interface — affecte les boutons, états actifs et badges",
+    sys_brand_logo: "Afficher l’en-tête de marque",
+    sys_brand_logo_desc:
+        "Masque le logo et le nom au-dessus des onglets ; le menu remonte automatiquement",
     sys_center_nav: "Centrer la barre latérale",
     sys_center_nav_desc:
         "Centrer verticalement les onglets de la barre latérale en groupe",

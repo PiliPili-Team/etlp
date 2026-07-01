@@ -683,7 +683,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 liquidGlassEnabled ? " liquid-glass-enabled" : ""
             }`}
         >
-            {isMac && (
+            {isMac && display.showBrandLogo && (
                 // data-tauri-drag-region activates Tauri's JS drag API
                 // (core:window:allow-start-dragging) on mousedown, bypassing
                 // any NSVisualEffectView hit-test interference with the CSS
@@ -698,7 +698,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
 
             <div className="body">
                 <nav className="sidebar" data-tauri-drag-region>
-                    {!isMac && <BrandBlock />}
+                    {!isMac && display.showBrandLogo && <BrandBlock />}
                     {NAV_SECTIONS.map((section, si) => (
                         <div key={si}>
                             {section.label && (

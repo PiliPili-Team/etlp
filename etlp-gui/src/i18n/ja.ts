@@ -379,6 +379,9 @@ export const ja: typeof zhCN = {
     sys_no_progress_desc: "Emby/Jellyfin サーバーに再生進捗を報告しません",
     sys_accent: "アクセントカラー",
     sys_accent_desc: "UI のハイライト色 — ボタン、アクティブ状態、バッジに影響します",
+    sys_brand_logo: "ブランド領域を表示",
+    sys_brand_logo_desc:
+        "オフにするとタブ上部のブランドロゴと名前を隠し、メニューは自動的に上へ移動します",
     sys_center_nav: "サイドバーを中央寄せ",
     sys_center_nav_desc: "サイドバーのタブをグループとして垂直方向に中央寄せします",
 

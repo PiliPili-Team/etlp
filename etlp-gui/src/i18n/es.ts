@@ -399,6 +399,9 @@ export const es: typeof zhCN = {
     sys_accent: "Color de acento",
     sys_accent_desc:
         "Color de resalte de la interfaz: afecta a botones, estados activos e insignias",
+    sys_brand_logo: "Mostrar área de marca",
+    sys_brand_logo_desc:
+        "Oculta el logo y el nombre sobre las pestañas; el menú sube automáticamente",
     sys_center_nav: "Centrar barra lateral",
     sys_center_nav_desc:
         "Centrar verticalmente las pestañas de la barra lateral como grupo",

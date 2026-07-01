@@ -372,6 +372,9 @@ export const he: typeof zhCN = {
     sys_no_progress_desc: "אל תדווח על התקדמות הפעלה לשרת Emby/Jellyfin",
     sys_accent: "צבע הדגשה",
     sys_accent_desc: "צבע הדגשת הממשק — משפיע על כפתורים, מצבים פעילים וסמלים",
+    sys_brand_logo: "הצג אזור מותג",
+    sys_brand_logo_desc:
+        "כאשר כבוי, לוגו ושם המותג מעל הלשוניות מוסתרים והתפריט עולה אוטומטית",
     sys_center_nav: "מרכז סרגל צד",
     sys_center_nav_desc: "מרכז אנכי את כרטיסיות סרגל הצד כקבוצה",
 

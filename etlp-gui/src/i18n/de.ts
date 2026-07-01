@@ -399,6 +399,9 @@ export const de: typeof zhCN = {
     sys_accent: "Akzentfarbe",
     sys_accent_desc:
         "UI-Hervorhebungsfarbe – betrifft Schaltflächen, aktive Zustände und Badges",
+    sys_brand_logo: "Markenbereich anzeigen",
+    sys_brand_logo_desc:
+        "Blendet Markenlogo und Namen oberhalb der Tabs aus; das Menü rückt automatisch nach oben",
     sys_center_nav: "Seitenleiste zentrieren",
     sys_center_nav_desc: "Die Tabs der Seitenleiste als Gruppe vertikal zentrieren",
 

@@ -2263,6 +2263,12 @@ function SystemSection({
                     value={display.accentColor ?? "blue"}
                     onChange={(v) => onDisplayChange({ accentColor: v })}
                 />
+                <ToggleRow
+                    label={t("sys_brand_logo")}
+                    desc={t("sys_brand_logo_desc")}
+                    checked={display.showBrandLogo ?? true}
+                    onChange={(v) => onDisplayChange({ showBrandLogo: v })}
+                />
                 {platform === "macos" && (
                     <ToggleRow
                         label={t("sys_liquid_glass")}

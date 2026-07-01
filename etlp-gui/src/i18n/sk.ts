@@ -391,6 +391,9 @@ export const sk: typeof zhCN = {
     sys_accent: "Farba zvýraznenia",
     sys_accent_desc:
         "Farba zvýraznenia rozhrania — ovplyvňuje tlačidlá, aktívne stavy a odznaky",
+    sys_brand_logo: "Zobraziť oblasť značky",
+    sys_brand_logo_desc:
+        "Skryje logo a názov nad kartami; ponuka sa automaticky posunie nahor",
     sys_center_nav: "Vycentrovať bočný panel",
     sys_center_nav_desc: "Vertikálne vycentrovať karty bočného panela ako skupinu",
 

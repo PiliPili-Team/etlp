@@ -379,6 +379,9 @@ export const ko: typeof zhCN = {
     sys_no_progress_desc: "Emby/Jellyfin 서버에 재생 진행률을 보고하지 않습니다",
     sys_accent: "강조 색상",
     sys_accent_desc: "UI 강조 색상 — 버튼, 활성 상태, 배지에 영향을 줍니다",
+    sys_brand_logo: "브랜드 영역 표시",
+    sys_brand_logo_desc:
+        "끄면 탭 위의 브랜드 로고와 이름을 숨기고 메뉴가 자동으로 위로 이동합니다",
     sys_center_nav: "사이드바 가운데 정렬",
     sys_center_nav_desc: "사이드바 탭을 그룹으로 세로 가운데 정렬합니다",
 

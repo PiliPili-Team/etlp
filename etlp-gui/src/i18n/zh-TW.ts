@@ -366,6 +366,8 @@ export const zhTW: typeof zhCN = {
     sys_no_progress_desc: "開啟後不向 Emby/Jellyfin 伺服器傳送播放進度",
     sys_accent: "主題顏色",
     sys_accent_desc: "介面強調色，影響按鈕、啟用狀態及徽章顏色",
+    sys_brand_logo: "顯示品牌區域",
+    sys_brand_logo_desc: "關閉後隱藏 Tab 上方的品牌 Logo 和名稱，選單會自動上移",
     sys_center_nav: "側邊欄置中",
     sys_center_nav_desc: "將左側標籤作為整體在側邊欄縱向置中顯示",
 

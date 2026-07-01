@@ -395,6 +395,9 @@ export const it: typeof zhCN = {
     sys_accent: "Colore accento",
     sys_accent_desc:
         "Colore di evidenziazione dell'interfaccia — influisce su pulsanti, stati attivi e badge",
+    sys_brand_logo: "Mostra area del brand",
+    sys_brand_logo_desc:
+        "Nasconde logo e nome sopra le schede; il menu sale automaticamente",
     sys_center_nav: "Centra barra laterale",
     sys_center_nav_desc:
         "Centra verticalmente le schede della barra laterale come gruppo",

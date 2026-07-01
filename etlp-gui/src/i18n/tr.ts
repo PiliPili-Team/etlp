@@ -386,6 +386,9 @@ export const tr: typeof zhCN = {
     sys_accent: "Vurgu Rengi",
     sys_accent_desc:
         "Arayüz vurgu rengi — düğmeleri, etkin durumları ve simgeleri etkiler",
+    sys_brand_logo: "Marka alanını göster",
+    sys_brand_logo_desc:
+        "Sekmelerin üstündeki marka logosunu ve adını gizler; menü otomatik olarak yukarı çıkar",
     sys_center_nav: "Kenar Çubuğunu Ortala",
     sys_center_nav_desc: "Kenar çubuğu sekmelerini grup olarak dikey ortala",
 

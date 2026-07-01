@@ -396,6 +396,9 @@ export const pt: typeof zhCN = {
     sys_accent: "Cor de destaque",
     sys_accent_desc:
         "Cor de realce da interface — afeta botões, estados ativos e emblemas",
+    sys_brand_logo: "Mostrar área da marca",
+    sys_brand_logo_desc:
+        "Oculta o logótipo e o nome acima dos separadores; o menu sobe automaticamente",
     sys_center_nav: "Centrar barra lateral",
     sys_center_nav_desc:
         "Centrar verticalmente os separadores da barra lateral como grupo",

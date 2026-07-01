@@ -406,6 +406,9 @@ export const en: typeof zhCN = {
     sys_no_progress_desc: "Do not report playback progress to the Emby/Jellyfin server",
     sys_accent: "Accent Color",
     sys_accent_desc: "UI highlight color — affects buttons, active states, and badges",
+    sys_brand_logo: "Show Brand Header",
+    sys_brand_logo_desc:
+        "Hide the brand logo and name above the tabs; the menu moves up automatically",
     sys_center_nav: "Center Sidebar",
     sys_center_nav_desc: "Vertically center the sidebar tabs as a group",
 

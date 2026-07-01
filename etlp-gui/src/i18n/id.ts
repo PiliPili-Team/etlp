@@ -391,6 +391,9 @@ export const id: typeof zhCN = {
     sys_accent: "Warna Aksen",
     sys_accent_desc:
         "Warna sorotan antarmuka — memengaruhi tombol, status aktif, dan ikon",
+    sys_brand_logo: "Tampilkan Area Merek",
+    sys_brand_logo_desc:
+        "Menyembunyikan logo dan nama merek di atas tab; menu otomatis naik",
     sys_center_nav: "Pusatkan Sidebar",
     sys_center_nav_desc: "Pusatkan tab sidebar secara vertikal sebagai grup",
 
