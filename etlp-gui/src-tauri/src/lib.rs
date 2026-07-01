@@ -465,10 +465,72 @@ fn apply_window_frame(window: &tauri::WebviewWindow) {
     if let Err(e) = window.set_decorations(false) {
         eprintln!("[etlp] undecorated window: {e}");
     }
+    apply_windows_window_region(window);
 }
 
 #[cfg(not(target_os = "windows"))]
 fn apply_window_frame(_window: &tauri::WebviewWindow) {}
+
+#[cfg(target_os = "windows")]
+fn apply_windows_window_region(window: &tauri::WebviewWindow) {
+    use windows::Win32::Graphics::Dwm::{
+        DWM_WINDOW_CORNER_PREFERENCE, DWMWA_WINDOW_CORNER_PREFERENCE,
+        DwmSetWindowAttribute,
+    };
+    use windows::Win32::Graphics::Gdi::{
+        CreateRoundRectRgn, DeleteObject, HGDIOBJ, SetWindowRgn,
+    };
+
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let Ok(scale) = window.scale_factor() else {
+        return;
+    };
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let radius = (12.0 * scale).round() as i32;
+    let width = i32::try_from(size.width).unwrap_or(i32::MAX);
+    let height = i32::try_from(size.height).unwrap_or(i32::MAX);
+
+    // Ask DWM for rounded-window semantics first. Undecorated transparent
+    // windows still need an explicit region below, but this avoids square DWM
+    // metadata on systems that honour the hint.
+    let preference = DWM_WINDOW_CORNER_PREFERENCE(2);
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &preference as *const _ as *const _,
+            std::mem::size_of_val(&preference) as u32,
+        )
+    };
+
+    let region = unsafe {
+        CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2)
+    };
+    if region.is_invalid() {
+        return;
+    }
+    // On success Windows owns the region handle. On failure it remains ours and
+    // must be deleted to avoid leaking a GDI object during resize.
+    if unsafe { SetWindowRgn(hwnd, Some(region), true) } == 0 {
+        let _ = unsafe { DeleteObject(HGDIOBJ(region.0)) };
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_windows_runtime_window_region(window: &tauri::Window) {
+    if let Some(webview_window) =
+        window.app_handle().get_webview_window(window.label())
+    {
+        apply_windows_window_region(&webview_window);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_windows_runtime_window_region(_window: &tauri::Window) {}
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn apply_window_material(_window: &tauri::WebviewWindow) {}
@@ -860,6 +922,7 @@ pub fn run() {
                 | WindowEvent::Moved(_)
                 | WindowEvent::ScaleFactorChanged { .. } => {
                     persist_window_state(window);
+                    apply_windows_runtime_window_region(window);
                 }
 
                 WindowEvent::CloseRequested { api, .. } => {

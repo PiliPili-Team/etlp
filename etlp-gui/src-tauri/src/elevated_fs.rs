@@ -7,12 +7,16 @@
 use std::path::Path;
 
 #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt as _;
+
+#[cfg(target_os = "windows")]
 fn quote_ps_string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
 #[cfg(target_os = "windows")]
 fn run_powershell_elevated(script: &str) -> Result<(), String> {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let status = std::process::Command::new("powershell.exe")
         .args([
             "-NoProfile",
@@ -20,12 +24,15 @@ fn run_powershell_elevated(script: &str) -> Result<(), String> {
             "Bypass",
             "-Command",
             &format!(
-                "$p = Start-Process -Verb RunAs -Wait -PassThru -FilePath powershell.exe \
-                 -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass',\
-                 '-Command', {}); exit $p.ExitCode",
+                "$p = Start-Process -Verb RunAs -WindowStyle Hidden -Wait \
+                 -PassThru -FilePath powershell.exe -ArgumentList \
+                 @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy',\
+                 'Bypass','-WindowStyle','Hidden','-Command', {}); \
+                 exit $p.ExitCode",
                 quote_ps_string(script)
             ),
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|e| format!("request elevation: {e}"))?;
 
