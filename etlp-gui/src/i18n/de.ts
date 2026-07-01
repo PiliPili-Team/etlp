@@ -405,6 +405,16 @@ export const de: typeof zhCN = {
     sys_brand_name: "Markenname",
     sys_brand_name_desc:
         "Leer lassen, um automatisch den integrierten lokalisierten Markennamen zu verwenden",
+    sys_app_icon: "Benutzerdefiniertes Symbol",
+    sys_app_icon_desc:
+        "PNG-Bild für Marke und Tray-Symbol wählen; Mindestauflösung 512x512",
+    sys_app_icon_choose: "Bild wählen",
+    sys_app_icon_reset: "Zurücksetzen",
+    sys_app_icon_saved: "Symbol aktualisiert",
+    sys_app_icon_reset_done: "Standardsymbol wiederhergestellt",
+    sys_app_icon_too_small:
+        "Bildauflösung ist zu niedrig ({size}); mindestens 512x512 erforderlich",
+    sys_app_icon_invalid: "Bitte ein gültiges PNG-Bild wählen",
     sys_material_opacity: "Materialtransparenz",
     sys_material_opacity_desc:
         "Niedrigere Werte machen Hintergründe und Karten transparenter, ohne Text auszublenden",

@@ -405,6 +405,16 @@ export const es: typeof zhCN = {
     sys_brand_name: "Nombre de marca",
     sys_brand_name_desc:
         "Déjalo vacío para usar automáticamente el nombre localizado integrado",
+    sys_app_icon: "Icono personalizado",
+    sys_app_icon_desc:
+        "Elige una imagen PNG para la marca y el icono de bandeja; resolución mínima 512x512",
+    sys_app_icon_choose: "Elegir imagen",
+    sys_app_icon_reset: "Restablecer",
+    sys_app_icon_saved: "Icono actualizado",
+    sys_app_icon_reset_done: "Icono predeterminado restaurado",
+    sys_app_icon_too_small:
+        "La resolución de la imagen es demasiado baja ({size}); se requiere al menos 512x512",
+    sys_app_icon_invalid: "Elige una imagen PNG válida",
     sys_material_opacity: "Opacidad del material",
     sys_material_opacity_desc:
         "Los valores más bajos hacen fondos y tarjetas más transparentes sin desvanecer el texto",

@@ -402,6 +402,16 @@ export const pl: typeof zhCN = {
     sys_brand_name: "Nazwa marki",
     sys_brand_name_desc:
         "Zostaw puste, aby automatycznie użyć wbudowanej zlokalizowanej nazwy",
+    sys_app_icon: "Ikona niestandardowa",
+    sys_app_icon_desc:
+        "Wybierz obraz PNG dla marki i ikony zasobnika; minimalna rozdzielczość 512x512",
+    sys_app_icon_choose: "Wybierz obraz",
+    sys_app_icon_reset: "Resetuj",
+    sys_app_icon_saved: "Ikona zaktualizowana",
+    sys_app_icon_reset_done: "Przywrócono domyślną ikonę",
+    sys_app_icon_too_small:
+        "Rozdzielczość obrazu jest za niska ({size}); wymagane co najmniej 512x512",
+    sys_app_icon_invalid: "Wybierz prawidłowy obraz PNG",
     sys_material_opacity: "Nieprzezroczystość materiału",
     sys_material_opacity_desc:
         "Niższe wartości zwiększają przezroczystość tła i kart bez wygaszania tekstu",

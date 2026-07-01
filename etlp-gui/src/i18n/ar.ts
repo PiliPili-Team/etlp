@@ -387,6 +387,15 @@ export const ar: typeof zhCN = {
         "عند إيقافه يختفي شعار العلامة واسمها أعلى علامات التبويب وتتحرك القائمة للأعلى تلقائيًا",
     sys_brand_name: "اسم العلامة",
     sys_brand_name_desc: "اتركه فارغًا لاستخدام اسم العلامة المحلي المدمج تلقائيًا",
+    sys_app_icon: "أيقونة مخصّصة",
+    sys_app_icon_desc:
+        "اختر صورة PNG للعلامة وأيقونة شريط النظام؛ الحد الأدنى للدقة 512x512",
+    sys_app_icon_choose: "اختر صورة",
+    sys_app_icon_reset: "إعادة تعيين",
+    sys_app_icon_saved: "تم تحديث الأيقونة",
+    sys_app_icon_reset_done: "تمت استعادة الأيقونة الافتراضية",
+    sys_app_icon_too_small: "دقة الصورة منخفضة جدًا ({size})؛ يلزم 512x512 على الأقل",
+    sys_app_icon_invalid: "اختر صورة PNG صالحة",
     sys_material_opacity: "شفافية المادة",
     sys_material_opacity_desc:
         "القيم الأقل تجعل الخلفيات والبطاقات أكثر شفافية من دون جعل النص باهتًا",

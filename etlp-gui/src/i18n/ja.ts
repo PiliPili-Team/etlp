@@ -384,6 +384,15 @@ export const ja: typeof zhCN = {
         "オフにするとタブ上部のブランドロゴと名前を隠し、メニューは自動的に上へ移動します",
     sys_brand_name: "ブランド名",
     sys_brand_name_desc: "空のままにすると内蔵の多言語ブランド名を自動的に使用します",
+    sys_app_icon: "カスタムアイコン",
+    sys_app_icon_desc:
+        "ブランドとトレイアイコンに使う PNG 画像を選択します。最低解像度は 512x512 です",
+    sys_app_icon_choose: "画像を選択",
+    sys_app_icon_reset: "リセット",
+    sys_app_icon_saved: "アイコンを更新しました",
+    sys_app_icon_reset_done: "既定のアイコンに戻しました",
+    sys_app_icon_too_small: "画像の解像度が低すぎます（{size}）。512x512 以上が必要です",
+    sys_app_icon_invalid: "有効な PNG 画像を選択してください",
     sys_material_opacity: "マテリアル透明度",
     sys_material_opacity_desc:
         "値を下げると背景とカードがより透け、文字の透明度は変わりません",

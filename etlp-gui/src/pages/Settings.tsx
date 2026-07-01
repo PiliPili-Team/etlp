@@ -88,6 +88,8 @@ interface Props {
     addToast: (msg: string, err?: boolean) => void;
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
+    customIconUrl: string | null;
+    onCustomIconChange: (url: string | null) => void;
     onAbout: () => void;
     onLiquidGlassChange: (enabled: boolean) => void;
 }
@@ -96,6 +98,10 @@ interface LiquidGlassSupport {
     supported: boolean;
     macos26_or_newer: boolean;
     appkit_supported: boolean;
+}
+
+interface CustomIconInfo {
+    data_url: string;
 }
 
 // ── Delta patch ────────────────────────────────────────────────────────────────
@@ -1099,6 +1105,84 @@ function AccentColorRow({
     );
 }
 
+function CustomIconRow({
+    iconUrl,
+    onChange,
+    addToast,
+}: {
+    iconUrl: string | null;
+    onChange: (url: string | null) => void;
+    addToast: (msg: string, err?: boolean) => void;
+}) {
+    const t = useI18n();
+    const [busy, setBusy] = useState(false);
+
+    const mapIconError = (e: unknown) => {
+        const msg = String(e);
+        if (msg.startsWith("ICON_TOO_SMALL:")) {
+            const size = msg.slice("ICON_TOO_SMALL:".length);
+            return t("sys_app_icon_too_small", { size });
+        }
+        if (msg.startsWith("ICON_INVALID:")) return t("sys_app_icon_invalid");
+        return mapBackendError(e, t);
+    };
+
+    const chooseIcon = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            const info = await invoke<CustomIconInfo | null>("pick_custom_app_icon");
+            if (!info) return;
+            onChange(info.data_url);
+            addToast(t("sys_app_icon_saved"));
+        } catch (e) {
+            addToast(mapIconError(e), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const resetIcon = async () => {
+        if (busy || !iconUrl) return;
+        setBusy(true);
+        try {
+            await invoke("reset_custom_app_icon");
+            onChange(null);
+            addToast(t("sys_app_icon_reset_done"));
+        } catch (e) {
+            addToast(mapBackendError(e, t), true);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="row">
+            <div className="row-label">
+                <div>{t("sys_app_icon")}</div>
+                <div className="row-desc">{t("sys_app_icon_desc")}</div>
+            </div>
+            <div className="row-control icon-picker-control">
+                <img
+                    className="icon-picker-preview"
+                    src={iconUrl ?? "/app-icon.png"}
+                    alt=""
+                />
+                <button className="btn" disabled={busy} onClick={() => void chooseIcon()}>
+                    {t("sys_app_icon_choose")}
+                </button>
+                <button
+                    className="btn"
+                    disabled={busy || !iconUrl}
+                    onClick={() => void resetIcon()}
+                >
+                    {t("sys_app_icon_reset")}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ── Font picker row (pure <select> dropdown) ────────────────────────────────────
 
 // Module-level cache: the backend already memoizes the scan, but caching the
@@ -1163,6 +1247,8 @@ export default function Settings({
     addToast,
     display,
     onDisplayChange,
+    customIconUrl,
+    onCustomIconChange,
     onAbout,
     onLiquidGlassChange,
 }: Props) {
@@ -1264,6 +1350,8 @@ export default function Settings({
                 onAutostart={handleAutostart}
                 display={display}
                 onDisplayChange={onDisplayChange}
+                customIconUrl={customIconUrl}
+                onCustomIconChange={onCustomIconChange}
                 addToast={addToast}
                 onAbout={onAbout}
             />
@@ -2107,6 +2195,8 @@ function SystemSection({
     onAutostart,
     display,
     onDisplayChange,
+    customIconUrl,
+    onCustomIconChange,
     addToast,
     onAbout,
 }: {
@@ -2116,6 +2206,8 @@ function SystemSection({
     onAutostart: (v: boolean) => void;
     display: DisplaySettings;
     onDisplayChange: (patch: Partial<DisplaySettings>) => void;
+    customIconUrl: string | null;
+    onCustomIconChange: (url: string | null) => void;
     addToast: (msg: string, err?: boolean) => void;
     onAbout: () => void;
 }) {
@@ -2309,6 +2401,11 @@ function SystemSection({
                     desc={t("sys_brand_logo_desc")}
                     checked={display.showBrandLogo ?? true}
                     onChange={(v) => onDisplayChange({ showBrandLogo: v })}
+                />
+                <CustomIconRow
+                    iconUrl={customIconUrl}
+                    onChange={onCustomIconChange}
+                    addToast={addToast}
                 />
                 <InputRow
                     label={t("sys_brand_name")}

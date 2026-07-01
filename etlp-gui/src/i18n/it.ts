@@ -401,6 +401,16 @@ export const it: typeof zhCN = {
     sys_brand_name: "Nome del brand",
     sys_brand_name_desc:
         "Lascia vuoto per usare automaticamente il nome localizzato integrato",
+    sys_app_icon: "Icona personalizzata",
+    sys_app_icon_desc:
+        "Scegli un'immagine PNG per brand e icona nel tray; risoluzione minima 512x512",
+    sys_app_icon_choose: "Scegli immagine",
+    sys_app_icon_reset: "Ripristina",
+    sys_app_icon_saved: "Icona aggiornata",
+    sys_app_icon_reset_done: "Icona predefinita ripristinata",
+    sys_app_icon_too_small:
+        "La risoluzione dell'immagine è troppo bassa ({size}); serve almeno 512x512",
+    sys_app_icon_invalid: "Scegli un'immagine PNG valida",
     sys_material_opacity: "Opacità materiale",
     sys_material_opacity_desc:
         "Valori più bassi rendono sfondi e schede più trasparenti senza sbiadire il testo",

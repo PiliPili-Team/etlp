@@ -19,6 +19,8 @@ use commands::GuiState;
 
 const DEFAULT_WINDOW_WIDTH: f64 = 1120.0;
 const DEFAULT_WINDOW_HEIGHT: f64 = 700.0;
+pub const CUSTOM_APP_ICON_FILE: &str = "custom-app-icon.png";
+pub const TRAY_ICON_ID: &str = "main";
 const WINDOW_STATE_FILE: &str = "window-state.json";
 #[cfg(target_os = "macos")]
 static LIQUID_GLASS_LOG_ONCE: Once = Once::new();
@@ -120,7 +122,7 @@ fn augment_path() {}
 /// commonly dark panel. Windows has no template support either and a silhouette
 /// renders nearly invisible on its taskbar, so it keeps the full-colour app
 /// logo — the squircle-rounded variant so it matches the rounded app icon.
-fn tray_icon_asset() -> (&'static [u8], bool) {
+pub(crate) fn tray_icon_asset() -> (&'static [u8], bool) {
     #[cfg(target_os = "macos")]
     {
         (include_bytes!("../icons/tray-icon.png"), true)
@@ -135,11 +137,22 @@ fn tray_icon_asset() -> (&'static [u8], bool) {
     }
 }
 
+pub(crate) fn bundled_app_icon_asset() -> &'static [u8] {
+    include_bytes!("../icons/source.png")
+}
+
+/// Returns the persisted custom app icon path, if the user has configured one.
+pub fn custom_app_icon_path() -> Option<std::path::PathBuf> {
+    etlp_server::platform::data_dir()
+        .map(|dir| dir.join(CUSTOM_APP_ICON_FILE))
+        .filter(|path| path.is_file())
+}
+
 /// Decode the bundled tray PNG into `(rgba_bytes, width, height)`.
 ///
 /// Returns an error instead of panicking so a corrupt/unsupported asset only
 /// costs the custom tray icon rather than the whole process.
-fn decode_tray_icon(
+pub fn decode_png_icon(
     bytes: &[u8],
 ) -> Result<(Vec<u8>, u32, u32), Box<dyn std::error::Error>> {
     use image::ImageDecoder as _;
@@ -149,6 +162,12 @@ fn decode_tray_icon(
     let mut buf = vec![0u8; usize::try_from(decoder.total_bytes())?];
     decoder.read_image(&mut buf)?;
     Ok((buf, w, h))
+}
+
+fn decode_tray_icon(
+    bytes: &[u8],
+) -> Result<(Vec<u8>, u32, u32), Box<dyn std::error::Error>> {
+    decode_png_icon(bytes)
 }
 
 // ── Tray menu builder ─────────────────────────────────────────────────────────
@@ -779,12 +798,27 @@ pub fn run() {
 
     // Decode the tray PNG to raw RGBA at startup. A decode failure must not
     // crash the app — the tray simply launches without a custom icon. macOS
-    // uses a monochrome template; Windows/Linux use the colour app logo.
-    let (tray_icon_bytes, tray_is_template) = tray_icon_asset();
-    let tray_rgba: Option<(Vec<u8>, u32, u32)> =
+    // uses a monochrome template only for the bundled icon; user icons stay
+    // full-colour on every platform.
+    let custom_icon = custom_app_icon_path()
+        .and_then(|path| std::fs::read(&path).ok())
+        .and_then(|bytes| {
+            decode_tray_icon(&bytes)
+                .map_err(|e| {
+                    eprintln!("[etlp] custom tray icon decode failed: {e}")
+                })
+                .ok()
+        });
+    let tray_is_template = custom_icon.is_none() && {
+        let (_, is_template) = tray_icon_asset();
+        is_template
+    };
+    let tray_rgba: Option<(Vec<u8>, u32, u32)> = custom_icon.or_else(|| {
+        let (tray_icon_bytes, _) = tray_icon_asset();
         decode_tray_icon(tray_icon_bytes)
             .map_err(|e| eprintln!("[etlp] tray icon decode failed: {e}"))
-            .ok();
+            .ok()
+    });
 
     let gui_state = {
         let s = GuiState::default();
@@ -825,7 +859,7 @@ pub fn run() {
             // ── Tray icon ──────────────────────────────────────────────────────
             let menu = build_tray_menu(app.handle(), &labels)?;
 
-            let mut tray_builder = TrayIconBuilder::new();
+            let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID);
             if let Some((tray_buf, tray_w, tray_h)) = tray_rgba {
                 let tray_img =
                     tauri::image::Image::new_owned(tray_buf, tray_w, tray_h);
@@ -879,6 +913,14 @@ pub fn run() {
                 // this applies NSGlassEffectView, falling back to vibrancy on
                 // older systems or when the runtime rejects Liquid Glass.
                 apply_window_material(&window, liquid_glass_requested);
+                if let Some(path) = custom_app_icon_path()
+                    && let Ok(bytes) = std::fs::read(path)
+                    && let Ok((rgba, width, height)) = decode_png_icon(&bytes)
+                {
+                    let icon =
+                        tauri::image::Image::new_owned(rgba, width, height);
+                    let _ = window.set_icon(icon);
+                }
                 // Show the main window on launch; tauri.conf.json sets
                 // visible:false so the OS doesn't flash an unstyled frame.
                 // When silent start is enabled the window stays hidden and the
@@ -965,6 +1007,9 @@ pub fn run() {
             commands::set_autostart,
             commands::get_autostart,
             commands::get_liquid_glass_support,
+            commands::get_custom_app_icon,
+            commands::pick_custom_app_icon,
+            commands::reset_custom_app_icon,
             commands::validate_bangumi_mapping,
             commands::export_bangumi_map,
             commands::import_bangumi_map,

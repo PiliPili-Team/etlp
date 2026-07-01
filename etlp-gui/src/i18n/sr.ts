@@ -392,6 +392,16 @@ export const sr: typeof zhCN = {
     sys_brand_name: "Назив бренда",
     sys_brand_name_desc:
         "Оставите празно за аутоматску употребу уграђеног локализованог назива",
+    sys_app_icon: "Прилагођена икона",
+    sys_app_icon_desc:
+        "Изаберите PNG слику за бренд и икону у системској траци; најмања резолуција је 512x512",
+    sys_app_icon_choose: "Изабери слику",
+    sys_app_icon_reset: "Ресетуј",
+    sys_app_icon_saved: "Икона је ажурирана",
+    sys_app_icon_reset_done: "Подразумевана икона је враћена",
+    sys_app_icon_too_small:
+        "Резолуција слике је прениска ({size}); потребно је најмање 512x512",
+    sys_app_icon_invalid: "Изаберите важећу PNG слику",
     sys_material_opacity: "Провидност материјала",
     sys_material_opacity_desc:
         "Ниже вредности чине позадине и картице провиднијим без изблеђивања текста",

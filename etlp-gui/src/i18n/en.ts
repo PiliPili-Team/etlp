@@ -412,6 +412,16 @@ export const en: typeof zhCN = {
     sys_brand_name: "Brand Name",
     sys_brand_name_desc:
         "Leave empty to use the built-in localized brand name automatically",
+    sys_app_icon: "Custom Icon",
+    sys_app_icon_desc:
+        "Choose a PNG image for the brand and tray icon; minimum resolution is 512x512",
+    sys_app_icon_choose: "Choose Image",
+    sys_app_icon_reset: "Reset",
+    sys_app_icon_saved: "Icon updated",
+    sys_app_icon_reset_done: "Default icon restored",
+    sys_app_icon_too_small:
+        "Image resolution is too low ({size}); at least 512x512 is required",
+    sys_app_icon_invalid: "Choose a valid PNG image",
     sys_material_opacity: "Material Opacity",
     sys_material_opacity_desc:
         "Lower values make backgrounds and cards more transparent without fading text",

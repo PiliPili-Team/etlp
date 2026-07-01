@@ -392,6 +392,16 @@ export const tr: typeof zhCN = {
     sys_brand_name: "Marka Adı",
     sys_brand_name_desc:
         "Yerleşik yerelleştirilmiş marka adını otomatik kullanmak için boş bırakın",
+    sys_app_icon: "Özel Simge",
+    sys_app_icon_desc:
+        "Marka ve tepsi simgesi için PNG görseli seçin; minimum çözünürlük 512x512",
+    sys_app_icon_choose: "Görsel Seç",
+    sys_app_icon_reset: "Sıfırla",
+    sys_app_icon_saved: "Simge güncellendi",
+    sys_app_icon_reset_done: "Varsayılan simge geri yüklendi",
+    sys_app_icon_too_small:
+        "Görsel çözünürlüğü çok düşük ({size}); en az 512x512 gerekiyor",
+    sys_app_icon_invalid: "Geçerli bir PNG görseli seçin",
     sys_material_opacity: "Malzeme Opaklığı",
     sys_material_opacity_desc:
         "Düşük değerler metni soldurmadan arka planları ve kartları daha şeffaf yapar",

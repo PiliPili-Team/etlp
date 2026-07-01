@@ -397,6 +397,16 @@ export const id: typeof zhCN = {
     sys_brand_name: "Nama Merek",
     sys_brand_name_desc:
         "Biarkan kosong untuk otomatis memakai nama merek bawaan yang dilokalkan",
+    sys_app_icon: "Ikon Kustom",
+    sys_app_icon_desc:
+        "Pilih gambar PNG untuk merek dan ikon tray; resolusi minimum 512x512",
+    sys_app_icon_choose: "Pilih Gambar",
+    sys_app_icon_reset: "Reset",
+    sys_app_icon_saved: "Ikon diperbarui",
+    sys_app_icon_reset_done: "Ikon default dipulihkan",
+    sys_app_icon_too_small:
+        "Resolusi gambar terlalu rendah ({size}); minimal 512x512 diperlukan",
+    sys_app_icon_invalid: "Pilih gambar PNG yang valid",
     sys_material_opacity: "Opasitas Material",
     sys_material_opacity_desc:
         "Nilai lebih rendah membuat latar dan kartu lebih transparan tanpa memudarkan teks",

@@ -234,7 +234,15 @@ export interface Toast {
 // the brief placeholder flash. (No freshness concern: it never changes.)
 let cachedVersion: string | null = null;
 
-function AboutCard({ brandName, onClose }: { brandName: string; onClose: () => void }) {
+function AboutCard({
+    brandName,
+    iconUrl,
+    onClose,
+}: {
+    brandName: string;
+    iconUrl: string;
+    onClose: () => void;
+}) {
     const t = useI18n();
     const [version, setVersion] = useState(cachedVersion ?? "0.1.0");
 
@@ -268,7 +276,7 @@ function AboutCard({ brandName, onClose }: { brandName: string; onClose: () => v
 
             <img
                 className="about-icon"
-                src="/app-icon.png"
+                src={iconUrl}
                 alt="etlp icon"
                 onError={(e) => {
                     (e.target as HTMLImageElement).style.display = "none";
@@ -332,10 +340,18 @@ function AboutCard({ brandName, onClose }: { brandName: string; onClose: () => v
     );
 }
 
-function AboutModal({ brandName, onClose }: { brandName: string; onClose: () => void }) {
+function AboutModal({
+    brandName,
+    iconUrl,
+    onClose,
+}: {
+    brandName: string;
+    iconUrl: string;
+    onClose: () => void;
+}) {
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <AboutCard brandName={brandName} onClose={onClose} />
+            <AboutCard brandName={brandName} iconUrl={iconUrl} onClose={onClose} />
         </div>
     );
 }
@@ -392,15 +408,20 @@ interface ShellConfig {
     liquid_glass: boolean;
 }
 
+interface CustomIconInfo {
+    data_url: string;
+}
+
 // Stores the version the user dismissed so the banner stays hidden until a
 // newer release appears.
 const UPDATE_DISMISS_KEY = "etlp-update-dismissed";
 const AUTO_UPDATE_CHECK_DELAY_MS = 120_000;
+const DEFAULT_APP_ICON = "/app-icon.png";
 
-function BrandBlock({ brandName }: { brandName: string }) {
+function BrandBlock({ brandName, iconUrl }: { brandName: string; iconUrl: string }) {
     return (
         <div className="brand-block" data-tauri-drag-region>
-            <img className="brand-logo" src="/app-icon.png" alt="" />
+            <img className="brand-logo" src={iconUrl} alt="" />
             <span className="brand-name">{brandName}</span>
         </div>
     );
@@ -502,9 +523,11 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const [showAbout, setShowAbout] = useState(false);
     const [update, setUpdate] = useState<UpdateInfo | null>(null);
     const [windowFocused, setWindowFocused] = useState(true);
+    const [customIconUrl, setCustomIconUrl] = useState<string | null>(null);
     const [liquidGlassEnabled, setLiquidGlassEnabled] = useState(false);
     const toastIdRef = useRef(0);
     const brandName = display.customBrandName.trim() || t("app_name");
+    const appIconUrl = customIconUrl ?? DEFAULT_APP_ICON;
 
     // Auto update check: runs once per app launch (independent of the active
     // tab), gated by the user's `check_update` setting (default on). It is
@@ -551,6 +574,18 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         invoke<ShellConfig>("get_config")
             .then((cfg) => {
                 if (!cancelled) setLiquidGlassEnabled(cfg.liquid_glass);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        invoke<CustomIconInfo | null>("get_custom_app_icon")
+            .then((info) => {
+                if (!cancelled) setCustomIconUrl(info?.data_url ?? null);
             })
             .catch(() => {});
         return () => {
@@ -690,7 +725,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 // macOS keeps native traffic lights and the established
                 // traffic-light-friendly branding row.
                 <div className="titlebar" data-tauri-drag-region>
-                    <BrandBlock brandName={brandName} />
+                    <BrandBlock brandName={brandName} iconUrl={appIconUrl} />
                 </div>
             )}
             {isWindows && <WindowsDragShell />}
@@ -698,7 +733,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             <div className="body">
                 <nav className="sidebar" data-tauri-drag-region>
                     {!isMac && display.showBrandLogo && (
-                        <BrandBlock brandName={brandName} />
+                        <BrandBlock brandName={brandName} iconUrl={appIconUrl} />
                     )}
                     {NAV_SECTIONS.map((section, si) => (
                         <div key={si}>
@@ -735,6 +770,8 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                             addToast={addToast}
                             display={display}
                             onDisplayChange={onDisplayChange}
+                            customIconUrl={customIconUrl}
+                            onCustomIconChange={setCustomIconUrl}
                             onAbout={() => setShowAbout(true)}
                             onLiquidGlassChange={setLiquidGlassEnabled}
                         />
@@ -756,7 +793,11 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             </div>
 
             {showAbout && (
-                <AboutModal brandName={brandName} onClose={() => setShowAbout(false)} />
+                <AboutModal
+                    brandName={brandName}
+                    iconUrl={appIconUrl}
+                    onClose={() => setShowAbout(false)}
+                />
             )}
         </div>
     );

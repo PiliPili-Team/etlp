@@ -663,6 +663,21 @@ body.platform-windows .content {
     -webkit-app-region: no-drag;
 }
 
+.icon-picker-control {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.icon-picker-preview {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    object-fit: cover;
+    border: 1px solid rgba(216, 238, 245, 0.12);
+    background: var(--surface-alt);
+    flex-shrink: 0;
+}
+
 .slider-control {
     width: min(260px, 42vw);
 }

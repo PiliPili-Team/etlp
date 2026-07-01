@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
+use tauri::Manager as _;
 use tauri::State;
 use tower::Layer;
 use tower_http::normalize_path::NormalizePathLayer;
@@ -55,6 +56,53 @@ fn err_create_data_dir(e: impl std::fmt::Display) -> String {
         format!("无法创建数据目录：{e}")
     } else {
         format!("create data dir: {e}")
+    }
+}
+
+fn err_icon_too_small(width: u32, height: u32) -> String {
+    format!("ICON_TOO_SMALL:{width}x{height}")
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CustomIconInfo {
+    pub data_url: String,
+}
+
+fn custom_icon_path() -> Result<PathBuf, String> {
+    let data_dir = platform::data_dir().ok_or_else(err_no_data_dir)?;
+    std::fs::create_dir_all(&data_dir).map_err(err_create_data_dir)?;
+    Ok(data_dir.join(crate::CUSTOM_APP_ICON_FILE))
+}
+
+fn custom_icon_info_from_bytes(bytes: &[u8]) -> CustomIconInfo {
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    CustomIconInfo {
+        data_url: format!("data:image/png;base64,{encoded}"),
+    }
+}
+
+fn validate_custom_icon(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
+    let (rgba, width, height) = crate::decode_png_icon(bytes)
+        .map_err(|e| format!("ICON_INVALID:{e}"))?;
+    if width < 512 || height < 512 {
+        return Err(err_icon_too_small(width, height));
+    }
+    Ok((rgba, width, height))
+}
+
+fn apply_custom_icon(
+    app: &tauri::AppHandle,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) {
+    let icon = tauri::image::Image::new_owned(rgba, width, height);
+    if let Some(tray) = app.tray_by_id(crate::TRAY_ICON_ID) {
+        let _ = tray.set_icon_with_as_template(Some(icon.clone()), false);
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_icon(icon);
     }
 }
 
@@ -778,6 +826,74 @@ pub async fn import_bangumi_map_url(
         "added": added,
         "replaced": replaced,
     }))
+}
+
+/// Return the persisted custom app icon, if the user has configured one.
+#[tauri::command]
+pub fn get_custom_app_icon() -> Result<Option<CustomIconInfo>, String> {
+    let path = custom_icon_path()?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("ICON_READ:{e}"))?;
+    validate_custom_icon(&bytes)?;
+    Ok(Some(custom_icon_info_from_bytes(&bytes)))
+}
+
+/// Pick, validate, persist, and apply a custom PNG app/tray icon.
+///
+/// The bundled app executable icon cannot be rewritten reliably at runtime on
+/// every platform, so this updates the in-app branding, main window icon, and
+/// tray icon immediately while persisting the PNG for the next launch.
+#[tauri::command]
+pub async fn pick_custom_app_icon(
+    app: tauri::AppHandle,
+) -> Result<Option<CustomIconInfo>, String> {
+    use tauri_plugin_dialog::DialogExt as _;
+
+    let Some(src) = app
+        .dialog()
+        .file()
+        .set_title("Choose App Icon")
+        .add_filter("PNG", &["png"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+
+    let src_path = PathBuf::from(src.to_string());
+    let bytes =
+        std::fs::read(&src_path).map_err(|e| format!("ICON_READ:{e}"))?;
+    let (rgba, width, height) = validate_custom_icon(&bytes)?;
+    let dest = custom_icon_path()?;
+    std::fs::write(&dest, &bytes).map_err(|e| format!("ICON_WRITE:{e}"))?;
+    apply_custom_icon(&app, rgba, width, height);
+    Ok(Some(custom_icon_info_from_bytes(&bytes)))
+}
+
+/// Remove the custom icon and restore the bundled tray icon for this session.
+#[tauri::command]
+pub fn reset_custom_app_icon(app: tauri::AppHandle) -> Result<(), String> {
+    let path = custom_icon_path()?;
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("ICON_REMOVE:{e}"))?;
+    }
+
+    let (bytes, is_template) = crate::tray_icon_asset();
+    let (rgba, width, height) = crate::decode_png_icon(bytes)
+        .map_err(|e| format!("ICON_INVALID:{e}"))?;
+    let icon = tauri::image::Image::new_owned(rgba, width, height);
+    if let Some(tray) = app.tray_by_id(crate::TRAY_ICON_ID) {
+        let _ = tray.set_icon_with_as_template(Some(icon), is_template);
+    }
+    let (rgba, width, height) =
+        crate::decode_png_icon(crate::bundled_app_icon_asset())
+            .map_err(|e| format!("ICON_INVALID:{e}"))?;
+    let icon = tauri::image::Image::new_owned(rgba, width, height);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_icon(icon);
+    }
+    Ok(())
 }
 
 /// Validate a `version_filter` regular expression against the same engine the

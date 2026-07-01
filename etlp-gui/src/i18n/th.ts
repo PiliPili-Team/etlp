@@ -383,6 +383,15 @@ export const th: typeof zhCN = {
         "เมื่อปิด จะซ่อนโลโก้และชื่อแบรนด์เหนือแท็บ และเมนูจะเลื่อนขึ้นอัตโนมัติ",
     sys_brand_name: "ชื่อแบรนด์",
     sys_brand_name_desc: "เว้นว่างเพื่อใช้ชื่อแบรนด์หลายภาษาที่มีมาให้อัตโนมัติ",
+    sys_app_icon: "ไอคอนกำหนดเอง",
+    sys_app_icon_desc:
+        "เลือกภาพ PNG สำหรับแบรนด์และไอคอนถาด ระบบต้องมีความละเอียดอย่างน้อย 512x512",
+    sys_app_icon_choose: "เลือกภาพ",
+    sys_app_icon_reset: "รีเซ็ต",
+    sys_app_icon_saved: "อัปเดตไอคอนแล้ว",
+    sys_app_icon_reset_done: "กู้คืนไอคอนเริ่มต้นแล้ว",
+    sys_app_icon_too_small: "ความละเอียดภาพต่ำเกินไป ({size}); ต้องมีอย่างน้อย 512x512",
+    sys_app_icon_invalid: "โปรดเลือกภาพ PNG ที่ถูกต้อง",
     sys_material_opacity: "ความทึบของวัสดุ",
     sys_material_opacity_desc:
         "ค่าที่ต่ำลงทำให้พื้นหลังและการ์ดโปร่งขึ้นโดยไม่ทำให้ข้อความจาง",

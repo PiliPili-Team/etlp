@@ -384,6 +384,16 @@ export const ko: typeof zhCN = {
         "끄면 탭 위의 브랜드 로고와 이름을 숨기고 메뉴가 자동으로 위로 이동합니다",
     sys_brand_name: "브랜드 이름",
     sys_brand_name_desc: "비워 두면 내장된 다국어 브랜드 이름을 자동으로 사용합니다",
+    sys_app_icon: "사용자 지정 아이콘",
+    sys_app_icon_desc:
+        "브랜드와 트레이 아이콘에 사용할 PNG 이미지를 선택하세요. 최소 해상도는 512x512입니다",
+    sys_app_icon_choose: "이미지 선택",
+    sys_app_icon_reset: "초기화",
+    sys_app_icon_saved: "아이콘이 업데이트되었습니다",
+    sys_app_icon_reset_done: "기본 아이콘으로 복원되었습니다",
+    sys_app_icon_too_small:
+        "이미지 해상도가 너무 낮습니다({size}). 최소 512x512가 필요합니다",
+    sys_app_icon_invalid: "유효한 PNG 이미지를 선택하세요",
     sys_material_opacity: "재질 투명도",
     sys_material_opacity_desc:
         "값을 낮추면 배경과 카드가 더 투명해지며 텍스트 투명도는 변하지 않습니다",

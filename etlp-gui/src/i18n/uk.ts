@@ -398,6 +398,16 @@ export const uk: typeof zhCN = {
     sys_brand_name: "Назва бренду",
     sys_brand_name_desc:
         "Залиште порожнім, щоб автоматично використовувати вбудовану локалізовану назву",
+    sys_app_icon: "Власна піктограма",
+    sys_app_icon_desc:
+        "Виберіть PNG для бренду та піктограми в треї; мінімальна роздільність 512x512",
+    sys_app_icon_choose: "Вибрати зображення",
+    sys_app_icon_reset: "Скинути",
+    sys_app_icon_saved: "Піктограму оновлено",
+    sys_app_icon_reset_done: "Типову піктограму відновлено",
+    sys_app_icon_too_small:
+        "Роздільність зображення замала ({size}); потрібно щонайменше 512x512",
+    sys_app_icon_invalid: "Виберіть коректне PNG-зображення",
     sys_material_opacity: "Прозорість матеріалу",
     sys_material_opacity_desc:
         "Менші значення роблять фон і картки прозорішими, не змінюючи прозорість тексту",
