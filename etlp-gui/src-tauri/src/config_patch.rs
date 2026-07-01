@@ -5,6 +5,22 @@
 
 use std::path::Path;
 
+fn write_config_str(path: &Path, content: &str) -> Result<(), String> {
+    match etlp_config::write_config_str(path, content) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            let tmp = std::env::temp_dir()
+                .join(format!("etlp-config-{}.toml", std::process::id()));
+            etlp_config::write_config_str(&tmp, content)
+                .map_err(|e| format!("write temp config: {e}"))?;
+            let result = crate::elevated_fs::copy_file(&tmp, path);
+            let _ = std::fs::remove_file(&tmp);
+            result.map_err(|e| format!("write config with elevation: {e}"))
+        }
+        Err(e) => Err(format!("write config: {e}")),
+    }
+}
+
 /// Patch a single field in a TOML config file without touching any other keys.
 ///
 /// * `path`    – path to the `.toml` file (created if absent)
@@ -49,8 +65,7 @@ pub fn patch_field(
 
     // Write with platform-appropriate encoding (UTF-8 BOM on Windows) so the
     // file renders correctly in native editors; creates parent dirs as needed.
-    etlp_config::write_config_str(path, &doc.to_string())
-        .map_err(|e| format!("write config: {e}"))
+    write_config_str(path, &doc.to_string())
 }
 
 /// Set `key` to `item` while preserving any existing formatting.

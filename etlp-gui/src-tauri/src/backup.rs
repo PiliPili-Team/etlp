@@ -32,8 +32,14 @@ pub struct BackupEntry {
 fn backup_dir() -> Result<PathBuf, String> {
     let dir = platform::backup_dir()
         .ok_or_else(|| "cannot determine data directory".to_owned())?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("create backup dir: {e}"))?;
+    match std::fs::create_dir_all(&dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            // Let elevated copy create the parent for backup writes. Read-only
+            // listing still falls back to an empty list in list_backups().
+        }
+        Err(e) => return Err(format!("create backup dir: {e}")),
+    }
     Ok(dir)
 }
 
@@ -144,7 +150,7 @@ pub fn create_backup() -> Result<BackupEntry, String> {
     }
     let path = dir.join(&name);
 
-    write_zip(&path, &content)?;
+    write_zip_with_elevation(&path, &content)?;
     prune(&dir);
 
     let meta =
@@ -159,8 +165,13 @@ pub fn create_backup() -> Result<BackupEntry, String> {
 
 /// Write `content` into a new zip at `path` under the [`CONFIG_ENTRY`] name.
 fn write_zip(path: &Path, content: &str) -> Result<(), String> {
-    let file =
-        std::fs::File::create(path).map_err(|e| format!("create zip: {e}"))?;
+    let file = std::fs::File::create(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            "create zip: permission denied".to_owned()
+        } else {
+            format!("create zip: {e}")
+        }
+    })?;
     let mut zip = zip::ZipWriter::new(file);
     let opts: zip::write::SimpleFileOptions =
         zip::write::SimpleFileOptions::default()
@@ -171,6 +182,24 @@ fn write_zip(path: &Path, content: &str) -> Result<(), String> {
         .map_err(|e| format!("zip write: {e}"))?;
     zip.finish().map_err(|e| format!("zip finish: {e}"))?;
     Ok(())
+}
+
+fn write_zip_with_elevation(path: &Path, content: &str) -> Result<(), String> {
+    match write_zip(path, content) {
+        Ok(()) => Ok(()),
+        Err(e) if e.contains("permission denied") => {
+            let tmp = std::env::temp_dir().join(format!(
+                "etlp-backup-{}-{}.zip",
+                std::process::id(),
+                chrono::Local::now().timestamp_millis()
+            ));
+            write_zip(&tmp, content)?;
+            let result = crate::elevated_fs::copy_file(&tmp, path);
+            let _ = std::fs::remove_file(&tmp);
+            result.map_err(|e| format!("create zip with elevation: {e}"))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Read the `config.toml` payload from a backup zip at `path`.
@@ -200,13 +229,33 @@ pub fn restore_backup(path: &str) -> Result<(), String> {
     body.parse::<toml_edit::DocumentMut>()
         .map_err(|e| format!("backup config is not valid TOML: {e}"))?;
     let cfg = config_path()?;
-    etlp_config::write_config_str(&cfg, body)
-        .map_err(|e| format!("write config: {e}"))
+    match etlp_config::write_config_str(&cfg, body) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            let tmp = std::env::temp_dir().join(format!(
+                "etlp-restore-config-{}.toml",
+                std::process::id()
+            ));
+            etlp_config::write_config_str(&tmp, body)
+                .map_err(|e| format!("write temp config: {e}"))?;
+            let result = crate::elevated_fs::copy_file(&tmp, &cfg);
+            let _ = std::fs::remove_file(&tmp);
+            result.map_err(|e| format!("write config with elevation: {e}"))
+        }
+        Err(e) => Err(format!("write config: {e}")),
+    }
 }
 
 /// Delete a backup archive at `path`.
 pub fn delete_backup(path: &str) -> Result<(), String> {
-    std::fs::remove_file(path).map_err(|e| format!("delete backup: {e}"))
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            crate::elevated_fs::remove_file(Path::new(path))
+                .map_err(|e| format!("delete backup with elevation: {e}"))
+        }
+        Err(e) => Err(format!("delete backup: {e}")),
+    }
 }
 
 /// Reset the live config to the bundled default template.

@@ -1360,9 +1360,14 @@ pub async fn clear_log_file(
             .map_err(|e| format!("lock log_handle: {e}"))?
             .as_ref()
     {
-        return handle
-            .clear_log_file()
-            .map_err(|e| format!("clear log file: {e}"));
+        match handle.clear_log_file() {
+            Ok(()) => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                crate::elevated_fs::truncate_file(&target)?;
+                return Ok(());
+            }
+            Err(e) => return Err(format!("clear log file: {e}")),
+        }
     }
 
     // Any other file (or a missing logger handle): a plain truncate is enough,
@@ -1373,6 +1378,9 @@ pub async fn clear_log_file(
             .map_err(|e| format!("truncate log file: {e}")),
         // Nothing written yet → nothing to clear.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            crate::elevated_fs::truncate_file(&target)
+        }
         Err(e) => Err(format!("open log file: {e}")),
     }
 }
@@ -1549,17 +1557,35 @@ pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
     }
     let mut freed = 0u64;
     let mut errors: Vec<String> = Vec::new();
+    let app_log = state
+        .log_file
+        .lock()
+        .map_err(|e| format!("lock log_file: {e}"))?
+        .clone();
     for path in cache_log_paths(&state)? {
         let size = match std::fs::metadata(&path) {
             Ok(meta) => meta.len(),
             Err(_) => continue, // missing file → nothing to clear
         };
+        if path == app_log {
+            match clear_log_file(state.clone(), None).await {
+                Ok(()) => freed += size,
+                Err(e) => errors.push(format!("{}: {e}", path.display())),
+            }
+            continue;
+        }
         match std::fs::OpenOptions::new().write(true).open(&path) {
             Ok(file) => match file.set_len(0) {
                 Ok(()) => freed += size,
                 Err(e) => errors.push(format!("{}: {e}", path.display())),
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                match crate::elevated_fs::truncate_file(&path) {
+                    Ok(()) => freed += size,
+                    Err(e) => errors.push(format!("{}: {e}", path.display())),
+                }
+            }
             Err(e) => errors.push(format!("{}: {e}", path.display())),
         }
     }
@@ -1586,7 +1612,21 @@ pub async fn clear_cache(state: State<'_, GuiState>) -> Result<u64, String> {
                     std::fs::remove_file(&path)
                 };
                 if let Err(e) = res {
-                    errors.push(format!("{}: {e}", path.display()));
+                    if e.kind() != std::io::ErrorKind::PermissionDenied {
+                        errors.push(format!("{}: {e}", path.display()));
+                        continue;
+                    }
+                    let elevated = if is_dir {
+                        crate::elevated_fs::remove_dir_all(&path)
+                    } else {
+                        crate::elevated_fs::remove_file(&path)
+                    };
+                    if let Err(elevated_err) = elevated {
+                        errors.push(format!(
+                            "{}: {e}; elevated: {elevated_err}",
+                            path.display()
+                        ));
+                    }
                 }
             }
         }
@@ -2830,6 +2870,19 @@ pub(crate) fn write_default_config(
         Ok(()) => {
             debug!(path = %path.display(), "default config written");
             Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            let tmp = std::env::temp_dir().join(format!(
+                "etlp-default-config-{}.toml",
+                std::process::id()
+            ));
+            etlp_config::write_config_str(&tmp, &template)
+                .map_err(|e| format!("write temp default config: {e}"))?;
+            let result = crate::elevated_fs::copy_file(&tmp, path);
+            let _ = std::fs::remove_file(&tmp);
+            result.map_err(|e| {
+                format!("write default config with elevation: {e}")
+            })
         }
         Err(e) => {
             error!(path = %path.display(), "write default config failed: {e}");

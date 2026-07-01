@@ -3,6 +3,7 @@
 pub mod backup;
 pub mod commands;
 pub mod config_patch;
+pub mod elevated_fs;
 
 #[cfg(target_os = "macos")]
 use std::sync::Once;
