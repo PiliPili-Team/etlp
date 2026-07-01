@@ -348,6 +348,7 @@ export const he: typeof zhCN = {
     cfg_update_check: "בדוק עכשיו",
     cfg_update_check_desc: "בדוק גרסה חדשה יותר ב-GitHub עכשיו",
     cfg_update_checking: "בודק…",
+    cfg_update_check_failed: "בדיקת העדכונים נכשלה. נסה שוב מאוחר יותר.",
     cfg_update_available: "נמצאה גרסה חדשה v{version}",
     cfg_update_latest: "יש לך את הגרסה העדכנית v{version}",
     cfg_update_current_ver: "גרסה נוכחית",

@@ -370,6 +370,8 @@ export const pl: typeof zhCN = {
     cfg_update_check: "Sprawdź teraz",
     cfg_update_check_desc: "Sprawdź nowszą wersję na GitHub teraz",
     cfg_update_checking: "Sprawdzanie…",
+    cfg_update_check_failed:
+        "Nie udało się sprawdzić aktualizacji. Spróbuj ponownie później.",
     cfg_update_available: "Znaleziono nową wersję v{version}",
     cfg_update_latest: "Masz najnowszą wersję v{version}",
     cfg_update_current_ver: "Bieżąca wersja",

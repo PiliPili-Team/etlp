@@ -360,6 +360,8 @@ export const tr: typeof zhCN = {
     cfg_update_check: "Şimdi Kontrol Et",
     cfg_update_check_desc: "GitHub'da daha yeni bir sürümü hemen kontrol et",
     cfg_update_checking: "Kontrol ediliyor…",
+    cfg_update_check_failed:
+        "Güncellemeler kontrol edilemedi. Lütfen daha sonra tekrar deneyin.",
     cfg_update_available: "Yeni sürüm v{version} bulundu",
     cfg_update_latest: "En son sürüme sahipsiniz v{version}",
     cfg_update_current_ver: "Mevcut sürüm",

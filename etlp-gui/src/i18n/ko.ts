@@ -354,6 +354,7 @@ export const ko: typeof zhCN = {
     cfg_update_check: "지금 확인",
     cfg_update_check_desc: "지금 GitHub에서 새 버전을 확인합니다",
     cfg_update_checking: "확인 중…",
+    cfg_update_check_failed: "업데이트를 확인하지 못했습니다. 잠시 후 다시 시도하세요.",
     cfg_update_available: "새 버전 v{version}을(를) 찾았습니다",
     cfg_update_latest: "최신 버전 v{version}을(를) 사용 중입니다",
     cfg_update_current_ver: "현재 버전",

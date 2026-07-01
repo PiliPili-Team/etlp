@@ -361,6 +361,7 @@ export const sr: typeof zhCN = {
     cfg_update_check: "Провери сада",
     cfg_update_check_desc: "Провери новију верзију на GitHub-у одмах",
     cfg_update_checking: "Провера…",
+    cfg_update_check_failed: "Провера ажурирања није успела. Покушајте поново касније.",
     cfg_update_available: "Пронађена нова верзија v{version}",
     cfg_update_latest: "Имате најновију верзију v{version}",
     cfg_update_current_ver: "Тренутна верзија",

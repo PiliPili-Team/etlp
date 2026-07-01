@@ -365,6 +365,7 @@ export const id: typeof zhCN = {
     cfg_update_check: "Periksa Sekarang",
     cfg_update_check_desc: "Periksa versi yang lebih baru di GitHub sekarang",
     cfg_update_checking: "Memeriksa…",
+    cfg_update_check_failed: "Gagal memeriksa pembaruan. Coba lagi nanti.",
     cfg_update_available: "Versi baru v{version} ditemukan",
     cfg_update_latest: "Anda memiliki versi terbaru v{version}",
     cfg_update_current_ver: "Versi saat ini",

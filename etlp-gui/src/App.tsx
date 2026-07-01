@@ -527,6 +527,12 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const brandName = display.customBrandName.trim() || t("app_name");
     const appIconUrl = customIconUrl ?? DEFAULT_APP_ICON;
 
+    const addToast = useCallback((message: string, error = false) => {
+        const id = ++toastIdRef.current;
+        setToasts((prev) => [...prev, { id, message, error }]);
+        setTimeout(() => setToasts((prev) => prev.filter((tst) => tst.id !== id)), 3000);
+    }, []);
+
     // Auto update check: runs once per app launch (independent of the active
     // tab), gated by the user's `check_update` setting (default on). It is
     // intentionally delayed so launch-at-login proxy clients can finish their
@@ -556,7 +562,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
                 if (dismissed && !isVersionNewer(info.latest, dismissed)) return;
                 setUpdate(info);
             } catch {
-                /* offline or rate-limited — silently skip */
+                if (!cancelled) addToast(t("cfg_update_check_failed"), true);
             }
         };
         const id = setTimeout(run, AUTO_UPDATE_CHECK_DELAY_MS);
@@ -564,7 +570,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
             cancelled = true;
             clearTimeout(id);
         };
-    }, []);
+    }, [addToast, t]);
 
     useEffect(() => {
         let cancelled = false;
@@ -629,12 +635,6 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
     const handleTabChange = useCallback((id: TabId) => {
         setTab(id);
         localStorage.setItem(LAST_TAB_KEY, id);
-    }, []);
-
-    const addToast = useCallback((message: string, error = false) => {
-        const id = ++toastIdRef.current;
-        setToasts((prev) => [...prev, { id, message, error }]);
-        setTimeout(() => setToasts((prev) => prev.filter((tst) => tst.id !== id)), 3000);
     }, []);
 
     const isMac = platform === "macos";

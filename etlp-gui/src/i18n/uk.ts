@@ -366,6 +366,7 @@ export const uk: typeof zhCN = {
     cfg_update_check: "Перевірити зараз",
     cfg_update_check_desc: "Перевірити новішу версію на GitHub прямо зараз",
     cfg_update_checking: "Перевірка…",
+    cfg_update_check_failed: "Не вдалося перевірити оновлення. Спробуйте ще раз пізніше.",
     cfg_update_available: "Знайдено нову версію v{version}",
     cfg_update_latest: "У вас найновіша версія v{version}",
     cfg_update_current_ver: "Поточна версія",

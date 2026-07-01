@@ -2276,8 +2276,8 @@ function SystemSection({
         try {
             const info = await invoke<UpdateInfo>("check_update");
             setUpdateResult(info);
-        } catch (e) {
-            addToast(mapBackendError(e, t), true);
+        } catch {
+            addToast(t("cfg_update_check_failed"), true);
         } finally {
             setChecking(false);
         }

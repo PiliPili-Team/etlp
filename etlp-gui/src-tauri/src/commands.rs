@@ -2176,12 +2176,7 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
         Ok(release) => release,
         Err(e) => {
             debug!(error = %e, "update check failed");
-            return Ok(UpdateInfo {
-                current: current.clone(),
-                latest: current,
-                has_update: false,
-                url: fallback_url,
-            });
+            return Err(format!("check update: {e}"));
         }
     };
     let tag = release.tag_name;

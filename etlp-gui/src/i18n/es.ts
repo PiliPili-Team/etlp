@@ -372,6 +372,8 @@ export const es: typeof zhCN = {
     cfg_update_check: "Buscar ahora",
     cfg_update_check_desc: "Buscar ahora en GitHub una versión más reciente",
     cfg_update_checking: "Buscando…",
+    cfg_update_check_failed:
+        "No se pudo buscar actualizaciones. Inténtalo de nuevo más tarde.",
     cfg_update_available: "Nueva versión v{version} encontrada",
     cfg_update_latest: "Tienes la versión más reciente v{version}",
     cfg_update_current_ver: "Versión actual",

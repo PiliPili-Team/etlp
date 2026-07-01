@@ -365,6 +365,8 @@ export const ru: typeof zhCN = {
     cfg_update_check: "Проверить сейчас",
     cfg_update_check_desc: "Проверить на GitHub более новую версию прямо сейчас",
     cfg_update_checking: "Проверка…",
+    cfg_update_check_failed:
+        "Не удалось проверить обновления. Попробуйте повторить позже.",
     cfg_update_available: "Найдена новая версия v{version}",
     cfg_update_latest: "У вас последняя версия v{version}",
     cfg_update_current_ver: "Текущая версия",

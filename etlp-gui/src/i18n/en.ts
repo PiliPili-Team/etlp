@@ -381,6 +381,7 @@ export const en: typeof zhCN = {
     cfg_update_check: "Check Now",
     cfg_update_check_desc: "Check GitHub for a newer version right now",
     cfg_update_checking: "Checking…",
+    cfg_update_check_failed: "Failed to check for updates. Please try again later.",
     cfg_update_available: "New version v{version} available",
     cfg_update_latest: "You are on the latest version v{version}",
     cfg_update_current_ver: "Current version",

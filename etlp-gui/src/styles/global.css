@@ -249,7 +249,7 @@ body.platform-linux {
 }
 
 body.platform-windows .app {
-    border-radius: 0;
+    border-radius: 12px;
     border: none;
 }
 

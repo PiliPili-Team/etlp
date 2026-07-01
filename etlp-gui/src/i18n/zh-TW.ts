@@ -342,6 +342,7 @@ export const zhTW: typeof zhCN = {
     cfg_update_check: "立即檢查",
     cfg_update_check_desc: "立即從 GitHub 檢查是否有新版本",
     cfg_update_checking: "檢查中…",
+    cfg_update_check_failed: "檢查更新失敗，請稍後再試",
     cfg_update_available: "發現新版本 v{version}",
     cfg_update_latest: "已是最新版本 v{version}",
     cfg_update_current_ver: "當前版本",

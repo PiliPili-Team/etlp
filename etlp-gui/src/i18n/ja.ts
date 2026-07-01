@@ -354,6 +354,8 @@ export const ja: typeof zhCN = {
     cfg_update_check: "今すぐ確認",
     cfg_update_check_desc: "今すぐ GitHub で新しいバージョンを確認します",
     cfg_update_checking: "確認中…",
+    cfg_update_check_failed:
+        "アップデートを確認できませんでした。しばらくしてからもう一度お試しください。",
     cfg_update_available: "新しいバージョン v{version} が見つかりました",
     cfg_update_latest: "最新バージョン v{version} を使用しています",
     cfg_update_current_ver: "現在のバージョン",

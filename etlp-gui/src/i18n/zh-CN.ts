@@ -354,6 +354,7 @@ export const zhCN = {
     cfg_update_check: "立即检查",
     cfg_update_check_desc: "立即从 GitHub 检查是否有新版本",
     cfg_update_checking: "检查中…",
+    cfg_update_check_failed: "检查更新失败，请稍后重试",
     cfg_update_available: "发现新版本 v{version}",
     cfg_update_latest: "已是最新版本 v{version}",
     cfg_update_current_ver: "当前版本",

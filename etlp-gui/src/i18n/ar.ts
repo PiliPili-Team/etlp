@@ -357,6 +357,7 @@ export const ar: typeof zhCN = {
     cfg_update_check: "تحقّق الآن",
     cfg_update_check_desc: "التحقق الآن من GitHub بحثًا عن إصدار أحدث",
     cfg_update_checking: "جارٍ التحقق…",
+    cfg_update_check_failed: "تعذّر التحقق من التحديثات. حاول مرة أخرى لاحقًا.",
     cfg_update_available: "عُثر على إصدار جديد v{version}",
     cfg_update_latest: "أنت على أحدث إصدار v{version}",
     cfg_update_current_ver: "الإصدار الحالي",

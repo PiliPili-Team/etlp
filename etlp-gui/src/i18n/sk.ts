@@ -365,6 +365,8 @@ export const sk: typeof zhCN = {
     cfg_update_check: "Skontrolovať teraz",
     cfg_update_check_desc: "Skontrolovať novšiu verziu na GitHub práve teraz",
     cfg_update_checking: "Kontroluje sa…",
+    cfg_update_check_failed:
+        "Nepodarilo sa skontrolovať aktualizácie. Skúste to znova neskôr.",
     cfg_update_available: "Nová verzia v{version} nájdená",
     cfg_update_latest: "Máte najnovšiu verziu v{version}",
     cfg_update_current_ver: "Aktuálna verzia",

@@ -354,6 +354,7 @@ export const th: typeof zhCN = {
     cfg_update_check: "ตรวจสอบตอนนี้",
     cfg_update_check_desc: "ตรวจสอบเวอร์ชันใหม่กว่าบน GitHub ทันที",
     cfg_update_checking: "กำลังตรวจสอบ…",
+    cfg_update_check_failed: "ตรวจสอบอัปเดตไม่สำเร็จ โปรดลองอีกครั้งในภายหลัง",
     cfg_update_available: "พบเวอร์ชันใหม่ v{version}",
     cfg_update_latest: "คุณมีเวอร์ชันล่าสุด v{version}",
     cfg_update_current_ver: "เวอร์ชันปัจจุบัน",
