@@ -380,7 +380,7 @@ export const zhCN = {
     sys_brand_name: "品牌名称",
     sys_brand_name_desc: "留空时自动使用内置多语言品牌名",
     sys_app_icon: "自定义图标",
-    sys_app_icon_desc: "选择 PNG 图片作为品牌和托盘图标，最低分辨率 512x512",
+    sys_app_icon_desc: "选择 PNG 图片作为品牌图标，最低分辨率 512x512",
     sys_app_icon_choose: "选择图片",
     sys_app_icon_reset: "恢复默认",
     sys_app_icon_saved: "图标已更新",
@@ -388,7 +388,7 @@ export const zhCN = {
     sys_app_icon_too_small: "图片分辨率过低（{size}），至少需要 512x512",
     sys_app_icon_invalid: "请选择有效的 PNG 图片",
     sys_material_opacity: "材质不透明度",
-    sys_material_opacity_desc: "50% 为默认观感，向左更透明，向右更厚重",
+    sys_material_opacity_desc: "0% 为完全透明，100% 为完全不透明",
     sys_live_backdrop: "实时背景模糊",
     sys_live_backdrop_desc:
         "关闭时使用静态材质以保持滚动稳定；开启后真实模糊窗口下方内容，但需要更高性能",

@@ -82,6 +82,7 @@ export interface DisplaySettings {
     showBrandLogo: boolean;
     customBrandName: string;
     materialOpacity: number;
+    materialOpacityModel: "alpha";
     materialBlur: number;
     liveBackdropBlur: boolean;
     /** Deprecated local preference. Always coerced to false on load. */
@@ -110,7 +111,8 @@ export function defaultDisplay(): DisplaySettings {
         accentColor: "blue",
         showBrandLogo: true,
         customBrandName: "",
-        materialOpacity: 50,
+        materialOpacity: 100,
+        materialOpacityModel: "alpha",
         materialBlur: 9,
         liveBackdropBlur: false,
         centerNav: false,
@@ -131,20 +133,20 @@ export function loadDisplay(): DisplaySettings {
             const parsed = { ...defaultDisplay(), ...rawParsed };
             const isLegacyMaterialScale = !Object.prototype.hasOwnProperty.call(
                 rawParsed,
-                "liveBackdropBlur",
+                "materialOpacityModel",
             );
-            const storedOpacity = clampNumber(parsed.materialOpacity, 0, 115, 50);
-            const materialOpacity =
-                isLegacyMaterialScale && storedOpacity > 80
-                    ? Math.round(storedOpacity / 2)
-                    : storedOpacity;
+            const storedOpacity = clampNumber(parsed.materialOpacity, 0, 115, 100);
+            const materialOpacity = isLegacyMaterialScale
+                ? Math.round(72 + Math.min(storedOpacity, 50) * 0.56)
+                : storedOpacity;
             return {
                 ...parsed,
                 customBrandName:
                     typeof parsed.customBrandName === "string"
                         ? parsed.customBrandName
                         : "",
-                materialOpacity: clampNumber(materialOpacity, 0, 100, 50),
+                materialOpacity: clampNumber(materialOpacity, 0, 100, 100),
+                materialOpacityModel: "alpha",
                 materialBlur: clampNumber(parsed.materialBlur, 0, 18, 9),
                 liveBackdropBlur: parsed.liveBackdropBlur === true,
                 centerNav: false,
@@ -166,13 +168,12 @@ export function applyDisplay(s: DisplaySettings) {
     // those with hardcoded px values. Default font size (13) gives a multiplier
     // of 1 — backward-compatible with stored zoom preferences.
     const effectiveZoom = s.zoom * (s.fontSize / 13);
-    const materialMix = 72 + Math.min(s.materialOpacity, 50) * 0.56;
-    const materialDensity = Math.max(0, (s.materialOpacity - 50) / 50);
+    const materialOpacity = clampNumber(s.materialOpacity, 0, 100, 100);
     root.style.setProperty("--base-font-size", `${s.fontSize}px`);
     root.style.setProperty("--app-zoom", String(effectiveZoom));
-    root.style.setProperty("--material-opacity", String(materialMix / 100));
-    root.style.setProperty("--material-opacity-percent", `${materialMix}%`);
-    root.style.setProperty("--material-density", String(materialDensity));
+    root.style.setProperty("--material-opacity", String(materialOpacity / 100));
+    root.style.setProperty("--material-opacity-percent", `${materialOpacity}%`);
+    root.style.setProperty("--material-density", "0");
     root.style.setProperty("--material-blur", `${s.materialBlur}px`);
 
     // On Windows / Linux the platform body class overrides font-family; we

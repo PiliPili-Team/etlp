@@ -99,9 +99,12 @@ fn apply_custom_icon(
     height: u32,
 ) {
     let icon = tauri::image::Image::new_owned(rgba, width, height);
+
+    #[cfg(target_os = "windows")]
     if let Some(tray) = app.tray_by_id(crate::TRAY_ICON_ID) {
         let _ = tray.set_icon_with_as_template(Some(icon.clone()), false);
     }
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_icon(icon);
     }
@@ -951,11 +954,11 @@ pub fn get_custom_app_icon() -> Result<Option<CustomIconInfo>, String> {
     Ok(Some(custom_icon_info_from_bytes(&bytes)))
 }
 
-/// Pick, validate, persist, and apply a custom PNG app/tray icon.
+/// Pick, validate, persist, and apply a custom PNG app icon.
 ///
 /// The bundled app executable icon cannot be rewritten reliably at runtime on
 /// every platform, so this updates the in-app branding, main window icon, and
-/// tray icon immediately while persisting the PNG for the next launch.
+/// Windows tray icon immediately while persisting the PNG for the next launch.
 #[tauri::command]
 pub async fn pick_custom_app_icon(
     app: tauri::AppHandle,
@@ -983,20 +986,24 @@ pub async fn pick_custom_app_icon(
     Ok(Some(custom_icon_info_from_bytes(&bytes)))
 }
 
-/// Remove the custom icon and restore the bundled tray icon for this session.
+/// Remove the custom icon and restore bundled runtime icons for this session.
 #[tauri::command]
 pub fn reset_custom_app_icon(app: tauri::AppHandle) -> Result<(), String> {
     let path = custom_icon_path()?;
     crate::elevated_fs::remove_file_if_exists(&path)
         .map_err(|e| format!("ICON_REMOVE:{e}"))?;
 
-    let (bytes, is_template) = crate::tray_icon_asset();
-    let (rgba, width, height) = crate::decode_png_icon(bytes)
-        .map_err(|e| format!("ICON_INVALID:{e}"))?;
-    let icon = tauri::image::Image::new_owned(rgba, width, height);
-    if let Some(tray) = app.tray_by_id(crate::TRAY_ICON_ID) {
-        let _ = tray.set_icon_with_as_template(Some(icon), is_template);
+    #[cfg(target_os = "windows")]
+    {
+        let (bytes, is_template) = crate::tray_icon_asset();
+        let (rgba, width, height) = crate::decode_png_icon(bytes)
+            .map_err(|e| format!("ICON_INVALID:{e}"))?;
+        let icon = tauri::image::Image::new_owned(rgba, width, height);
+        if let Some(tray) = app.tray_by_id(crate::TRAY_ICON_ID) {
+            let _ = tray.set_icon_with_as_template(Some(icon), is_template);
+        }
     }
+
     let (rgba, width, height) =
         crate::decode_png_icon(crate::bundled_app_icon_asset())
             .map_err(|e| format!("ICON_INVALID:{e}"))?;
@@ -2093,6 +2100,76 @@ fn latest_release_page_url() -> String {
     GITHUB_LATEST_RELEASE_PAGE.replace("%s", GITHUB_REPO)
 }
 
+fn portable_asset_version(filename: &str) -> Option<&str> {
+    const PREFIX: &str = "Genshin-portable-x64-";
+    const SUFFIX: &str = ".zip";
+
+    filename.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)
+}
+
+fn compatible_asset_names(filename: &str) -> Vec<String> {
+    let mut names = vec![filename.to_owned()];
+
+    if let Some(version) = portable_asset_version(filename) {
+        if let Some(version_without_v) = version
+            .strip_prefix('v')
+            .or_else(|| version.strip_prefix('V'))
+        {
+            names.push(format!("Genshin-portable-x64-{version_without_v}.zip"));
+        } else {
+            names.push(format!("Genshin-portable-x64-v{version}.zip"));
+        }
+    }
+
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn find_release_asset<'a>(
+    release: &'a GithubRelease,
+    filename: &str,
+) -> Option<&'a GithubReleaseAsset> {
+    if let Some(asset) =
+        release.assets.iter().find(|asset| asset.name == filename)
+    {
+        return Some(asset);
+    }
+
+    let compatible_names = compatible_asset_names(filename)
+        .into_iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    release.assets.iter().find(|asset| {
+        compatible_names.contains(&asset.name.to_ascii_lowercase())
+    })
+}
+
+fn available_asset_summary(release: &GithubRelease) -> String {
+    const MAX_NAMES: usize = 6;
+
+    let mut names = release
+        .assets
+        .iter()
+        .map(|asset| asset.name.as_str())
+        .collect::<Vec<_>>();
+    names.sort();
+
+    let shown = names
+        .iter()
+        .take(MAX_NAMES)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let remaining = names.len().saturating_sub(MAX_NAMES);
+    if remaining == 0 {
+        shown
+    } else {
+        format!("{shown}, ... (+{remaining} more)")
+    }
+}
+
 async fn github_release(api: &str) -> Result<GithubRelease, String> {
     let client = build_proxied_http_client()?;
     let mut last_error = String::new();
@@ -2128,18 +2205,10 @@ fn release_asset_url(
     release: &GithubRelease,
     filename: &str,
 ) -> Result<String, String> {
-    release
-        .assets
-        .iter()
-        .find(|asset| asset.name == filename)
+    find_release_asset(release, filename)
         .map(|asset| asset.browser_download_url.clone())
         .ok_or_else(|| {
-            let available = release
-                .assets
-                .iter()
-                .map(|asset| asset.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
+            let available = available_asset_summary(release);
             if available.is_empty() {
                 format!("release asset not found: {filename}")
             } else {
@@ -3247,6 +3316,11 @@ mod tests {
                     name: "Genshin_0.0.18_aarch64.dmg".to_owned(),
                     browser_download_url: "https://download/dmg".to_owned(),
                 },
+                GithubReleaseAsset {
+                    name: "Genshin-portable-x64-v0.0.18.zip".to_owned(),
+                    browser_download_url: "https://download/portable"
+                        .to_owned(),
+                },
             ],
         };
 
@@ -3254,6 +3328,11 @@ mod tests {
             release_asset_url(&release, "Genshin_0.0.18_aarch64.dmg")
                 .expect("asset"),
             "https://download/dmg"
+        );
+        assert_eq!(
+            release_asset_url(&release, "Genshin-portable-x64-0.0.18.zip")
+                .expect("portable asset"),
+            "https://download/portable"
         );
         assert!(release_asset_url(&release, "missing.AppImage").is_err());
     }

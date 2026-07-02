@@ -410,7 +410,7 @@ export const en: typeof zhCN = {
         "Leave empty to use the built-in localized brand name automatically",
     sys_app_icon: "Custom Icon",
     sys_app_icon_desc:
-        "Choose a PNG image for the brand and tray icon; minimum resolution is 512x512",
+        "Choose a PNG image for the brand icon; minimum resolution is 512x512",
     sys_app_icon_choose: "Choose Image",
     sys_app_icon_reset: "Reset",
     sys_app_icon_saved: "Icon updated",
@@ -419,8 +419,7 @@ export const en: typeof zhCN = {
         "Image resolution is too low ({size}); at least 512x512 is required",
     sys_app_icon_invalid: "Choose a valid PNG image",
     sys_material_opacity: "Material Opacity",
-    sys_material_opacity_desc:
-        "50% keeps the default look; move left for more transparency or right for denser material",
+    sys_material_opacity_desc: "0% is fully transparent and 100% is fully opaque",
     sys_live_backdrop: "Live Background Blur",
     sys_live_backdrop_desc:
         "Off uses static material for stable scrolling; on truly blurs content beneath the window and requires more performance",

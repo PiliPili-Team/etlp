@@ -368,7 +368,7 @@ export const zhTW: typeof zhCN = {
     sys_brand_name: "品牌名稱",
     sys_brand_name_desc: "留空時自動使用內建多語言品牌名",
     sys_app_icon: "自訂圖示",
-    sys_app_icon_desc: "選擇 PNG 圖片作為品牌和托盤圖示，最低解析度 512x512",
+    sys_app_icon_desc: "選擇 PNG 圖片作為品牌圖示，最低解析度 512x512",
     sys_app_icon_choose: "選擇圖片",
     sys_app_icon_reset: "恢復預設",
     sys_app_icon_saved: "圖示已更新",
@@ -376,7 +376,7 @@ export const zhTW: typeof zhCN = {
     sys_app_icon_too_small: "圖片解析度過低（{size}），至少需要 512x512",
     sys_app_icon_invalid: "請選擇有效的 PNG 圖片",
     sys_material_opacity: "材質不透明度",
-    sys_material_opacity_desc: "50% 為預設觀感，向左更透明，向右更厚重",
+    sys_material_opacity_desc: "0% 為完全透明，100% 為完全不透明",
     sys_live_backdrop: "即時背景模糊",
     sys_live_backdrop_desc:
         "關閉時使用靜態材質以保持捲動穩定；開啟後會真實模糊視窗下方內容，但需要更高效能",

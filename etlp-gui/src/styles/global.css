@@ -19,7 +19,8 @@
     --material-opacity-percent: 100%;
     --material-density: 0;
     --material-blur: 9px;
-    --material-surface: rgba(224, 232, 236, 0.74);
+    --material-surface: rgb(224, 232, 236);
+    --material-layer-surface: rgb(246, 250, 252);
 
     --window-bg: rgba(218, 226, 231, 0.72);
     --window-tint: rgba(224, 232, 236, 0.56);
@@ -72,18 +73,19 @@
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
         color-scheme: dark;
-        --window-bg: rgba(31, 36, 49, 0.72);
-        --window-tint: rgba(31, 36, 49, 0.48);
-        --pane-bg: rgba(31, 36, 49, 0.58);
-        --material-surface: rgba(31, 36, 49, 0.9);
+        --window-bg: rgba(36, 41, 54, 0.72);
+        --window-tint: rgba(36, 41, 54, 0.48);
+        --pane-bg: rgba(36, 41, 54, 0.58);
+        --material-surface: rgb(36, 41, 54);
+        --material-layer-surface: rgb(25, 29, 38);
         --sidebar-bg: var(--pane-bg);
         --pane-border: rgba(216, 238, 245, 0.03);
         --bg: var(--window-bg);
-        --surface: rgba(20, 24, 32, 0.84);
-        --surface-alt: rgba(24, 28, 37, 0.74);
+        --surface: rgba(25, 29, 38, 0.84);
+        --surface-alt: rgba(29, 33, 43, 0.74);
         --surface-hover: rgba(255, 255, 255, 0.062);
-        --surface-strong: rgba(20, 24, 32, 0.88);
-        --overview-meta-bg: rgba(34, 38, 46, 0.82);
+        --surface-strong: rgba(25, 29, 38, 0.88);
+        --overview-meta-bg: rgba(39, 43, 54, 0.82);
         --bg-2: var(--surface-alt);
         --bg-hover: var(--surface-hover);
         --bg-input: rgba(10, 16, 22, 0.36);
@@ -115,18 +117,19 @@
 /* ── Dark theme (explicit override) ────────────────────────────────── */
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --window-bg: rgba(31, 36, 49, 0.72);
-    --window-tint: rgba(31, 36, 49, 0.48);
-    --pane-bg: rgba(31, 36, 49, 0.58);
-    --material-surface: rgba(31, 36, 49, 0.9);
+    --window-bg: rgba(36, 41, 54, 0.72);
+    --window-tint: rgba(36, 41, 54, 0.48);
+    --pane-bg: rgba(36, 41, 54, 0.58);
+    --material-surface: rgb(36, 41, 54);
+    --material-layer-surface: rgb(25, 29, 38);
     --sidebar-bg: var(--pane-bg);
     --pane-border: rgba(216, 238, 245, 0.03);
     --bg: var(--window-bg);
-    --surface: rgba(20, 24, 32, 0.84);
-    --surface-alt: rgba(24, 28, 37, 0.74);
+    --surface: rgba(25, 29, 38, 0.84);
+    --surface-alt: rgba(29, 33, 43, 0.74);
     --surface-hover: rgba(255, 255, 255, 0.062);
-    --surface-strong: rgba(20, 24, 32, 0.88);
-    --overview-meta-bg: rgba(34, 38, 46, 0.82);
+    --surface-strong: rgba(25, 29, 38, 0.88);
+    --overview-meta-bg: rgba(39, 43, 54, 0.82);
     --bg-2: var(--surface-alt);
     --bg-hover: var(--surface-hover);
     --bg-input: rgba(10, 16, 22, 0.36);
@@ -165,7 +168,7 @@
 .overview-hero {
     --material-layer-bg: color-mix(
         in srgb,
-        var(--surface-strong) var(--material-opacity-percent),
+        var(--material-layer-surface) var(--material-opacity-percent),
         transparent
     );
 }
@@ -229,21 +232,21 @@ body.platform-linux {
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background: rgba(31, 36, 49, calc(var(--material-density) * 0.18));
+    background: rgba(36, 41, 54, calc(var(--material-density) * 0.18));
 }
 
 .app.window-focused {
-    --window-bg: rgba(31, 36, 49, 0.74);
-    --window-tint: rgba(31, 36, 49, 0.5);
-    --pane-bg: rgba(31, 36, 49, 0.6);
+    --window-bg: rgba(36, 41, 54, 0.74);
+    --window-tint: rgba(36, 41, 54, 0.5);
+    --pane-bg: rgba(36, 41, 54, 0.6);
     --sidebar-bg: var(--pane-bg);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.02);
 }
 
 .app.window-blurred {
-    --window-bg: rgba(27, 31, 42, 0.68);
-    --window-tint: rgba(27, 31, 42, 0.46);
-    --pane-bg: rgba(27, 31, 42, 0.56);
+    --window-bg: rgba(32, 36, 48, 0.68);
+    --window-tint: rgba(32, 36, 48, 0.46);
+    --pane-bg: rgba(32, 36, 48, 0.56);
     --sidebar-bg: var(--pane-bg);
     box-shadow: inset 0 0 0 1px rgba(216, 238, 245, 0.012);
     filter: brightness(0.94) saturate(0.94);
@@ -687,6 +690,7 @@ body.platform-windows .content {
 }
 
 .slider {
+    --slider-track: rgba(216, 238, 245, 0.12);
     flex: 1;
     min-width: 130px;
     height: 22px;
@@ -699,7 +703,11 @@ body.platform-windows .content {
 .slider::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 999px;
-    background: rgba(216, 238, 245, 0.12);
+    background: linear-gradient(
+        to right,
+        var(--accent) 0 var(--slider-fill),
+        var(--slider-track) var(--slider-fill) 100%
+    );
 }
 
 .slider::-webkit-slider-thumb {
@@ -716,7 +724,13 @@ body.platform-windows .content {
 .slider::-moz-range-track {
     height: 4px;
     border-radius: 999px;
-    background: rgba(216, 238, 245, 0.12);
+    background: var(--slider-track);
+}
+
+.slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--accent);
 }
 
 .slider::-moz-range-thumb {
@@ -1360,7 +1374,7 @@ body.platform-windows .content {
     border-radius: 10px;
     background: color-mix(
         in srgb,
-        color-mix(in srgb, var(--accent-soft) 48%, var(--surface) 52%)
+        color-mix(in srgb, var(--accent) 8%, var(--material-layer-surface) 92%)
             var(--material-opacity-percent),
         transparent
     );
@@ -1870,11 +1884,7 @@ body.platform-windows .content {
 }
 
 .toast {
-    background: color-mix(
-        in srgb,
-        var(--surface) var(--material-opacity-percent),
-        transparent
-    );
+    background: var(--material-layer-bg);
     border: 1.5px solid var(--border);
     border-radius: 10px;
     padding: 9px 16px;
@@ -2172,12 +2182,20 @@ body.platform-windows .body {
 }
 
 body.platform-linux .app {
-    background: color-mix(in srgb, var(--window-bg) 78%, var(--surface) 22%);
+    background: color-mix(
+        in srgb,
+        var(--material-surface) var(--material-opacity-percent),
+        transparent
+    );
 }
 
 body.platform-linux .content,
 body.platform-linux .sidebar {
-    background: color-mix(in srgb, var(--pane-bg) 86%, var(--surface) 14%);
+    background: color-mix(
+        in srgb,
+        var(--material-layer-surface) var(--material-opacity-percent),
+        transparent
+    );
 }
 
 .log-body {

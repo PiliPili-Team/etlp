@@ -6,7 +6,7 @@ import {
     useRef,
     useMemo,
 } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -517,6 +517,13 @@ function SliderRow({
     valueLabel: (v: number) => string;
     onChange: (v: number) => void;
 }) {
+    const range = max - min;
+    const rawFill = range <= 0 ? 0 : ((value - min) / range) * 100;
+    const sliderFill = Math.min(100, Math.max(0, rawFill));
+    const sliderStyle = {
+        "--slider-fill": `${sliderFill}%`,
+    } as CSSProperties;
+
     return (
         <div className={`row${disabled ? " row-disabled" : ""}`}>
             <div className="row-label">
@@ -532,6 +539,7 @@ function SliderRow({
                     max={max}
                     step={step ?? 1}
                     disabled={disabled}
+                    style={sliderStyle}
                     onChange={(e) => onChange(Number(e.target.value))}
                 />
                 <span className="slider-value">{valueLabel(value)}</span>
@@ -2388,27 +2396,11 @@ function SystemSection({
                 <SliderRow
                     label={t("sys_material_opacity")}
                     desc={t("sys_material_opacity_desc")}
-                    value={display.materialOpacity ?? 50}
+                    value={display.materialOpacity ?? 100}
                     min={0}
                     max={100}
                     valueLabel={(v) => `${v}%`}
                     onChange={(v) => onDisplayChange({ materialOpacity: v })}
-                />
-                <ToggleRow
-                    label={t("sys_live_backdrop")}
-                    desc={t("sys_live_backdrop_desc")}
-                    checked={display.liveBackdropBlur ?? false}
-                    onChange={(v) => onDisplayChange({ liveBackdropBlur: v })}
-                />
-                <SliderRow
-                    label={t("sys_material_blur")}
-                    desc={t("sys_material_blur_desc")}
-                    value={display.materialBlur ?? 9}
-                    min={0}
-                    max={18}
-                    disabled={!display.liveBackdropBlur}
-                    valueLabel={(v) => `${v}/18`}
-                    onChange={(v) => onDisplayChange({ materialBlur: v })}
                 />
             </div>
 

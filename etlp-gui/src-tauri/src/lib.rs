@@ -639,8 +639,9 @@ pub fn run() {
 
     // Decode the tray PNG to raw RGBA at startup. A decode failure must not
     // crash the app — the tray simply launches without a custom icon. macOS
-    // uses a monochrome template only for the bundled icon; user icons stay
-    // full-colour on every platform.
+    // and Linux keep their bundled tray/menu-bar icons because PNG brand icons
+    // do not render reliably there.
+    #[cfg(target_os = "windows")]
     let custom_icon = custom_app_icon_path()
         .and_then(|path| std::fs::read(&path).ok())
         .and_then(|bytes| {
@@ -650,6 +651,9 @@ pub fn run() {
                 })
                 .ok()
         });
+    #[cfg(not(target_os = "windows"))]
+    let custom_icon = None;
+
     let tray_is_template = custom_icon.is_none() && {
         let (_, is_template) = tray_icon_asset();
         is_template

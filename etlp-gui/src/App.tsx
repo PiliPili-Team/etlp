@@ -700,7 +700,7 @@ function AppInner({ display, onDisplayChange }: AppInnerProps) {
         "app",
         windowFocused ? "window-focused" : "window-blurred",
         display.showBrandLogo ? "brand-visible" : "brand-hidden",
-        display.liveBackdropBlur ? "live-backdrop" : "static-material",
+        "static-material",
     ].join(" ");
 
     return (
