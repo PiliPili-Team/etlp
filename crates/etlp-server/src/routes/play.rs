@@ -1175,8 +1175,7 @@ async fn backfill_trakt_episodes(
     );
 
     for number in to_mark {
-        let ep_item =
-            ms_episodes.iter().find(|p| p.index == i64::from(number));
+        let ep_item = ms_episodes.iter().find(|p| p.index == i64::from(number));
         if let Some(ep) = ep_item
             && let Some(item) =
                 trakt_item_from_ids(TraktItemKind::Episode, &ep.provider_ids)
