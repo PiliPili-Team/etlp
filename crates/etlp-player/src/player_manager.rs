@@ -87,7 +87,9 @@ async fn mpv_stop_sec(handle: &MpvHandle) -> Option<i64> {
     let mut last: Option<i64> = None;
     loop {
         match handle.time_pos().await {
-            Ok(Some(pos)) if pos > 0.0 => {
+            // `>= 0`: a seek back to the very start must overwrite a stale
+            // later position, otherwise the old (possibly >80%) value wins.
+            Ok(Some(pos)) if pos >= 0.0 => {
                 last = Some(pos as i64);
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
@@ -124,10 +126,16 @@ pub struct PlayerManager {
     /// exits so continuously-played later episodes are written back and synced,
     /// not only the episode the user opened.
     playlist_stops: Arc<Mutex<HashMap<String, i64>>>,
-    /// Tracks episodes that reached the 80% completion threshold during any visit
-    /// within the playlist session. Used to prevent Trakt from skipping episodes
-    /// if the user later jumps back to them and leaves their progress at 0%.
-    completed_episodes: Arc<Mutex<HashSet<String>>>,
+    /// Episodes that were *left* (switched away from) at or past the completion
+    /// threshold during this playlist session, keyed by media-title, with the
+    /// position they were left at.
+    ///
+    /// Populated by [`playlist_completion_loop`] at the moment the playlist
+    /// moves to another entry. When the user later revisits such an episode
+    /// and quits at a low position, the remembered completed position is used
+    /// instead, so the episode is still written back as played and synced to
+    /// Trakt/Bangumi as watched (instead of being reset / scrobbled as 1 %).
+    completed_episodes: Arc<Mutex<HashMap<String, i64>>>,
     /// Set to `true` by the realtime feedback loop when it successfully sends
     /// the initial `Sessions/Playing` (Start) event. `write_progress` reads
     /// this to avoid sending a redundant Start when the loop already ran.
@@ -147,7 +155,7 @@ impl PlayerManager {
             stop_times: HashMap::new(),
             total_secs: HashMap::new(),
             playlist_stops: Arc::new(Mutex::new(HashMap::new())),
-            completed_episodes: Arc::new(Mutex::new(HashSet::new())),
+            completed_episodes: Arc::new(Mutex::new(HashMap::new())),
             realtime_started: Arc::new(AtomicBool::new(false)),
             disable_progress_report: false,
         }
@@ -189,15 +197,18 @@ impl PlayerManager {
             .map(|m| m.clone())
             .unwrap_or_default();
         for (title, pos) in captured {
-            let is_primary = title == self.data.media_title;
-            let completed = self
-                .playlist
-                .get(&title)
-                .map(|ep| ep.is_complete_at(pos))
-                .unwrap_or(false);
-            let in_whitelist = historically_completed.contains(&title);
-            if is_primary || completed || in_whitelist {
-                self.stop_times.insert(title, pos);
+            let ep = self.playlist.get(&title);
+            // The opened episode. Matched by item id as well: for remote
+            // `.strm` versions the playlist title can differ from the title
+            // parsed from the click payload, and a title-only match would
+            // drop the opened episode's progress entirely.
+            let is_primary = title == self.data.media_title
+                || ep.is_some_and(|e| e.item_id == self.data.item_id);
+            let completed = ep.is_some_and(|e| e.is_complete_at(pos));
+            let historical = historically_completed.get(&title).copied();
+            if is_primary || completed || historical.is_some() {
+                let effective = effective_stop_sec(ep, pos, historical);
+                self.stop_times.insert(title, effective);
             }
         }
 
@@ -282,7 +293,7 @@ impl PlayerManager {
                 let is_historical_completed = self
                     .completed_episodes
                     .lock()
-                    .map(|m| m.contains(key))
+                    .map(|m| m.contains_key(key))
                     .unwrap_or(false);
                 SyncEntry {
                     stop_sec,
@@ -357,13 +368,98 @@ impl PlayerManager {
             client.clone(),
             self.playlist.clone(),
             self.playlist_stops.clone(),
+            self.completed_episodes.clone(),
         ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
 }
 
+/// Position to write back / sync for an episode whose last observed position
+/// is `pos`.
+///
+/// When the last visit itself reached the completion threshold, `pos` is used.
+/// Otherwise, if an earlier visit in this session left the episode completed
+/// (`historical`), that completed position wins, so revisiting a finished
+/// episode and quitting near the start neither resets the media server's
+/// played state nor downgrades the Trakt/Bangumi sync to "in progress".
+fn effective_stop_sec(
+    ep: Option<&PlaybackData>,
+    pos: i64,
+    historical: Option<i64>,
+) -> i64 {
+    let last_visit_completed = ep.is_some_and(|e| e.is_complete_at(pos));
+    match historical {
+        Some(done) if !last_visit_completed => done.max(pos),
+        _ => pos,
+    }
+}
+
+/// Tracks playlist entry switches for [`playlist_completion_loop`].
+///
+/// Each poll records the current entry's position into `stops`. When the
+/// playing entry changes, the entry being left is judged on the position it
+/// was *left at*: only if that reaches the completion threshold is it added to
+/// `completed`. Watching past 80 % and then seeking back before leaving
+/// therefore does not count, while leaving at 80 %+ is remembered even if the
+/// episode is revisited later.
+#[derive(Debug, Default)]
+struct VisitTracker {
+    current: Option<String>,
+}
+
+impl VisitTracker {
+    fn observe(
+        &mut self,
+        title: &str,
+        pos_sec: Option<i64>,
+        playlist: &HashMap<String, PlaybackData>,
+        stops: &Mutex<HashMap<String, i64>>,
+        completed: &Mutex<HashMap<String, i64>>,
+    ) {
+        // Ignore the brief window before mpv reports a known title.
+        if !playlist.contains_key(title) {
+            return;
+        }
+        if self.current.as_deref() != Some(title) {
+            if let Some(prev) = self.current.take() {
+                Self::settle(&prev, playlist, stops, completed);
+            }
+            self.current = Some(title.to_owned());
+        }
+        if let Some(pos) = pos_sec.filter(|p| *p >= 0)
+            && let Ok(mut map) = stops.lock()
+        {
+            map.insert(title.to_owned(), pos);
+        }
+    }
+
+    /// Judge the entry that was left using its last recorded position.
+    fn settle(
+        title: &str,
+        playlist: &HashMap<String, PlaybackData>,
+        stops: &Mutex<HashMap<String, i64>>,
+        completed: &Mutex<HashMap<String, i64>>,
+    ) {
+        let Some(left_at) =
+            stops.lock().ok().and_then(|m| m.get(title).copied())
+        else {
+            return;
+        };
+        if playlist
+            .get(title)
+            .is_some_and(|ep| ep.is_complete_at(left_at))
+            && let Ok(mut map) = completed.lock()
+        {
+            let entry = map.entry(title.to_owned()).or_insert(left_at);
+            *entry = (*entry).max(left_at);
+            debug!(title, left_at, "playlist: episode left completed");
+        }
+    }
+}
+
 /// Record the latest playback position of every episode an mpv playlist visits,
-/// keyed by media-title, into `stops`.
+/// keyed by media-title, into `stops`, and remember episodes that were left at
+/// or past the completion threshold in `completed`.
 ///
 /// Runs for multi-episode playlists only and polls until mpv's IPC disconnects.
 /// Unlike [`realtime_playing_feedback_loop`] it sends nothing to the media
@@ -374,6 +470,7 @@ pub async fn playlist_completion_loop(
     client: MpvClient,
     playlist: HashMap<String, PlaybackData>,
     stops: Arc<Mutex<HashMap<String, i64>>>,
+    completed: Arc<Mutex<HashMap<String, i64>>>,
 ) {
     use serde_json::json;
 
@@ -381,6 +478,7 @@ pub async fn playlist_completion_loop(
         return;
     }
 
+    let mut tracker = VisitTracker::default();
     loop {
         let title = match client
             .command("get_property", &[json!("media-title")])
@@ -390,21 +488,16 @@ pub async fn playlist_completion_loop(
             Ok(None) => String::new(),
             Err(_) => break,
         };
-        let pos_sec: i64 =
+        // `None` while mpv has no position yet (file still loading); a real
+        // `0` (seeked back to the start) is kept so it overwrites stale values.
+        let pos_sec: Option<i64> =
             match client.command("get_property", &[json!("time-pos")]).await {
-                Ok(Some(v)) => v.as_f64().unwrap_or(0.0) as i64,
-                Ok(None) => 0,
+                Ok(Some(v)) => v.as_f64().map(|p| p as i64),
+                Ok(None) => None,
                 Err(_) => break,
             };
 
-        // Only record titles that map to a known playlist entry; ignore the
-        // brief window before mpv reports a matching title.
-        if pos_sec > 0
-            && playlist.contains_key(&title)
-            && let Ok(mut map) = stops.lock()
-        {
-            map.insert(title, pos_sec);
-        }
+        tracker.observe(&title, pos_sec, &playlist, &stops, &completed);
 
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
@@ -518,7 +611,7 @@ pub async fn realtime_playing_feedback_loop(
     cancel_tx: Option<UnboundedSender<String>>,
     realtime_started: Arc<AtomicBool>,
     stops: Arc<Mutex<HashMap<String, i64>>>,
-    completed_eps: Arc<Mutex<HashSet<String>>>,
+    completed_eps: Arc<Mutex<HashMap<String, i64>>>,
 ) {
     // STRM sentinel (total_sec == 86400) and Plex are not supported.
     if data.runtime_missing() || data.server == etlp_core::Server::Plex {
@@ -587,17 +680,26 @@ pub async fn realtime_playing_feedback_loop(
                 }
                 let mut final_req_sec = req_sec;
                 if let Some(prev_title) = &last_key {
-                    if let Ok(stops_map) = stops.lock() {
-                        if let Some(&saved_pos) = stops_map.get(prev_title) {
-                            final_req_sec = saved_pos;
-                        }
+                    // Prefer the 1 s-resolution position from the completion
+                    // loop over the last 10 s heartbeat.
+                    if let Some(saved_pos) = stops
+                        .lock()
+                        .ok()
+                        .and_then(|m| m.get(prev_title).copied())
+                    {
+                        final_req_sec = saved_pos;
                     }
-                    let progress = prev_ep.progress_percent(final_req_sec);
-                    if PlaybackData::is_complete_percent(progress) {
-                        if let Ok(mut completed) = completed_eps.lock() {
-                            completed.insert(prev_title.clone());
-                        }
-                    }
+                    // Leaving a revisited episode that an earlier visit
+                    // finished: do not reset its played state on the server.
+                    let historical = completed_eps
+                        .lock()
+                        .ok()
+                        .and_then(|m| m.get(prev_title).copied());
+                    final_req_sec = effective_stop_sec(
+                        Some(&prev_ep),
+                        final_req_sec,
+                        historical,
+                    );
                 }
                 let _ = realtime_progress(
                     &http,
@@ -912,7 +1014,7 @@ mod tests {
             headers: BTreeMap::new(),
             user_id: "user".into(),
             server_version: "4.8.0".into(),
-            item_id: "item1".into(),
+            item_id: format!("item-{media_title}"),
             media_source_id: "src1".into(),
             rating_key: None,
             file_path: "/mnt/video.mkv".into(),
@@ -1072,5 +1174,162 @@ mod tests {
         let e = entries.first().unwrap();
         assert!(!e.completed);
         assert_eq!(e.progress, 0.0);
+    }
+
+    // ── multi-visit completion tracking ───────────────────────────────────────
+
+    const EP1: &str = "Anime S01E01";
+    const EP2: &str = "Anime S01E02";
+    const EP3: &str = "Anime S01E03";
+    /// 85 % of the 3600 s fixture runtime.
+    const DONE: i64 = 3060;
+
+    fn playlist_mgr() -> PlayerManager {
+        let mut mgr = make_mgr(dummy_data(EP1, 0));
+        for t in [EP1, EP2, EP3] {
+            mgr.register_playlist(t.into(), dummy_data(t, 0));
+        }
+        mgr
+    }
+
+    /// Feed a sequence of `(title, pos)` mpv polls through the tracker.
+    fn simulate(mgr: &PlayerManager, polls: &[(&str, Option<i64>)]) {
+        let mut tracker = VisitTracker::default();
+        for (title, pos) in polls {
+            tracker.observe(
+                title,
+                *pos,
+                &mgr.playlist,
+                &mgr.playlist_stops,
+                &mgr.completed_episodes,
+            );
+        }
+    }
+
+    fn entry<'a>(entries: &'a [SyncEntry<'a>], title: &str) -> SyncEntry<'a> {
+        *entries
+            .iter()
+            .find(|e| e.data.media_title == title)
+            .unwrap_or_else(|| panic!("no entry for {title}"))
+    }
+
+    /// 漏标: EP1 finished, moved on, came back to EP1 and quit near the start.
+    /// EP1 must still be written back at its completed position and synced
+    /// as watched (Trakt history / Bangumi), not scrobbled as in-progress.
+    #[tokio::test]
+    async fn revisited_completed_episode_stays_watched() {
+        let mut mgr = playlist_mgr();
+        simulate(
+            &mgr,
+            &[
+                (EP1, Some(100)),
+                (EP1, Some(DONE)),
+                (EP2, None), // loading
+                (EP2, Some(30)),
+                (EP1, Some(0)),
+                (EP1, Some(5)),
+            ],
+        );
+        mgr.collect_stop_times().await;
+
+        assert_eq!(mgr.stop_times.get(EP1), Some(&DONE));
+        let entries = mgr.completed_entries();
+        assert!(entry(&entries, EP1).completed, "EP1 must sync as watched");
+        // EP2 was only sampled (30 s) and is not the opened episode.
+        assert!(!mgr.stop_times.contains_key(EP2));
+    }
+
+    /// 错标: seeking past 80 % and back to the start *before* leaving the
+    /// episode must not mark it watched.
+    #[tokio::test]
+    async fn seek_past_threshold_then_back_is_not_completed() {
+        let mut mgr = playlist_mgr();
+        simulate(
+            &mgr,
+            &[
+                (EP2, Some(10)),
+                (EP2, Some(DONE)),
+                (EP2, Some(0)), // dragged back to 0 s
+                (EP3, Some(20)),
+            ],
+        );
+        mgr.collect_stop_times().await;
+
+        assert!(
+            mgr.completed_episodes.lock().unwrap().is_empty(),
+            "EP2 was left at 0 s"
+        );
+        assert!(!mgr.stop_times.contains_key(EP2));
+        assert!(mgr.completed_entries().iter().all(|e| !e.completed));
+    }
+
+    /// Seeking the opened episode back to 0 s must record 0 (reset), not the
+    /// stale later position.
+    #[tokio::test]
+    async fn seek_to_zero_overwrites_stale_position() {
+        let mut mgr = playlist_mgr();
+        simulate(&mgr, &[(EP1, Some(DONE)), (EP1, Some(0))]);
+        mgr.collect_stop_times().await;
+
+        assert_eq!(mgr.stop_times.get(EP1), Some(&0));
+        assert!(!entry(&mgr.completed_entries(), EP1).completed);
+    }
+
+    /// Episodes played straight through (auto-advance) are all synced.
+    #[tokio::test]
+    async fn continuous_playback_marks_each_finished_episode() {
+        let mut mgr = playlist_mgr();
+        simulate(
+            &mgr,
+            &[
+                (EP1, Some(3590)),
+                (EP2, Some(0)),
+                (EP2, Some(3595)),
+                (EP3, Some(100)),
+            ],
+        );
+        mgr.collect_stop_times().await;
+
+        let entries = mgr.completed_entries();
+        assert!(entry(&entries, EP1).completed);
+        assert!(entry(&entries, EP2).completed);
+        assert!(!mgr.stop_times.contains_key(EP3));
+    }
+
+    /// The opened episode is matched by item id when its playlist title
+    /// differs from the click-payload title (remote `.strm` versions), so its
+    /// progress is not silently dropped.
+    #[tokio::test]
+    async fn primary_matched_by_item_id_when_title_differs() {
+        let mut data = dummy_data("Show S01E54.strm", 0);
+        data.item_id = "item-Show S01E54.mp4".into();
+        let mut mgr = make_mgr(data);
+        for t in ["Show S01E54.mp4", "Show S01E55.mp4"] {
+            mgr.register_playlist(t.into(), dummy_data(t, 0));
+        }
+        simulate(&mgr, &[("Show S01E54.mp4", Some(1050))]);
+        mgr.collect_stop_times().await;
+
+        assert_eq!(mgr.stop_times.get("Show S01E54.mp4"), Some(&1050));
+        assert_eq!(mgr.completed_entries().len(), 1);
+    }
+
+    #[test]
+    fn effective_stop_prefers_latest_completed_visit() {
+        let ep = dummy_data(EP1, 0);
+        assert_eq!(effective_stop_sec(Some(&ep), 5, None), 5);
+        assert_eq!(effective_stop_sec(Some(&ep), 5, Some(DONE)), DONE);
+        // Latest visit itself completed: keep the real position.
+        assert_eq!(effective_stop_sec(Some(&ep), 3500, Some(DONE)), 3500);
+    }
+
+    /// Without the old 20 s guard a stop close to the start is still kept.
+    #[tokio::test]
+    async fn short_session_progress_is_kept() {
+        let mut mgr = playlist_mgr();
+        mgr.data.start_sec = 500;
+        simulate(&mgr, &[(EP1, Some(500)), (EP1, Some(505))]);
+        mgr.collect_stop_times().await;
+        assert_eq!(mgr.stop_times.get(EP1), Some(&505));
     }
 }
