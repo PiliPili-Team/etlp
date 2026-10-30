@@ -829,6 +829,8 @@ struct PlayedEpisode {
     index: i64,
     /// Air date, used as the primary key for Bangumi episode matching.
     premiere_date: Option<String>,
+    /// Provider IDs (TVDB, TMDB, IMDb) for the episode itself.
+    provider_ids: std::collections::BTreeMap<String, String>,
 }
 
 /// Episodes of `data`'s season the user already watched, up to and including the
@@ -896,6 +898,7 @@ async fn emby_played_backfill(
         out.push(PlayedEpisode {
             index: idx,
             premiere_date: item.premiere_date.clone(),
+            provider_ids: item.provider_ids.clone(),
         });
 
         // Expand multi-episode files (e.g. S01E02-E05 → [2, 3, 4, 5]).
@@ -910,6 +913,7 @@ async fn emby_played_backfill(
                     out.push(PlayedEpisode {
                         index: extra,
                         premiere_date: None,
+                        provider_ids: item.provider_ids.clone(),
                     });
                 }
             }
@@ -940,10 +944,17 @@ async fn emby_played_backfill(
 fn trakt_ids_from_provider_map(
     provider_ids: &std::collections::BTreeMap<String, String>,
 ) -> etlp_sync::TraktIds {
+    let get_id = |name: &str| -> Option<&String> {
+        provider_ids
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v)
+            .filter(|v| !v.is_empty())
+    };
     etlp_sync::TraktIds {
-        imdb: provider_ids.get("Imdb").cloned(),
-        tmdb: provider_ids.get("Tmdb").and_then(|v| v.parse().ok()),
-        tvdb: provider_ids.get("Tvdb").and_then(|v| v.parse().ok()),
+        imdb: get_id("Imdb").cloned(),
+        tmdb: get_id("Tmdb").and_then(|v| v.parse().ok()),
+        tvdb: get_id("Tvdb").and_then(|v| v.parse().ok()),
         ..etlp_sync::TraktIds::default()
     }
 }
@@ -999,17 +1010,27 @@ fn trakt_item_from_ids(
 
 /// Build the best-matching Trakt item for the just-watched entry.
 ///
-/// For an Emby/Jellyfin episode it prefers the **show's** ids plus the
-/// season/episode number — the match Trakt resolves most reliably — by fetching
-/// the series' `ProviderIds` from the media server. It falls back to the item's
-/// own ids (movies, or when the show ids / season / episode number are missing).
-/// Returns `None` when no usable id can be found, so the caller skips the item
-/// instead of sending a request that would 404.
+/// Prefers the item's own provider ids (movies or episodes with TVDB/TMDB/IMDb
+/// ids) — this globally addresses the episode entity on Trakt and bypasses any
+/// season/episode numbering mismatches between media servers (e.g. anime split
+/// into seasons on Emby but listed as a single continuous season on Trakt).
+///
+/// Falls back to the series' ids + season/episode number for episodes where
+/// per-episode ids are missing from the media server.
+/// Returns `None` when no usable id can be found.
 async fn build_trakt_item(
     state: &SharedState,
     kind: etlp_sync::TraktItemKind,
     data: &PlaybackData,
 ) -> Option<etlp_sync::TraktHistoryItem> {
+    if let Some(item) = trakt_item_from_ids(kind, &data.provider_ids) {
+        debug!(
+            item = %data.media_title,
+            "trakt: matched by the item's own provider ids"
+        );
+        return Some(item);
+    }
+
     if kind == etlp_sync::TraktItemKind::Episode
         && data.server.is_emby_like()
         && !data.series_id.is_empty()
@@ -1021,7 +1042,7 @@ async fn build_trakt_item(
         debug!(
             item = %data.media_title,
             season, number,
-            "trakt: matched episode by show ids + season/number"
+            "trakt: matched episode by show ids + season/number fallback"
         );
         return Some(etlp_sync::TraktHistoryItem {
             kind,
@@ -1030,19 +1051,13 @@ async fn build_trakt_item(
             watched_at: None,
         });
     }
-    let item = trakt_item_from_ids(kind, &data.provider_ids);
-    match &item {
-        Some(_) => debug!(
-            item = %data.media_title,
-            "trakt: matched by the item's own provider ids"
-        ),
-        None => warn!(
-            item = %data.media_title,
-            item_type = %data.item_type,
-            "trakt: no usable tmdb/imdb/tvdb id, cannot sync this item"
-        ),
-    }
-    item
+
+    warn!(
+        item = %data.media_title,
+        item_type = %data.item_type,
+        "trakt: no usable tmdb/imdb/tvdb id, cannot sync this item"
+    );
+    None
 }
 
 /// Fetch the series' Trakt ids from the media server, or `None` when the series
@@ -1116,13 +1131,12 @@ async fn backfill_trakt_episodes(
     // Episodes the media server reports watched for this season, minus the
     // current one (handled by the direct /sync/history path above). The query
     // also emits the media-server watch-history debug line.
-    let ms_watched: std::collections::BTreeSet<u32> =
-        emby_played_backfill(state, data)
-            .await
-            .iter()
-            .filter(|p| p.index != cur_index)
-            .filter_map(|p| u32::try_from(p.index).ok())
-            .collect();
+    let ms_episodes = emby_played_backfill(state, data).await;
+    let ms_watched: std::collections::BTreeSet<u32> = ms_episodes
+        .iter()
+        .filter(|p| p.index != cur_index)
+        .filter_map(|p| u32::try_from(p.index).ok())
+        .collect();
 
     // The show's episodes already on Trakt (one whole-show progress query).
     let Some(show_id) = api.resolve_show_trakt_id(&show_ids).await else {
@@ -1161,12 +1175,21 @@ async fn backfill_trakt_episodes(
     );
 
     for number in to_mark {
-        out.push(TraktHistoryItem {
-            kind: TraktItemKind::Episode,
-            ids: show_ids.clone(),
-            episode: Some(TraktEpisode { season, number }),
-            watched_at: None,
-        });
+        let ep_item =
+            ms_episodes.iter().find(|p| p.index == i64::from(number));
+        if let Some(ep) = ep_item
+            && let Some(item) =
+                trakt_item_from_ids(TraktItemKind::Episode, &ep.provider_ids)
+        {
+            out.push(item);
+        } else {
+            out.push(TraktHistoryItem {
+                kind: TraktItemKind::Episode,
+                ids: show_ids.clone(),
+                episode: Some(TraktEpisode { season, number }),
+                watched_at: None,
+            });
+        }
     }
 }
 
@@ -1358,8 +1381,32 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     // Current items: added directly, no de-dup, so a re-watch records again.
     if !current_items.is_empty() {
         match api.add_to_history(&current_items).await {
-            Ok(_) => {
-                info!("trakt: added {} watched item(s)", current_items.len())
+            Ok(resp) => {
+                let added_eps = resp
+                    .get("added")
+                    .and_then(|a| a.get("episodes"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let added_movies = resp
+                    .get("added")
+                    .and_then(|a| a.get("movies"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let total_added = added_eps + added_movies;
+                if total_added > 0 {
+                    info!(
+                        total_added,
+                        episodes = added_eps,
+                        movies = added_movies,
+                        "trakt: added watched item(s) to history"
+                    );
+                } else {
+                    let not_found = resp.get("not_found");
+                    warn!(
+                        ?not_found,
+                        "trakt: add to history reported 0 items added"
+                    );
+                }
             }
             Err(e) => warn!("trakt history add error: {e}"),
         }
@@ -1370,7 +1417,33 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     if !backfill_items.is_empty() {
         let n = backfill_items.len();
         match api.add_to_history(&backfill_items).await {
-            Ok(_) => info!("trakt: backfilled {n} item(s)"),
+            Ok(resp) => {
+                let added_eps = resp
+                    .get("added")
+                    .and_then(|a| a.get("episodes"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let added_movies = resp
+                    .get("added")
+                    .and_then(|a| a.get("movies"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let total_added = added_eps + added_movies;
+                if total_added > 0 {
+                    info!(
+                        total_added,
+                        episodes = added_eps,
+                        movies = added_movies,
+                        "trakt: backfilled watched item(s)"
+                    );
+                } else {
+                    let not_found = resp.get("not_found");
+                    warn!(
+                        ?not_found,
+                        "trakt: backfill reported 0 items added (requested {n})"
+                    );
+                }
+            }
             Err(e) => warn!("trakt backfill add error: {e}"),
         }
     }
@@ -2510,5 +2583,46 @@ mod tests {
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn trakt_ids_from_provider_map_handles_case_and_parsing() {
+        let mut map = std::collections::BTreeMap::new();
+        map.insert("tvdb".to_string(), "12016785".to_string());
+        map.insert("TMDB".to_string(), "7906158".to_string());
+        map.insert("iMDb".to_string(), "tt48391161".to_string());
+        map.insert("extra".to_string(), "foo".to_string());
+
+        let ids = super::trakt_ids_from_provider_map(&map);
+        assert_eq!(ids.tvdb, Some(12016785));
+        assert_eq!(ids.tmdb, Some(7906158));
+        assert_eq!(ids.imdb.as_deref(), Some("tt48391161"));
+    }
+
+    #[tokio::test]
+    async fn build_trakt_item_prefers_episode_provider_ids() {
+        let (state, _dir) = test_state();
+        let mut data = PlaybackData {
+            server: Server::Emby,
+            series_id: "1910".into(),
+            season_number: Some(2),
+            index: Some(2),
+            ..PlaybackData::default()
+        };
+        data.provider_ids
+            .insert("Tvdb".to_string(), "12016785".to_string());
+
+        let item = super::build_trakt_item(
+            &state,
+            etlp_sync::TraktItemKind::Episode,
+            &data,
+        )
+        .await
+        .expect("should produce a trakt history item");
+
+        assert_eq!(item.kind, etlp_sync::TraktItemKind::Episode);
+        assert_eq!(item.ids.tvdb, Some(12016785));
+        // Episode-level provider ids resolve without season/episode hierarchy.
+        assert!(item.episode.is_none());
     }
 }
