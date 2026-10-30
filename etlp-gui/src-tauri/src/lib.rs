@@ -111,9 +111,10 @@ fn augment_path() {}
 
 /// The tray icon asset and whether it should render as a monochrome template.
 ///
-/// All platforms use the same menu-bar glyph as macOS. macOS renders the black
-/// source as a template image; platforms without template recolouring use the
-/// pre-rendered light glyph so the icon stays visible on dark tray surfaces.
+/// macOS renders the black glyph as a template image for light/dark adaptation.
+/// Linux uses the pre-rendered light emblem for dark panels. Windows uses the
+/// full-colour squircle-rounded app icon for high visibility across both light
+/// and dark taskbars and within the overflow drawer.
 pub(crate) fn tray_icon_asset() -> (&'static [u8], bool) {
     #[cfg(target_os = "macos")]
     {
@@ -717,6 +718,17 @@ pub fn run() {
                 // Windows owns the frame in React; macOS keeps native traffic
                 // lights and Linux keeps the native frame.
                 apply_window_frame(&window);
+                // ── Window icon (Windows) ──────────────────────
+                // Set the high-resolution squircle icon explicitly so Windows
+                // taskbar renders a sharp, matching rounded icon at all DPIs.
+                #[cfg(target_os = "windows")]
+                if let Ok((icon_buf, icon_w, icon_h)) = decode_png_icon(
+                    include_bytes!("../icons/icon-windows-rounded.png"),
+                ) {
+                    let icon =
+                        tauri::image::Image::new_owned(icon_buf, icon_w, icon_h);
+                    let _ = window.set_icon(icon);
+                }
                 // ── Window material ───────────────────────────────────────────
                 // Keep the native window transparent; the visible material is
                 // rendered by CSS, with live backdrop blur enabled only by an
