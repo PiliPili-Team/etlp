@@ -37,11 +37,10 @@ pub fn split_list(raw: &str, split_by: char) -> Vec<String> {
 pub fn split_pairs(raw: &str, split_by: char) -> Vec<(String, String)> {
     let tokens = split_list(raw, split_by);
     tokens
-        .chunks_exact(2)
-        .filter_map(|c| match c {
-            [a, b] => Some((a.clone(), b.clone())),
-            _ => None,
-        })
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|[a, b]| (a.clone(), b.clone()))
         .collect()
 }
 

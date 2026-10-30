@@ -127,10 +127,12 @@ pub fn parse_title_translate(s: &str) -> Vec<(char, char)> {
     const SEP: char = '，';
     let tokens: Vec<&str> = s.trim_matches(SEP).split(SEP).collect();
     tokens
-        .chunks_exact(2)
-        .filter_map(|pair| {
-            let src = pair.first()?.chars().next()?;
-            let dst = pair.get(1)?.chars().next()?;
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .filter_map(|[src, dst]| {
+            let src = src.chars().next()?;
+            let dst = dst.chars().next()?;
             Some((src, dst))
         })
         .collect()
