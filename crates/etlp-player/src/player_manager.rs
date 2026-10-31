@@ -96,10 +96,10 @@ async fn mpv_stop_sec(handle: &MpvHandle) -> Option<i64> {
             Ok(_) => {
                 // When time-pos is unavailable because mpv reached EOF,
                 // duration represents the true end of the video.
-                if let Ok(Some(true)) = handle.eof_reached().await {
-                    if let Ok(Some(dur)) = handle.duration().await {
-                        last = Some(dur as i64);
-                    }
+                if let Ok(Some(true)) = handle.eof_reached().await
+                    && let Ok(Some(dur)) = handle.duration().await
+                {
+                    last = Some(dur as i64);
                 }
                 tokio::time::sleep(Duration::from_millis(250)).await;
             }
@@ -203,13 +203,12 @@ impl PlayerManager {
             if let Ok(mut stops) = self.playlist_stops.lock() {
                 stops.insert(title.clone(), sec);
             }
-            if let Some(ep) = self.playlist.get(title) {
-                if ep.is_complete_at(sec) {
-                    if let Ok(mut comp) = self.completed_episodes.lock() {
-                        let entry = comp.entry(title.clone()).or_insert(sec);
-                        *entry = (*entry).max(sec);
-                    }
-                }
+            if let Some(ep) = self.playlist.get(title)
+                && ep.is_complete_at(sec)
+                && let Ok(mut comp) = self.completed_episodes.lock()
+            {
+                let entry = comp.entry(title.clone()).or_insert(sec);
+                *entry = (*entry).max(sec);
             }
         }
 
@@ -555,17 +554,16 @@ pub async fn playlist_completion_loop(
                 .flatten()
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            if eof {
-                if let Some(ep) = playlist.get(&title) {
-                    pos_sec = Some(ep.total_sec);
-                }
+            if eof && let Some(ep) = playlist.get(&title) {
+                pos_sec = Some(ep.total_sec);
             }
         }
 
-        if !title.is_empty() && playlist.contains_key(&title) {
-            if let Ok(mut act) = active_episode.lock() {
-                *act = Some(title.clone());
-            }
+        if !title.is_empty()
+            && playlist.contains_key(&title)
+            && let Ok(mut act) = active_episode.lock()
+        {
+            *act = Some(title.clone());
         }
 
         tracker.observe(&title, pos_sec, &playlist, &stops, &completed);
