@@ -194,15 +194,12 @@ impl PlayerManager {
         // Blocks until the player exits.
         let final_stop = self.handle.stop_sec().await;
 
-        let active_title = self
-            .active_episode
-            .lock()
-            .ok()
-            .and_then(|m| m.clone());
+        let active_title =
+            self.active_episode.lock().ok().and_then(|m| m.clone());
 
         // Update active episode position with final_stop if reported so seeks
         // right before player exit are never lost to loop polling latency.
-        if let (Some(ref title), Some(sec)) = (&active_title, final_stop) {
+        if let (Some(title), Some(sec)) = (&active_title, final_stop) {
             if let Ok(mut stops) = self.playlist_stops.lock() {
                 stops.insert(title.clone(), sec);
             }
@@ -1433,7 +1430,10 @@ mod tests {
             stops.insert(EP1.into(), DONE);
             stops.insert(EP2.into(), 500); // 500s in EP2 (< 80%)
         }
-        mgr.completed_episodes.lock().unwrap().insert(EP1.into(), DONE);
+        mgr.completed_episodes
+            .lock()
+            .unwrap()
+            .insert(EP1.into(), DONE);
         mgr.collect_stop_times().await;
 
         assert_eq!(mgr.stop_times.get(EP1), Some(&DONE));
