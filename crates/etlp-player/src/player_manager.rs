@@ -275,6 +275,19 @@ impl PlayerManager {
                     warn!("progress write failed for {:?}: {e}", ep.basename)
                 }
             }
+
+            if ep.is_complete_at(stop_sec) {
+                match mark_as_played(http, ep).await {
+                    Ok(()) => info!(
+                        "marked as played: {:?} @ {stop_sec}s",
+                        ep.basename
+                    ),
+                    Err(e) => warn!(
+                        "mark_as_played failed for {:?}: {e}",
+                        ep.basename
+                    ),
+                }
+            }
         }
     }
     /// Return a [`SyncEntry`] for every episode whose stop time was collected.
@@ -708,6 +721,9 @@ pub async fn realtime_playing_feedback_loop(
                     PlaybackEvent::End,
                 )
                 .await;
+                if prev_ep.is_complete_at(final_req_sec) {
+                    let _ = mark_as_played(&http, &prev_ep).await;
+                }
             }
             let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Start)
                 .await;

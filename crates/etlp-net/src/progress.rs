@@ -133,8 +133,13 @@ pub async fn update_progress(
         tracing::info!("skip update progress because media is .{ext}");
         return Ok(());
     }
-    // Match Python: pull back a couple seconds so "resume" lands before the end.
-    let stop_sec = if stop_sec > 5 { stop_sec - 2 } else { stop_sec };
+    // Match Python: pull back a couple seconds for resume so the user does not
+    // miss the last sentence, but keep the full position when completed.
+    let stop_sec = if !data.is_complete_at(stop_sec) && stop_sec > 5 {
+        stop_sec - 2
+    } else {
+        stop_sec
+    };
     if stop_sec > MAX_STOP_SEC {
         tracing::error!("stop_sec {stop_sec} too large, skip update");
         return Ok(());
@@ -171,6 +176,10 @@ async fn emby_mark_played(
     client: &HttpClient,
     data: &PlaybackData,
 ) -> Result<()> {
+    if data.user_id.is_empty() {
+        tracing::warn!("emby_mark_played: user_id is empty, skipping");
+        return Ok(());
+    }
     let url = format!(
         "{}://{}/emby/Users/{}/PlayedItems/{}",
         data.scheme, data.netloc, data.user_id, data.item_id
@@ -190,6 +199,10 @@ async fn jellyfin_mark_played(
     client: &HttpClient,
     data: &PlaybackData,
 ) -> Result<()> {
+    if data.user_id.is_empty() {
+        tracing::warn!("jellyfin_mark_played: user_id is empty, skipping");
+        return Ok(());
+    }
     let url = format!(
         "{}://{}/Users/{}/PlayedItems/{}",
         data.scheme, data.netloc, data.user_id, data.item_id
@@ -401,5 +414,21 @@ mod tests {
         update_progress(&client, &data, 600, true)
             .await
             .expect("update with success flag");
+    }
+
+    #[tokio::test]
+    async fn emby_mark_played_posts_user_played_items() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/emby/Users/U1/PlayedItems/100"))
+            .and(query_param("X-Emby-Token", "KEY"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        let client = HttpClient::new().expect("client");
+        let mut data = emby_data(&server.uri());
+        data.user_id = "U1".into();
+        mark_as_played(&client, &data).await.expect("mark played");
     }
 }
