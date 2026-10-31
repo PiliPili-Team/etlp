@@ -179,23 +179,20 @@ fn notify(app: &tauri::AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
-/// On Windows Portable, re-register the autostart entry to the current exe
-/// path so moving the portable directory doesn't break launch-at-login.
+/// On Windows, re-register the autostart entry to keep the exe path and
+/// `--autostart` argument up to date in the registry Run key.
 ///
-/// `tauri-plugin-autostart` stores the exe path in the registry when `enable()`
-/// is called. Re-calling `enable()` on each launch keeps the stored path in sync
-/// with the exe's actual location. No-op on non-Windows or non-portable builds.
+/// `tauri-plugin-autostart` stores the exe path and args in the registry when
+/// `enable()` is called. Re-calling `enable()` keeps the stored path and
+/// args in sync with the current build. No-op on non-Windows builds.
 #[cfg(target_os = "windows")]
 fn refresh_portable_autostart(app: &tauri::AppHandle) {
     use tauri_plugin_autostart::ManagerExt as _;
-    if !etlp_server::platform::is_portable() {
-        return;
-    }
     let launcher = app.autolaunch();
     if let Ok(true) = launcher.is_enabled()
         && let Err(e) = launcher.enable()
     {
-        eprintln!("[etlp] portable autostart path refresh failed: {e}");
+        eprintln!("[etlp] autostart path refresh failed: {e}");
     }
 }
 
@@ -588,10 +585,21 @@ pub fn run() {
         .unwrap_or_else(|| "info".to_owned());
     // Silent start: when enabled, launch straight to the tray without showing
     // the main window (pairs with OS autostart for a quiet login).
-    let silent_start = initial_config
+    // Manual launches (clicking the shortcut / exe) always display the main
+    // window so the user is never left wondering where the UI is.
+    let is_autostart = std::env::args().any(|a| a == "--autostart");
+    let is_explicit_silent = std::env::args().any(|a| {
+        a == "--silent"
+            || a == "-silent"
+            || a == "--minimized"
+            || a == "--hidden"
+    });
+    let silent_start_pref = initial_config
         .as_ref()
         .map(|c| c.gui.silent_start)
         .unwrap_or(false);
+    let silent_start =
+        is_explicit_silent || (is_autostart && silent_start_pref);
     // Saved launch-at-login preference; reconciled against the OS in `setup` so
     // the persisted value stays the source of truth even if the registration
     // drifted (e.g. the macOS backend that cannot read its own state back).
@@ -646,12 +654,14 @@ pub fn run() {
     let labels = TrayLabels::detect();
 
     let result = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !args.iter().any(|a| a == "--autostart") {
+                show_main_window(app);
+            }
         }))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
-            None,
+            Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
