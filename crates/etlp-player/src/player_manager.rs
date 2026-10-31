@@ -91,10 +91,17 @@ async fn mpv_stop_sec(handle: &MpvHandle) -> Option<i64> {
             // later position, otherwise the old (possibly >80%) value wins.
             Ok(Some(pos)) if pos >= 0.0 => {
                 last = Some(pos as i64);
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(250)).await;
             }
             Ok(_) => {
-                tokio::time::sleep(Duration::from_millis(300)).await;
+                // When time-pos is unavailable because mpv reached EOF,
+                // duration represents the true end of the video.
+                if let Ok(Some(true)) = handle.eof_reached().await {
+                    if let Ok(Some(dur)) = handle.duration().await {
+                        last = Some(dur as i64);
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
             }
             Err(_) => {
                 info!("mpv IPC disconnected, last position: {last:?}s");
@@ -136,6 +143,8 @@ pub struct PlayerManager {
     /// instead, so the episode is still written back as played and synced to
     /// Trakt/Bangumi as watched (instead of being reset / scrobbled as 1 %).
     completed_episodes: Arc<Mutex<HashMap<String, i64>>>,
+    /// Active episode currently playing in mpv, updated live by loops.
+    active_episode: Arc<Mutex<Option<String>>>,
     /// Set to `true` by the realtime feedback loop when it successfully sends
     /// the initial `Sessions/Playing` (Start) event. `write_progress` reads
     /// this to avoid sending a redundant Start when the loop already ran.
@@ -148,6 +157,7 @@ pub struct PlayerManager {
 impl PlayerManager {
     /// Create a new manager wrapping the given player handle and primary data.
     pub fn new(handle: PlayerHandle, data: PlaybackData) -> Self {
+        let initial_active = Some(data.media_title.clone());
         Self {
             handle,
             data,
@@ -156,6 +166,7 @@ impl PlayerManager {
             total_secs: HashMap::new(),
             playlist_stops: Arc::new(Mutex::new(HashMap::new())),
             completed_episodes: Arc::new(Mutex::new(HashMap::new())),
+            active_episode: Arc::new(Mutex::new(initial_active)),
             realtime_started: Arc::new(AtomicBool::new(false)),
             disable_progress_report: false,
         }
@@ -183,6 +194,28 @@ impl PlayerManager {
         // Blocks until the player exits.
         let final_stop = self.handle.stop_sec().await;
 
+        let active_title = self
+            .active_episode
+            .lock()
+            .ok()
+            .and_then(|m| m.clone());
+
+        // Update active episode position with final_stop if reported so seeks
+        // right before player exit are never lost to loop polling latency.
+        if let (Some(ref title), Some(sec)) = (&active_title, final_stop) {
+            if let Ok(mut stops) = self.playlist_stops.lock() {
+                stops.insert(title.clone(), sec);
+            }
+            if let Some(ep) = self.playlist.get(title) {
+                if ep.is_complete_at(sec) {
+                    if let Ok(mut comp) = self.completed_episodes.lock() {
+                        let entry = comp.entry(title.clone()).or_insert(sec);
+                        *entry = (*entry).max(sec);
+                    }
+                }
+            }
+        }
+
         // Merge per-episode positions captured while the playlist advanced.
         let captured: Vec<(String, i64)> = self
             .playlist_stops
@@ -204,9 +237,14 @@ impl PlayerManager {
             // drop the opened episode's progress entirely.
             let is_primary = title == self.data.media_title
                 || ep.is_some_and(|e| e.item_id == self.data.item_id);
+            let is_active_at_exit = active_title.as_deref() == Some(&title);
             let completed = ep.is_some_and(|e| e.is_complete_at(pos));
             let historical = historically_completed.get(&title).copied();
-            if is_primary || completed || historical.is_some() {
+            if is_primary
+                || is_active_at_exit
+                || completed
+                || historical.is_some()
+            {
                 let effective = effective_stop_sec(ep, pos, historical);
                 self.stop_times.insert(title, effective);
             }
@@ -382,6 +420,7 @@ impl PlayerManager {
             self.playlist.clone(),
             self.playlist_stops.clone(),
             self.completed_episodes.clone(),
+            self.active_episode.clone(),
         ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
@@ -484,6 +523,7 @@ pub async fn playlist_completion_loop(
     playlist: HashMap<String, PlaybackData>,
     stops: Arc<Mutex<HashMap<String, i64>>>,
     completed: Arc<Mutex<HashMap<String, i64>>>,
+    active_episode: Arc<Mutex<Option<String>>>,
 ) {
     use serde_json::json;
 
@@ -503,16 +543,41 @@ pub async fn playlist_completion_loop(
         };
         // `None` while mpv has no position yet (file still loading); a real
         // `0` (seeked back to the start) is kept so it overwrites stale values.
-        let pos_sec: Option<i64> =
+        let mut pos_sec: Option<i64> =
             match client.command("get_property", &[json!("time-pos")]).await {
                 Ok(Some(v)) => v.as_f64().map(|p| p as i64),
                 Ok(None) => None,
                 Err(_) => break,
             };
 
+        if pos_sec.is_none() {
+            let eof = client
+                .command("get_property", &[json!("eof-reached")])
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if eof {
+                if let Some(ep) = playlist.get(&title) {
+                    pos_sec = Some(ep.total_sec);
+                }
+            }
+        }
+
+        if !title.is_empty() && playlist.contains_key(&title) {
+            if let Ok(mut act) = active_episode.lock() {
+                *act = Some(title.clone());
+            }
+        }
+
         tracker.observe(&title, pos_sec, &playlist, &stops, &completed);
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+
+    if let Some(last) = tracker.current.take() {
+        VisitTracker::settle(&last, &playlist, &stops, &completed);
     }
 }
 
@@ -634,10 +699,12 @@ pub async fn realtime_playing_feedback_loop(
 
     let interval = Duration::from_secs(PROGRESS_INTERVAL_SECS);
     let paused_interval = Duration::from_secs(PAUSED_INTERVAL_SECS);
+    let poll_interval = Duration::from_millis(500);
     let mut last_key: Option<String> = None;
     let mut last_ep: Option<PlaybackData> = None;
     let mut req_sec: i64 = 0;
     let mut was_paused: bool = false;
+    let mut last_heartbeat = std::time::Instant::now();
     // Tracks when the current pause started; None while playing.
     let mut pause_started_at: Option<std::time::Instant> = None;
 
@@ -680,7 +747,7 @@ pub async fn realtime_playing_feedback_loop(
             }
         });
         let Some(ep) = ep else {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(poll_interval).await;
             continue;
         };
 
@@ -693,8 +760,8 @@ pub async fn realtime_playing_feedback_loop(
                 }
                 let mut final_req_sec = req_sec;
                 if let Some(prev_title) = &last_key {
-                    // Prefer the 1 s-resolution position from the completion
-                    // loop over the last 10 s heartbeat.
+                    // Prefer the 250 ms-resolution position from the completion
+                    // loop over the last heartbeat.
                     if let Some(saved_pos) = stops
                         .lock()
                         .ok()
@@ -732,12 +799,12 @@ pub async fn realtime_playing_feedback_loop(
             last_ep = Some(ep.clone());
             req_sec = pos_sec;
             was_paused = paused;
-            tokio::time::sleep(interval).await;
+            last_heartbeat = std::time::Instant::now();
+            tokio::time::sleep(poll_interval).await;
             continue;
         }
 
-        // Pause/resume transition: report exactly once, then switch to the
-        // cadence appropriate for the new state (30 s paused, 10 s playing).
+        // Pause/resume transition: report exactly once, then switch cadence.
         if pause_changed {
             if paused {
                 pause_started_at = Some(std::time::Instant::now());
@@ -749,8 +816,8 @@ pub async fn realtime_playing_feedback_loop(
                     .await;
             req_sec = pos_sec;
             was_paused = paused;
-            let next = if paused { paused_interval } else { interval };
-            tokio::time::sleep(next).await;
+            last_heartbeat = std::time::Instant::now();
+            tokio::time::sleep(poll_interval).await;
             continue;
         }
         was_paused = paused;
@@ -762,7 +829,7 @@ pub async fn realtime_playing_feedback_loop(
             let timed_out = pause_started_at
                 .map(|t| t.elapsed().as_secs() >= PAUSE_TIMEOUT_SECS)
                 .unwrap_or(false);
-            if !timed_out {
+            if !timed_out && last_heartbeat.elapsed() >= paused_interval {
                 let _ = realtime_progress(
                     &http,
                     ep,
@@ -771,16 +838,23 @@ pub async fn realtime_playing_feedback_loop(
                 )
                 .await;
                 req_sec = pos_sec;
+                last_heartbeat = std::time::Instant::now();
             }
-            tokio::time::sleep(paused_interval).await;
+            tokio::time::sleep(poll_interval).await;
             continue;
         }
 
-        // Playing: report every `PROGRESS_INTERVAL_SECS` seconds unconditionally.
-        let _ =
-            realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing).await;
-        req_sec = pos_sec;
-        tokio::time::sleep(interval).await;
+        // Playing: detect seek (> 3s jump) or periodic heartbeat cadence.
+        let seeked = (pos_sec - req_sec).abs() > 3;
+        let heartbeat_due = last_heartbeat.elapsed() >= interval;
+        if seeked || heartbeat_due {
+            let _ =
+                realtime_progress(&http, ep, pos_sec, PlaybackEvent::Playing)
+                    .await;
+            req_sec = pos_sec;
+            last_heartbeat = std::time::Instant::now();
+        }
+        tokio::time::sleep(poll_interval).await;
     }
 
     // The final Sessions/Playing/Stopped is sent by write_progress, which
@@ -1347,5 +1421,25 @@ mod tests {
         simulate(&mgr, &[(EP1, Some(500)), (EP1, Some(505))]);
         mgr.collect_stop_times().await;
         assert_eq!(mgr.stop_times.get(EP1), Some(&505));
+    }
+
+    /// Exiting on a later episode saves its progress as active-at-exit.
+    #[tokio::test]
+    async fn exit_on_later_episode_saves_active_progress() {
+        let mut mgr = playlist_mgr();
+        *mgr.active_episode.lock().unwrap() = Some(EP2.into());
+        {
+            let mut stops = mgr.playlist_stops.lock().unwrap();
+            stops.insert(EP1.into(), DONE);
+            stops.insert(EP2.into(), 500); // 500s in EP2 (< 80%)
+        }
+        mgr.completed_episodes.lock().unwrap().insert(EP1.into(), DONE);
+        mgr.collect_stop_times().await;
+
+        assert_eq!(mgr.stop_times.get(EP1), Some(&DONE));
+        assert_eq!(mgr.stop_times.get(EP2), Some(&500));
+        let entries = mgr.completed_entries();
+        assert!(entry(&entries, EP1).completed);
+        assert!(!entry(&entries, EP2).completed);
     }
 }

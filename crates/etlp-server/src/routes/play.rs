@@ -479,7 +479,7 @@ async fn run_player_chain(
                 let title = ep.media_title.replace(['\n', '\r'], " ");
                 m3u8.push_str(&format!(
                     "#EXTINF:-1,{title}\n{}\n",
-                    ep.stream_url
+                    ep.media_path
                 ));
             }
             let loaded_via_m3u8 = match std::fs::write(&m3u8_path, &m3u8) {
@@ -521,7 +521,7 @@ async fn run_player_chain(
                     };
                     if let Err(e) = h
                         .loadfile(
-                            &ep.stream_url,
+                            &ep.media_path,
                             LoadMode::Append,
                             &opts,
                             new_fmt,
@@ -579,7 +579,7 @@ async fn run_player_chain(
             .collect();
         debug!(after_count = after.len(), "vlc: enqueueing later episodes");
         for ep in &after {
-            if let Err(e) = h.playlist_add(&ep.stream_url).await {
+            if let Err(e) = h.playlist_add(&ep.media_path).await {
                 warn!("vlc enqueue {:?}: {e}", ep.media_title);
             }
         }

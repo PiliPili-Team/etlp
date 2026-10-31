@@ -566,6 +566,15 @@ impl MpvHandle {
         Ok(v.and_then(|x| x.as_f64()))
     }
 
+    /// Whether the player has reached the end of the file.
+    pub async fn eof_reached(&self) -> Result<Option<bool>, PlayerError> {
+        let v = self
+            .client
+            .command("get_property", &[json!("eof-reached")])
+            .await?;
+        Ok(v.and_then(|x| x.as_bool()))
+    }
+
     /// The current chapter index (0-based), or `None` when unavailable.
     pub async fn chapter_index(&self) -> Result<Option<i64>, PlayerError> {
         let v = self
@@ -1106,6 +1115,14 @@ mod tests {
         serve_n(server, 1, |_| json!(42.5)).await;
         let pos = handle.time_pos().await.expect("ok");
         assert_eq!(pos, Some(42.5));
+    }
+
+    #[tokio::test]
+    async fn eof_reached_returns_bool() {
+        let (handle, server) = make_handle();
+        serve_n(server, 1, |_| json!(true)).await;
+        let eof = handle.eof_reached().await.expect("ok");
+        assert_eq!(eof, Some(true));
     }
 
     #[tokio::test]
