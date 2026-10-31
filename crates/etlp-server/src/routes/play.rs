@@ -1211,7 +1211,6 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
         client_id,
         client_secret,
         user_name,
-        redirect_uri,
         enable_host,
         allow_duplicate,
         trakt_throttle,
@@ -1233,7 +1232,6 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.trakt.client_id.clone(),
             cfg.trakt.client_secret.clone(),
             cfg.trakt.user_name.clone(),
-            etlp_config::trakt_redirect_uri(cfg.server.listen_port),
             cfg.trakt.enable_host.clone(),
             cfg.trakt.allow_duplicate,
             cfg.trakt.duplicate_throttle(),
@@ -1276,12 +1274,11 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
     match api.ensure_auth().await {
         Ok(true) => {}
         Ok(false) => {
-            // No token yet (or refresh failed): open the OAuth authorize page
-            // so the user can grant access. The /trakt_auth callback then
-            // exchanges the code; the next playback will scrobble.
-            warn!("trakt: no valid token, opening authorization page");
-            let _ =
-                crate::platform::open_url(&api.authorize_url(&redirect_uri));
+            warn!(
+                token_path = %token_path.display(),
+                "trakt: no valid token, skipping sync (run `etlp trakt-auth` \
+                 to authorize via device code or configure trakt_token.json)"
+            );
             return;
         }
         Err(e) => {

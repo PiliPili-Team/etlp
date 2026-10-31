@@ -245,22 +245,67 @@ async fn run_trakt_auth(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use etlp_sync::TraktApi;
 
-    let client_id = std::env::var("TRAKT_CLIENT_ID")
-        .map_err(|_| "TRAKT_CLIENT_ID not set")?;
-    let client_secret = std::env::var("TRAKT_CLIENT_SECRET")
-        .map_err(|_| "TRAKT_CLIENT_SECRET not set")?;
+    let config = Config::load_from_dir(working_dir)
+        .or_else(|_| {
+            platform::config_dir()
+                .map(|d| Config::load_from_dir(&d))
+                .unwrap_or_else(|| {
+                    Err(etlp_config::ConfigError::NotFound(
+                        working_dir.to_path_buf(),
+                    ))
+                })
+        })
+        .or_else(|_| Config::load_from_dir(std::path::Path::new(".")))
+        .ok();
+
+    let client_id = config
+        .as_ref()
+        .map(|c| c.trakt.client_id.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("TRAKT_CLIENT_ID").ok())
+        .ok_or(
+            "trakt client_id required (set in config [trakt].client_id or \
+             TRAKT_CLIENT_ID env var)",
+        )?;
+
+    let client_secret = config
+        .as_ref()
+        .map(|c| c.trakt.client_secret.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("TRAKT_CLIENT_SECRET").ok())
+        .ok_or(
+            "trakt client_secret required (set in config [trakt].client_secret \
+             or TRAKT_CLIENT_SECRET env var)",
+        )?;
+
+    let user_name = config
+        .as_ref()
+        .map(|c| c.trakt.user_name.clone())
+        .unwrap_or_default();
+
+    let sync_proxy = config
+        .as_ref()
+        .map(|c| {
+            etlp_sync::SyncProxy::new(
+                c.dev.proxy_http.clone(),
+                c.dev.proxy_https.clone(),
+                c.dev.proxy_enabled,
+            )
+        })
+        .unwrap_or_default();
 
     // Prefer data_dir for the token file; fall back to working_dir.
     let token_dir =
         platform::data_dir().unwrap_or_else(|| working_dir.to_path_buf());
+    let _ = std::fs::create_dir_all(&token_dir);
     let token_path = token_dir.join(TraktApi::TOKEN_FILE_NAME);
     let mut api = TraktApi::new(
         &client_id,
         &client_secret,
-        "",
+        &user_name,
         &token_path,
         TraktApi::DEFAULT_BASE_URL,
-        etlp_sync::SyncProxy::default(),
+        sync_proxy,
     )?;
 
     let code_resp = api.request_device_code().await?;
@@ -269,15 +314,22 @@ async fn run_trakt_auth(
         code_resp.verification_url, code_resp.user_code
     );
 
+    // Automatically open the verification URL in the system's default browser.
+    let _ = platform::open_url(&code_resp.verification_url);
+    println!("Waiting for authorization in browser...");
+
     let token = api
         .poll_device_token(
             &code_resp.device_code,
-            code_resp.expires_in,
             code_resp.interval,
+            code_resp.expires_in,
         )
         .await?;
     api.save_token(&token)?;
-    println!("Trakt authentication successful.");
+    println!(
+        "Trakt authentication successful. Token saved to {}",
+        token_path.display()
+    );
     Ok(())
 }
 
