@@ -1191,6 +1191,7 @@ fn build_trakt_api() -> Result<Option<etlp_sync::TraktApi>, String> {
         return Ok(None);
     }
     let token_dir = platform::data_dir().ok_or_else(err_no_data_dir)?;
+    let _ = std::fs::create_dir_all(&token_dir);
     let token_path = token_dir.join(etlp_sync::TraktApi::TOKEN_FILE_NAME);
     let api = etlp_sync::TraktApi::new(
         &config.trakt.client_id,
@@ -1236,9 +1237,9 @@ fn build_bangumi_api() -> Result<Option<etlp_sync::BangumiApi>, String> {
 /// Refresh the Trakt authorization.
 ///
 /// Loads the saved token and tries to refresh it; if no valid token can be
-/// obtained, opens the OAuth authorization page (the running `/trakt_auth`
-/// callback then completes the exchange). Returns [`AUTH_VALID`] or
-/// [`AUTH_OPENED`].
+/// obtained, initiates the OAuth Device Code flow, opens the activation page
+/// in the user's browser, and polls Trakt in the background until authorized.
+/// Returns [`AUTH_VALID`] or [`AUTH_OPENED`].
 #[tauri::command]
 pub async fn refresh_trakt_auth(
     app: tauri::AppHandle,
@@ -1255,19 +1256,45 @@ pub async fn refresh_trakt_auth(
             Ok(AUTH_VALID.to_owned())
         }
         Ok(false) => {
-            let cfg_dir =
-                platform::config_dir().ok_or_else(err_no_config_dir)?;
-            let config = load_or_default_config(&cfg_dir)?;
-            let redirect_uri =
-                etlp_config::trakt_redirect_uri(config.server.listen_port);
-            let url = etlp_sync::trakt_authorize_url(
-                &config.trakt.client_id,
-                &redirect_uri,
+            let code_resp = api
+                .request_device_code()
+                .await
+                .map_err(|e| format!("request trakt device code: {e}"))?;
+            let url = if !code_resp.verification_url.is_empty() {
+                format!(
+                    "{}/{}",
+                    code_resp.verification_url.trim_end_matches('/'),
+                    code_resp.user_code
+                )
+            } else {
+                format!("https://trakt.tv/activate/{}", code_resp.user_code)
+            };
+            info!(
+                user_code = %code_resp.user_code,
+                verification_url = %url,
+                "refresh_trakt_auth: opening device activation page"
             );
-            info!("refresh_trakt_auth: no valid token, opening authorize page");
             app.opener()
-                .open_url(url, None::<&str>)
+                .open_url(&url, None::<&str>)
                 .map_err(|e| format!("open trakt authorize page: {e}"))?;
+
+            tauri::async_runtime::spawn(async move {
+                match api
+                    .poll_device_token(
+                        &code_resp.device_code,
+                        code_resp.interval,
+                        code_resp.expires_in,
+                    )
+                    .await
+                {
+                    Ok(_token) => {
+                        info!("refresh_trakt_auth: trakt token acquired");
+                    }
+                    Err(e) => {
+                        warn!("refresh_trakt_auth: device flow failed: {e}");
+                    }
+                }
+            });
             Ok(AUTH_OPENED.to_owned())
         }
         Err(e) => Err(format!("trakt auth failed: {e}")),
