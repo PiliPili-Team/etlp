@@ -348,11 +348,16 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         }
     }
 
-    if let Some(sec) = args.start_sec {
-        // iina in disk mode: start_sec would affect next episode — skip.
-        if !(is_iina && args.mount_disk_mode) {
-            cmd.push(format!("--start={sec}"));
-        }
+    // In playlist / multiple episodes mode, passing `--start` on mpv's CLI
+    // pollutes subsequent playlist items because mpv saves it as a
+    // persistent option. Seeking to start_sec is handled via IPC once the
+    // initial file loads. Also skipped for iina in disk mode.
+    if let Some(sec) = args.start_sec
+        && !args.is_multiple_episodes
+        && args.playlist_start.is_none()
+        && !(is_iina && args.mount_disk_mode)
+    {
+        cmd.push(format!("--start={sec}"));
     }
 
     if is_darwin {
@@ -969,12 +974,25 @@ mod tests {
     }
 
     #[test]
-    fn build_args_multiple_episodes_adds_pause() {
+    fn build_args_multiple_episodes_adds_pause_and_omits_cli_start() {
         let mut args = default_launch();
         args.is_multiple_episodes = true;
         let ipc = IpcPath::generate();
         let cmd = build_args(&args, &ipc);
-        assert!(cmd.iter().any(|s| s == "--pause"));
+        let flat = cmd.join(" ");
+        assert!(flat.contains("--pause"));
+        // CLI --start must be omitted so subsequent episodes are not polluted.
+        assert!(!flat.contains("--start="));
+    }
+
+    #[test]
+    fn build_args_playlist_start_omits_cli_start() {
+        let mut args = default_launch();
+        args.playlist_start = Some(2);
+        let ipc = IpcPath::generate();
+        let cmd = build_args(&args, &ipc);
+        let flat = cmd.join(" ");
+        assert!(!flat.contains("--start="));
     }
 
     #[test]

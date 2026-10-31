@@ -374,7 +374,7 @@ async fn run_player_chain(
         let spawn_ms = metrics.player_spawn_ms;
         let chain_start_for_task = chain_start;
         let spawn_done = std::time::Instant::now();
-        let should_reset_start = data.start_sec > 0;
+        let resume_sec = data.start_sec;
         tokio::spawn(async move {
             let deadline = spawn_done + std::time::Duration::from_secs(60);
             loop {
@@ -399,23 +399,32 @@ async fn run_player_chain(
                             player_spawn_ms = ?spawn_ms,
                             "playback_started"
                         );
-                        // Once the first episode is loaded and seeked to its
-                        // resume offset, clear the start option so subsequent
-                        // playlist episodes start at 0.
-                        if should_reset_start {
+                        // When resuming a playlist, seek to start_sec via IPC
+                        // so mpv's CLI args remain clean and do not pollute
+                        // subsequent playlist entries.
+                        if resume_sec > 0 {
                             let _ = client
                                 .command(
-                                    "set_property",
-                                    &[json!("options/start"), json!("none")],
-                                )
-                                .await;
-                            let _ = client
-                                .command(
-                                    "set_property",
-                                    &[json!("start"), json!("none")],
+                                    "seek",
+                                    &[json!(resume_sec), json!("absolute")],
                                 )
                                 .await;
                         }
+                        let _ = client
+                            .command(
+                                "set_property",
+                                &[json!("options/start"), json!("none")],
+                            )
+                            .await;
+                        let _ = client
+                            .command(
+                                "set_property",
+                                &[json!("start"), json!("none")],
+                            )
+                            .await;
+                        let _ = client
+                            .command("set", &[json!("pause"), json!("no")])
+                            .await;
                         break;
                     }
                     // Loaded but position not yet available — keep polling.
@@ -534,8 +543,13 @@ async fn run_player_chain(
             debug!("playlist-count: {cnt} (expected {expected_count})");
         }
 
-        if let Err(e) = h.set_pause(false).await {
-            warn!("mpv unpause: {e}");
+        // When resuming at start_sec > 0, unpausing is deferred to the
+        // background task after seeking to the resume position.
+        if data.start_sec <= 0 {
+            match h.set_pause(false).await {
+                Ok(()) => {}
+                Err(e) => warn!("mpv unpause: {e}"),
+            }
         }
     }
 
