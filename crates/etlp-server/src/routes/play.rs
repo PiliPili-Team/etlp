@@ -374,6 +374,7 @@ async fn run_player_chain(
         let spawn_ms = metrics.player_spawn_ms;
         let chain_start_for_task = chain_start;
         let spawn_done = std::time::Instant::now();
+        let should_reset_start = data.start_sec > 0;
         tokio::spawn(async move {
             let deadline = spawn_done + std::time::Duration::from_secs(60);
             loop {
@@ -387,7 +388,7 @@ async fn run_player_chain(
                 match client.command("get_property", &[json!("time-pos")]).await
                 {
                     // First non-null position → media loaded and ready.
-                    Ok(Some(_)) => {
+                    Ok(Some(ref v)) if !v.is_null() => {
                         let url_to_ready_ms = spawn_done.elapsed().as_millis();
                         let click_to_play_ms =
                             chain_start_for_task.elapsed().as_millis();
@@ -398,10 +399,27 @@ async fn run_player_chain(
                             player_spawn_ms = ?spawn_ms,
                             "playback_started"
                         );
+                        // Once the first episode is loaded and seeked to its
+                        // resume offset, clear the start option so subsequent
+                        // playlist episodes start at 0.
+                        if should_reset_start {
+                            let _ = client
+                                .command(
+                                    "set_property",
+                                    &[json!("options/start"), json!("none")],
+                                )
+                                .await;
+                            let _ = client
+                                .command(
+                                    "set_property",
+                                    &[json!("start"), json!("none")],
+                                )
+                                .await;
+                        }
                         break;
                     }
                     // Loaded but position not yet available — keep polling.
-                    Ok(None) => {
+                    Ok(_) => {
                         tokio::time::sleep(std::time::Duration::from_millis(
                             50,
                         ))

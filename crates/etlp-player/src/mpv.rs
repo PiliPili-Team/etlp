@@ -627,6 +627,16 @@ impl MpvHandle {
         Ok(())
     }
 
+    /// Reset the `start` option to "none" across options and start property so
+    /// that an initial `--start` flag does not pollute subsequent playlist
+    /// entries.
+    pub async fn reset_start_option(&self) -> Result<(), PlayerError> {
+        let _ = self
+            .set_property_value("options/start", json!("none"))
+            .await;
+        self.set_property_value("start", json!("none")).await
+    }
+
     // ── Playlist ──────────────────────────────────────────────────────────────
 
     /// Detect whether mpv supports the new `loadfile` command format (≥ 0.38).
@@ -1306,5 +1316,40 @@ mod tests {
         })
         .await;
         assert!(!handle.detect_new_loadfile_format().await);
+    }
+
+    #[tokio::test]
+    async fn reset_start_option_sets_start_none() {
+        let (handle, server) = make_handle();
+        let received: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let rx = Arc::clone(&received);
+        serve_n(server, 2, move |req| {
+            rx.lock().unwrap().push(req);
+            json!(null)
+        })
+        .await;
+
+        handle.reset_start_option().await.expect("ok");
+
+        let reqs = received.lock().unwrap().clone();
+        assert_eq!(reqs.len(), 2);
+
+        let cmd0 = reqs
+            .first()
+            .and_then(|r| r.get("command"))
+            .and_then(Value::as_array)
+            .expect("cmd0");
+        assert_eq!(cmd0.first().and_then(Value::as_str), Some("set_property"));
+        assert_eq!(cmd0.get(1).and_then(Value::as_str), Some("options/start"));
+        assert_eq!(cmd0.get(2).and_then(Value::as_str), Some("none"));
+
+        let cmd1 = reqs
+            .get(1)
+            .and_then(|r| r.get("command"))
+            .and_then(Value::as_array)
+            .expect("cmd1");
+        assert_eq!(cmd1.first().and_then(Value::as_str), Some("set_property"));
+        assert_eq!(cmd1.get(1).and_then(Value::as_str), Some("start"));
+        assert_eq!(cmd1.get(2).and_then(Value::as_str), Some("none"));
     }
 }
