@@ -35,87 +35,115 @@ pub use path::{
 pub fn activate_window_by_pid(_pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        use windows::Win32::Foundation::{HWND, LPARAM, RECT};
-        use windows::Win32::System::Threading::{
-            AttachThreadInput, GetCurrentThreadId,
-        };
-        use windows::Win32::UI::WindowsAndMessaging::{
-            BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowRect,
-            GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic,
-            IsWindowVisible, SW_RESTORE, SetForegroundWindow, ShowWindow,
-        };
-        use windows::core::BOOL;
-
-        /// Accumulator threaded through `EnumWindows` to find the best match.
-        struct FindCtx {
-            pid: u32,
-            best: HWND,
-            best_area: i64,
-        }
-
-        unsafe extern "system" fn enum_proc(
-            hwnd: HWND,
-            lparam: LPARAM,
-        ) -> BOOL {
-            // edition 2024: unsafe fn body is safe by default; each unsafe
-            // call needs its own unsafe {} block.
-            unsafe {
-                // SAFETY: `lparam` carries a `&mut FindCtx` that outlives the
-                // enumeration (it lives on the caller's stack below).
-                let ctx = &mut *(lparam.0 as *mut FindCtx);
-                let mut win_pid = 0u32;
-                GetWindowThreadProcessId(hwnd, Some(&mut win_pid));
-                if win_pid != ctx.pid
-                    || !IsWindowVisible(hwnd).as_bool()
-                    || GetWindowTextLengthW(hwnd) == 0
-                {
-                    return BOOL(1); // continue
+        tokio::spawn(async move {
+            for _ in 0..30 {
+                if try_activate_window_once(_pid) {
+                    break;
                 }
-                let mut rect = RECT::default();
-                if GetWindowRect(hwnd, &mut rect).is_err() {
-                    return BOOL(1);
-                }
-                let area = i64::from(rect.right - rect.left)
-                    * i64::from(rect.bottom - rect.top);
-                if area > ctx.best_area {
-                    ctx.best_area = area;
-                    ctx.best = hwnd;
-                }
-                BOOL(1) // continue: keep looking for a larger window
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
-        }
+        });
+    }
+}
 
-        let mut ctx = FindCtx {
-            pid: _pid,
-            best: HWND::default(),
-            best_area: 0,
-        };
-        // SAFETY: all calls below are plain Win32 FFI with valid arguments;
-        // `enum_proc` only dereferences the `&mut ctx` we hand it.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+fn try_activate_window_once(pid: u32) -> bool {
+    use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+    use windows::Win32::System::Threading::{
+        AttachThreadInput, GetCurrentThreadId,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        AllowSetForegroundWindow, BringWindowToTop, EnumWindows,
+        GetForegroundWindow, GetWindowRect, GetWindowTextLengthW,
+        GetWindowThreadProcessId, IsIconic, IsWindowVisible, SW_RESTORE,
+        SW_SHOW, SetForegroundWindow, ShowWindow,
+    };
+    use windows::core::BOOL;
+
+    struct FindCtx {
+        pid: u32,
+        best: HWND,
+        best_area: i64,
+    }
+
+    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
         unsafe {
-            let _ = EnumWindows(
-                Some(enum_proc),
-                LPARAM(&mut ctx as *mut FindCtx as isize),
-            );
-            if ctx.best.0.is_null() {
-                return;
+            let ctx = &mut *(lparam.0 as *mut FindCtx);
+            let mut win_pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut win_pid));
+            if win_pid != ctx.pid
+                || !IsWindowVisible(hwnd).as_bool()
+                || GetWindowTextLengthW(hwnd) == 0
+            {
+                return BOOL(1);
             }
-            let target = ctx.best;
-            let fg = GetForegroundWindow();
-            let fg_thread = GetWindowThreadProcessId(fg, None);
-            let cur_thread = GetCurrentThreadId();
-            // Share input state with the current foreground thread so the OS
-            // permits the focus change, then detach again.
-            let attached =
-                AttachThreadInput(cur_thread, fg_thread, true).as_bool();
-            if IsIconic(target).as_bool() {
-                let _ = ShowWindow(target, SW_RESTORE);
+            let mut rect = RECT::default();
+            if GetWindowRect(hwnd, &mut rect).is_err() {
+                return BOOL(1);
             }
-            let _ = SetForegroundWindow(target);
-            let _ = BringWindowToTop(target);
-            if attached {
-                let _ = AttachThreadInput(cur_thread, fg_thread, false);
+            let area = i64::from(rect.right - rect.left)
+                * i64::from(rect.bottom - rect.top);
+            if area > ctx.best_area {
+                ctx.best_area = area;
+                ctx.best = hwnd;
             }
+            BOOL(1)
         }
+    }
+
+    let mut ctx = FindCtx {
+        pid,
+        best: HWND::default(),
+        best_area: 0,
+    };
+
+    unsafe {
+        let _ = EnumWindows(
+            Some(enum_proc),
+            LPARAM(&mut ctx as *mut FindCtx as isize),
+        );
+        if ctx.best.0.is_null() {
+            return false;
+        }
+        let target = ctx.best;
+        let _ = AllowSetForegroundWindow(pid);
+
+        let fg = GetForegroundWindow();
+        let fg_thread = GetWindowThreadProcessId(fg, None);
+        let target_thread = GetWindowThreadProcessId(target, None);
+        let cur_thread = GetCurrentThreadId();
+
+        let attached_target = if target_thread != 0
+            && fg_thread != 0
+            && target_thread != fg_thread
+        {
+            AttachThreadInput(target_thread, fg_thread, true).as_bool()
+        } else {
+            false
+        };
+        let attached_cur =
+            if cur_thread != 0 && fg_thread != 0 && cur_thread != fg_thread {
+                AttachThreadInput(cur_thread, fg_thread, true).as_bool()
+            } else {
+                false
+            };
+
+        if IsIconic(target).as_bool() {
+            let _ = ShowWindow(target, SW_RESTORE);
+        } else {
+            let _ = ShowWindow(target, SW_SHOW);
+        }
+        let _ = BringWindowToTop(target);
+        let _ = SetForegroundWindow(target);
+
+        if attached_target {
+            let _ = AttachThreadInput(target_thread, fg_thread, false);
+        }
+        if attached_cur {
+            let _ = AttachThreadInput(cur_thread, fg_thread, false);
+        }
+
+        GetForegroundWindow() == target
     }
 }

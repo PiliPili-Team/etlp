@@ -316,34 +316,34 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         cmd.push(format!("--playlist-start={n}"));
     }
 
-    if !args.mount_disk_mode {
-        cmd.push("--force-window=immediate".into());
-        if let Some(proxy) = &args.http_proxy {
-            let scheme = proxy
-                .split("://")
-                .next()
-                .filter(|_| proxy.contains("://"))
-                .unwrap_or("http");
-            match scheme {
-                "http" | "https" => {
-                    let proxy_url = if proxy.contains("://") {
-                        proxy.clone()
-                    } else {
-                        format!("http://{proxy}")
-                    };
-                    tracing::debug!(proxy = %proxy_url, "mpv: --http-proxy set");
-                    cmd.push(format!("--http-proxy={proxy_url}"));
-                    if args.is_multiple_episodes {
-                        cmd.push("--cache=no".into());
-                    }
+    cmd.push("--force-window=immediate".into());
+    if !args.mount_disk_mode
+        && let Some(proxy) = &args.http_proxy
+    {
+        let scheme = proxy
+            .split("://")
+            .next()
+            .filter(|_| proxy.contains("://"))
+            .unwrap_or("http");
+        match scheme {
+            "http" | "https" => {
+                let proxy_url = if proxy.contains("://") {
+                    proxy.clone()
+                } else {
+                    format!("http://{proxy}")
+                };
+                tracing::debug!(proxy = %proxy_url, "mpv: --http-proxy set");
+                cmd.push(format!("--http-proxy={proxy_url}"));
+                if args.is_multiple_episodes {
+                    cmd.push("--cache=no".into());
                 }
-                other => {
-                    tracing::debug!(
-                        scheme = %other,
-                        proxy = %proxy,
-                        "mpv: proxy scheme not supported by --http-proxy, skipping"
-                    );
-                }
+            }
+            other => {
+                tracing::debug!(
+                    scheme = %other,
+                    proxy = %proxy,
+                    "mpv: proxy scheme not supported by --http-proxy, skipping"
+                );
             }
         }
     }
@@ -360,7 +360,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         cmd.push(format!("--start={sec}"));
     }
 
-    if is_darwin {
+    if is_darwin || cfg!(target_os = "windows") {
         cmd.push("--focus-on=open".into());
     }
 
