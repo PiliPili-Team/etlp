@@ -19,6 +19,12 @@ const DEFAULT_WINDOW_HEIGHT: f64 = 700.0;
 pub const CUSTOM_APP_ICON_FILE: &str = "custom-app-icon.png";
 pub const TRAY_ICON_ID: &str = "main";
 const WINDOW_STATE_FILE: &str = "window-state.json";
+pub const SERVER_STATE_FILE: &str = "server-state.json";
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct ServerState {
+    running: bool,
+}
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct WindowState {
@@ -379,6 +385,46 @@ fn write_window_state(app: &tauri::AppHandle, state: &WindowState) {
     }
 }
 
+fn server_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    match app.path().app_config_dir() {
+        Ok(dir) => Some(dir.join(SERVER_STATE_FILE)),
+        Err(e) => {
+            eprintln!("[etlp] server state dir: {e}");
+            None
+        }
+    }
+}
+
+pub(crate) fn read_server_state(app: &tauri::AppHandle) -> bool {
+    let Some(path) = server_state_path(app) else {
+        return true;
+    };
+    let Ok(body) = std::fs::read_to_string(&path) else {
+        return true;
+    };
+    serde_json::from_str::<ServerState>(&body)
+        .map(|s| s.running)
+        .unwrap_or(true)
+}
+
+pub(crate) fn write_server_state(app: &tauri::AppHandle, running: bool) {
+    let Some(path) = server_state_path(app) else {
+        return;
+    };
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("[etlp] create server state dir: {e}");
+        return;
+    }
+    let state = ServerState { running };
+    if let Ok(body) = serde_json::to_string_pretty(&state) {
+        if let Err(e) = std::fs::write(path, body) {
+            eprintln!("[etlp] write server state: {e}");
+        }
+    }
+}
+
 fn restore_window_state(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     let Some(state) = read_window_state(app) else {
         let _ = window.set_size(LogicalSize::new(
@@ -699,7 +745,7 @@ pub fn run() {
                         let app_c = app.clone();
                         tauri::async_runtime::spawn(async move {
                             let state = app_c.state::<GuiState>();
-                            let _ = commands::restart_server(state).await;
+                            let _ = commands::restart_server(app_c.clone(), state).await;
                         });
                     }
                     "about" => {
@@ -757,31 +803,25 @@ pub fn run() {
                 }
             }
 
-            // Silent start also brings the local service up so the app is
-            // usable straight from the tray. A startup failure (e.g. a port
-            // conflict) is logged and surfaced as a system notification — never
-            // a crash, since there is no window to report it.
-            if silent_start {
+            let server_wanted = read_server_state(app.handle());
+            if server_wanted {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<GuiState>();
-                    match commands::start_server(state).await {
+                    match commands::start_server(app_handle.clone(), state).await {
                         Ok(port) => {
-                            tracing::info!(
-                                port,
-                                "silent start: service started"
-                            );
+                            tracing::info!(port, "service started");
                         }
                         Err(e) => {
-                            tracing::error!(
-                                "silent start: service failed to start: {e}"
-                            );
-                            let body = if sys_is_chinese() {
-                                format!("服务启动失败：{e}")
-                            } else {
-                                format!("Failed to start service: {e}")
-                            };
-                            notify(&app_handle, "etlp", &body);
+                            tracing::error!("service failed to start: {e}");
+                            if silent_start {
+                                let body = if sys_is_chinese() {
+                                    format!("服务启动失败：{e}")
+                                } else {
+                                    format!("Failed to start service: {e}")
+                                };
+                                notify(&app_handle, "etlp", &body);
+                            }
                         }
                     }
                 });

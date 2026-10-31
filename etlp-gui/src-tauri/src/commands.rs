@@ -389,9 +389,14 @@ impl From<&Config> for ConfigDto {
 // ── Server lifecycle ───────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn start_server(state: State<'_, GuiState>) -> Result<u16, String> {
+pub async fn start_server(
+    app: tauri::AppHandle,
+    state: State<'_, GuiState>,
+) -> Result<u16, String> {
     let _guard = state.lifecycle_lock.lock().await;
-    start_server_locked(&state).await
+    let port = start_server_locked(&state).await?;
+    crate::write_server_state(&app, true);
+    Ok(port)
 }
 
 async fn start_server_locked(state: &GuiState) -> Result<u16, String> {
@@ -508,9 +513,14 @@ async fn start_server_locked(state: &GuiState) -> Result<u16, String> {
 }
 
 #[tauri::command]
-pub async fn stop_server(state: State<'_, GuiState>) -> Result<(), String> {
+pub async fn stop_server(
+    app: tauri::AppHandle,
+    state: State<'_, GuiState>,
+) -> Result<(), String> {
     let _guard = state.lifecycle_lock.lock().await;
-    stop_server_locked(&state).await
+    stop_server_locked(&state).await?;
+    crate::write_server_state(&app, false);
+    Ok(())
 }
 
 async fn stop_server_locked(state: &GuiState) -> Result<(), String> {
@@ -1079,13 +1089,18 @@ pub async fn reload_config(state: State<'_, GuiState>) -> Result<(), String> {
 
 /// Stop, wait briefly, then restart the server to pick up config changes.
 #[tauri::command]
-pub async fn restart_server(state: State<'_, GuiState>) -> Result<u16, String> {
+pub async fn restart_server(
+    app: tauri::AppHandle,
+    state: State<'_, GuiState>,
+) -> Result<u16, String> {
     let _guard = state.lifecycle_lock.lock().await;
     if state.running.load(Ordering::Acquire) {
         stop_server_locked(&state).await?;
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
     }
-    start_server_locked(&state).await
+    let port = start_server_locked(&state).await?;
+    crate::write_server_state(&app, true);
+    Ok(port)
 }
 
 /// Open the configuration directory in the system file manager.
