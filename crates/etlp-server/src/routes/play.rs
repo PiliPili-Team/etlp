@@ -260,7 +260,7 @@ async fn run_player_chain(
                 let title = ep.media_title.replace(['\n', '\r'], " ");
                 m3u8.push_str(&format!(
                     "#EXTINF:-1,{title}\n{}\n",
-                    ep.stream_url
+                    ep.media_path
                 ));
             }
             let m3u8_span = Span::new("m3u8_write").with_session(session_id);
@@ -283,16 +283,16 @@ async fn run_player_chain(
                     let _ = m3u8_span.finish();
                     warn!(
                         "M3U8 write failed ({e}); \
-                         falling back to direct stream URL"
+                         falling back to direct media path"
                     );
-                    (data.stream_url.clone(), None, cur_idx)
+                    (data.media_path.clone(), None, cur_idx)
                 }
             }
         } else {
-            (data.stream_url.clone(), None, 0)
+            (data.media_path.clone(), None, 0)
         };
 
-    // `stream_url` is the resolved play URL (HTTP stream or translated local path).
+    // `media_path` is the resolved play URL (HTTP stream or translated local path).
     let args = LaunchArgs {
         exe: cfg.player_exe.clone(),
         media_path: launch_media_path,

@@ -21,6 +21,16 @@ pub fn translate_path(file_path: &str, pairs: &[(String, String)]) -> String {
             return file_path.replacen(src.as_str(), dst, 1);
         }
     }
+    let norm_path = file_path.replace('\\', "/");
+    for (src, dst) in pairs {
+        if src.is_empty() {
+            continue;
+        }
+        let norm_src = src.replace('\\', "/");
+        if norm_path.starts_with(&norm_src) {
+            return norm_path.replacen(&norm_src, dst, 1);
+        }
+    }
     file_path.to_owned()
 }
 
@@ -33,6 +43,14 @@ mod tests {
             ("/mnt/disk1".to_owned(), "E:".to_owned()),
             ("/mnt/disk2/media".to_owned(), "F:/media".to_owned()),
         ]
+    }
+
+    #[test]
+    fn translates_with_mixed_slashes() {
+        assert_eq!(
+            translate_path(r"\mnt\disk1\movie\a.mkv", &pairs()),
+            "E:/movie/a.mkv"
+        );
     }
 
     #[test]
