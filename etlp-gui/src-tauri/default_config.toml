@@ -70,7 +70,8 @@ skip_certificate_verify = true
 # ── Playlist ────────────────────────────────────────────────────────────────────
 
 [playlist]
-item_limit = 1
+# Maximum episodes in the player playlist (0 = no limit, loads the entire season).
+item_limit = 0
 
 # Regex that selects one version per episode for the playlist (empty = no filter).
 # Matches case-insensitively; leading/trailing | and internal whitespace are ignored.
