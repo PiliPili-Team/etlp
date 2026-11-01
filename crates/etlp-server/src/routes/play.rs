@@ -2027,47 +2027,44 @@ async fn process_backfill_collection(
     {
         let mut tmdb_candidates: Vec<(i64, Option<String>)> = Vec::new();
         for (&idx, emby_date) in pending.iter() {
-            if let Ok(ep_num) = u32::try_from(idx) {
-                if let Some(tmdb_date) =
+            if let Ok(ep_num) = u32::try_from(idx)
+                && let Some(tmdb_date) =
                     tmdb.episode_air_date(tid, season, ep_num).await
-                {
-                    if emby_date.as_deref() != Some(&tmdb_date) {
-                        debug!(
-                            subject_id,
-                            episode = idx,
-                            emby_date = ?emby_date,
-                            tmdb_date = %tmdb_date,
-                            "bangumi: retrying pending backfill episode \
-                             with TMDB air_date fallback"
-                        );
-                        tmdb_candidates.push((idx, Some(tmdb_date)));
-                    }
-                }
+                && emby_date.as_deref() != Some(&tmdb_date)
+            {
+                debug!(
+                    subject_id,
+                    episode = idx,
+                    emby_date = ?emby_date,
+                    tmdb_date = %tmdb_date,
+                    "bangumi: retrying pending backfill episode \
+                     with TMDB air_date fallback"
+                );
+                tmdb_candidates.push((idx, Some(tmdb_date)));
             }
         }
-        if !tmdb_candidates.is_empty() {
-            if let Ok(outcome) = etlp_sync::mark_backfill_in_subject(
+        if !tmdb_candidates.is_empty()
+            && let Ok(outcome) = etlp_sync::mark_backfill_in_subject(
                 api,
                 subject_id,
                 &tmdb_candidates,
                 ep_offset,
             )
             .await
-            {
-                for idx in &outcome.consumed {
-                    let _ = pending.remove(idx);
-                }
-                if !outcome.marked.is_empty() {
-                    info!(
-                        "bangumi: backfill marked {} episode(s) for subject \
-                         {} via TMDB air_date fallback",
-                        outcome.marked.len(),
-                        subject_id
-                    );
-                    let _ = touched.insert(subject_id);
-                }
-                consumed_count += outcome.consumed.len();
+        {
+            for idx in &outcome.consumed {
+                let _ = pending.remove(idx);
             }
+            if !outcome.marked.is_empty() {
+                info!(
+                    "bangumi: backfill marked {} episode(s) for subject \
+                     {} via TMDB air_date fallback",
+                    outcome.marked.len(),
+                    subject_id
+                );
+                let _ = touched.insert(subject_id);
+            }
+            consumed_count += outcome.consumed.len();
         }
     }
 
@@ -2326,9 +2323,7 @@ async fn resolve_bangumi_subject(
             }
         }
 
-        let Some(id) = id else {
-            return None;
-        };
+        let id = id?;
         info!(
             subject_id = id,
             title = %data.media_title,
@@ -2495,9 +2490,7 @@ async fn resolve_bangumi_subject(
         }
     }
 
-    let Some(id) = id else {
-        return None;
-    };
+    let id = id?;
 
     info!(
         subject_id = id,
