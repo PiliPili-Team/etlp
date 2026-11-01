@@ -1856,6 +1856,15 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // Safety bound: a season never splits into this many BGM collections.
         const MAX_COLLECTIONS: usize = 64;
 
+        let s_u32 = data
+            .season_number
+            .and_then(|s| u32::try_from(s).ok())
+            .unwrap_or(1);
+        let tmdb_series_id: Option<u64> = series_provider_ids
+            .get("Tmdb")
+            .filter(|v| !v.is_empty())
+            .and_then(|v| v.parse::<u64>().ok());
+
         // Phase 1 — the current episode's collection. It defines the
         // per-collection scope used when `history_follow` is false, and is the
         // natural first collection in follow mode. It is resolved even when the
@@ -1882,6 +1891,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         {
             let _ = process_backfill_collection(
                 &api,
+                &tmdb,
+                tmdb_series_id,
+                s_u32,
                 t.subject_id,
                 t.ep_offset,
                 &mut pending,
@@ -1923,6 +1935,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 };
                 let consumed = process_backfill_collection(
                     &api,
+                    &tmdb,
+                    tmdb_series_id,
+                    s_u32,
                     t.subject_id,
                     t.ep_offset,
                     &mut pending,
@@ -1958,13 +1973,17 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 /// Pulls the subject's episode list and the user's watched state once, matches
 /// the whole `pending` set against it by air date (with a sort fallback), marks
 /// the not-yet-watched matches in a single batch, and removes the matched
-/// indices from `pending`. Returns how many entries the subject consumed (0
-/// means it matched nothing, e.g. the pending episodes belong elsewhere).
+/// indices from `pending`. If any candidates remain unconsumed and TMDB data
+/// is available, retries them with TMDB air dates.
 ///
 /// `touched` gains the subject id when at least one episode was freshly marked
 /// (so the caller can run the Stage-7 completion check on it).
+#[allow(clippy::too_many_arguments)]
 async fn process_backfill_collection(
     api: &etlp_sync::BangumiApi,
+    tmdb: &etlp_sync::TmdbClient,
+    tmdb_series_id: Option<u64>,
+    season: u32,
     subject_id: u64,
     ep_offset: i64,
     pending: &mut std::collections::BTreeMap<i64, Option<String>>,
@@ -1972,7 +1991,7 @@ async fn process_backfill_collection(
 ) -> usize {
     let candidates: Vec<(i64, Option<String>)> =
         pending.iter().map(|(i, d)| (*i, d.clone())).collect();
-    match etlp_sync::mark_backfill_in_subject(
+    let mut consumed_count = match etlp_sync::mark_backfill_in_subject(
         api,
         subject_id,
         &candidates,
@@ -1996,9 +2015,63 @@ async fn process_backfill_collection(
         }
         Err(e) => {
             warn!("bangumi backfill error for subject {subject_id}: {e}");
-            0
+            return 0;
+        }
+    };
+
+    // If any episodes remain pending in this collection and we have a TMDB
+    // series ID, check if their Emby air_dates were mismatched/fake and retry
+    // with TMDB air_dates.
+    if !pending.is_empty()
+        && let Some(tid) = tmdb_series_id
+    {
+        let mut tmdb_candidates: Vec<(i64, Option<String>)> = Vec::new();
+        for (&idx, emby_date) in pending.iter() {
+            if let Ok(ep_num) = u32::try_from(idx) {
+                if let Some(tmdb_date) =
+                    tmdb.episode_air_date(tid, season, ep_num).await
+                {
+                    if emby_date.as_deref() != Some(&tmdb_date) {
+                        debug!(
+                            subject_id,
+                            episode = idx,
+                            emby_date = ?emby_date,
+                            tmdb_date = %tmdb_date,
+                            "bangumi: retrying pending backfill episode \
+                             with TMDB air_date fallback"
+                        );
+                        tmdb_candidates.push((idx, Some(tmdb_date)));
+                    }
+                }
+            }
+        }
+        if !tmdb_candidates.is_empty() {
+            if let Ok(outcome) = etlp_sync::mark_backfill_in_subject(
+                api,
+                subject_id,
+                &tmdb_candidates,
+                ep_offset,
+            )
+            .await
+            {
+                for idx in &outcome.consumed {
+                    let _ = pending.remove(idx);
+                }
+                if !outcome.marked.is_empty() {
+                    info!(
+                        "bangumi: backfill marked {} episode(s) for subject \
+                         {} via TMDB air_date fallback",
+                        outcome.marked.len(),
+                        subject_id
+                    );
+                    let _ = touched.insert(subject_id);
+                }
+                consumed_count += outcome.consumed.len();
+            }
         }
     }
+
+    consumed_count
 }
 
 /// A resolved Bangumi subject plus the per-season episode offset to apply when
@@ -2117,7 +2190,30 @@ async fn resolve_bangumi_subject(
         return None;
     }
     // Only anime should reach title search; bgm's keyword index is anime-only.
-    if !genres_match(&data.genres, genres) {
+    let genres_passed = if genres_match(&data.genres, genres) {
+        true
+    } else if let Some(tmdb_id) = tmdb_id_for_gate {
+        let tmdb_genres = if is_movie {
+            tmdb.movie_genres(tmdb_id).await
+        } else {
+            tmdb.series_genres(tmdb_id).await
+        };
+        if genres_match(&tmdb_genres, genres) {
+            info!(
+                item = %data.media_title,
+                tmdb_id,
+                tmdb_genres = ?tmdb_genres,
+                "bangumi: genres gate passed via TMDB metadata fallback"
+            );
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if !genres_passed {
         debug!(item = %data.media_title, "bangumi: genres gate, skip fallback");
         return None;
     }
@@ -2197,12 +2293,42 @@ async fn resolve_bangumi_subject(
             // prevents failures when BGM movie episodes lack air dates.
             episode_air_date: None,
         };
-        let id = etlp_sync::resolve_by_web_scrape_with_chain(
+        let mut id = etlp_sync::resolve_by_web_scrape_with_chain(
             &req,
             scrape_cache,
             api,
         )
-        .await?;
+        .await;
+
+        if id.is_none() && ep_premiere_date.is_some() && tmdb_movie_id > 0 {
+            let tmdb_date = tmdb.movie_release_date(tmdb_movie_id).await;
+            if let Some(ref tmdb_d) = tmdb_date
+                && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
+            {
+                info!(
+                    title = %data.media_title,
+                    emby_date = ?ep_premiere_date,
+                    tmdb_date = %tmdb_d,
+                    "bangumi: movie resolution with Emby release_date \
+                     yielded no subject; retrying with TMDB release_date \
+                     fallback"
+                );
+                let retry_req = etlp_sync::WebScrapeReq {
+                    season_premiere_date: Some(tmdb_d),
+                    ..req
+                };
+                id = etlp_sync::resolve_by_web_scrape_with_chain(
+                    &retry_req,
+                    scrape_cache,
+                    api,
+                )
+                .await;
+            }
+        }
+
+        let Some(id) = id else {
+            return None;
+        };
         info!(
             subject_id = id,
             title = %data.media_title,
@@ -2243,6 +2369,7 @@ async fn resolve_bangumi_subject(
         .and_then(|v| v.parse::<u64>().ok());
 
     let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
+    let ep_u32 = u32::try_from(ep_index).ok();
 
     // Episode-level premiere date: fallback anchor when S×E1 cannot be
     // resolved. Source: Emby → TMDB specific episode → None.
@@ -2256,7 +2383,6 @@ async fn resolve_bangumi_subject(
         );
         Some(d)
     } else {
-        let ep_u32 = u32::try_from(ep_index).ok();
         if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
         {
             let date = tmdb.episode_air_date(tid, s, ep).await;
@@ -2335,9 +2461,43 @@ async fn resolve_bangumi_subject(
         episode_air_date: premiere_date.as_deref(),
     };
 
-    let id =
+    let mut id =
         etlp_sync::resolve_by_web_scrape_with_chain(&req, scrape_cache, api)
-            .await?;
+            .await;
+
+    if id.is_none()
+        && ep_premiere_date.is_some()
+        && let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
+    {
+        let tmdb_ep_date = tmdb.episode_air_date(tid, s, ep).await;
+        if let Some(ref tmdb_d) = tmdb_ep_date
+            && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
+        {
+            info!(
+                series = %data.series_name,
+                season,
+                episode = ep_index,
+                emby_date = ?ep_premiere_date,
+                tmdb_date = %tmdb_d,
+                "bangumi: resolution with Emby air_date yielded no subject; \
+                 retrying with TMDB air_date fallback"
+            );
+            let retry_req = etlp_sync::WebScrapeReq {
+                episode_air_date: Some(tmdb_d),
+                ..req
+            };
+            id = etlp_sync::resolve_by_web_scrape_with_chain(
+                &retry_req,
+                scrape_cache,
+                api,
+            )
+            .await;
+        }
+    }
+
+    let Some(id) = id else {
+        return None;
+    };
 
     info!(
         subject_id = id,
