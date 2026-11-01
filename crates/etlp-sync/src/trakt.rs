@@ -887,13 +887,19 @@ impl TraktApi {
                 }
             }
             if let Some(ids) = ep.get("ids") {
-                if let Some(tvdb) = ids.get("tvdb").and_then(serde_json::Value::as_u64) {
+                if let Some(tvdb) =
+                    ids.get("tvdb").and_then(serde_json::Value::as_u64)
+                {
                     history.tvdb_ids.insert(tvdb);
                 }
-                if let Some(tmdb) = ids.get("tmdb").and_then(serde_json::Value::as_u64) {
+                if let Some(tmdb) =
+                    ids.get("tmdb").and_then(serde_json::Value::as_u64)
+                {
                     history.tmdb_ids.insert(tmdb);
                 }
-                if let Some(imdb) = ids.get("imdb").and_then(serde_json::Value::as_str) {
+                if let Some(imdb) =
+                    ids.get("imdb").and_then(serde_json::Value::as_str)
+                {
                     let trimmed = imdb.trim();
                     if !trimmed.is_empty() {
                         history.imdb_ids.insert(trimmed.to_owned());

@@ -35,8 +35,7 @@ pub use tmdb::TmdbClient;
 pub use trakt::{
     DeviceCodeResponse, ScrobbleAction, TraktApi, TraktEpisode,
     TraktHistoryItem, TraktIds, TraktItemKind, TraktShowHistory, TraktToken,
-    sync_history,
-    trakt_authorize_url,
+    sync_history, trakt_authorize_url,
 };
 
 /// Proxy configuration forwarded from the app config to sync HTTP clients.
