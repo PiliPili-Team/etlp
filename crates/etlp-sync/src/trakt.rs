@@ -128,6 +128,71 @@ pub enum ScrobbleAction {
     Stop,
 }
 
+/// Authenticated user's watch history for a show, indexed by episode-level
+/// provider IDs and (season, episode_number) pairs.
+#[derive(Debug, Clone, Default)]
+pub struct TraktShowHistory {
+    /// Episode TVDB IDs present in the user's history for this show.
+    pub tvdb_ids: std::collections::HashSet<u64>,
+    /// Episode TMDB IDs present in the user's history for this show.
+    pub tmdb_ids: std::collections::HashSet<u64>,
+    /// Episode IMDb IDs present in the user's history for this show.
+    pub imdb_ids: std::collections::HashSet<String>,
+    /// (season, episode_number) tuples present in the user's history for this
+    /// show.
+    pub season_episodes: std::collections::HashSet<(u32, u32)>,
+}
+
+impl TraktShowHistory {
+    /// Returns `true` when the given episode is recorded as watched on Trakt.
+    ///
+    /// Prioritizes matching by episode-level provider IDs (TVDB, TMDB, IMDb)
+    /// to prevent season/number mismatches (e.g. anime split into seasons on
+    /// the media server but continuous on Trakt). Falls back to
+    /// (season, number) when provider IDs are unavailable.
+    #[must_use]
+    pub fn is_watched(
+        &self,
+        provider_ids: &std::collections::BTreeMap<String, String>,
+        season: Option<u32>,
+        number: Option<u32>,
+    ) -> bool {
+        let get_id = |name: &str| -> Option<&String> {
+            provider_ids
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v)
+                .filter(|v| !v.trim().is_empty())
+        };
+
+        if let Some(tvdb) = get_id("tvdb").and_then(|v| v.parse::<u64>().ok())
+            && self.tvdb_ids.contains(&tvdb)
+        {
+            return true;
+        }
+
+        if let Some(tmdb) = get_id("tmdb").and_then(|v| v.parse::<u64>().ok())
+            && self.tmdb_ids.contains(&tmdb)
+        {
+            return true;
+        }
+
+        if let Some(imdb) = get_id("imdb")
+            && self.imdb_ids.contains(imdb)
+        {
+            return true;
+        }
+
+        if let (Some(s), Some(n)) = (season, number)
+            && self.season_episodes.contains(&(s, n))
+        {
+            return true;
+        }
+
+        false
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Build the Trakt OAuth authorization URL the user opens to grant access.
@@ -770,6 +835,73 @@ impl TraktApi {
             }
         }
         None
+    }
+
+    /// Fetch the authenticated user's watch history for a show.
+    ///
+    /// Calls `GET /sync/history/shows/{show_trakt_id}?limit=250` (one request for
+    /// the whole show) and indexes watched episodes by both provider IDs and
+    /// season/number. Returns an empty history on 404 (show unknown / not watched).
+    pub async fn show_watch_history(
+        &self,
+        show_trakt_id: u64,
+    ) -> Result<TraktShowHistory> {
+        let path = format!("sync/history/shows/{show_trakt_id}");
+        let resp = crate::curl::send_logged(
+            DOMAIN,
+            self.http
+                .get(self.url(&path))
+                .query(&[("limit", "250")])
+                .headers(self.auth_headers()),
+        )
+        .await?;
+
+        let (status, body) = crate::curl::read_logged(DOMAIN, resp).await?;
+        if status.as_u16() == 404 {
+            return Ok(TraktShowHistory::default());
+        }
+        if !status.is_success() {
+            return Err(SyncError::Api {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        let json: serde_json::Value =
+            serde_json::from_str(&body).map_err(SyncError::Json)?;
+
+        let mut history = TraktShowHistory::default();
+        let Some(items) = json.as_array() else {
+            return Ok(history);
+        };
+
+        for item in items {
+            let Some(ep) = item.get("episode") else {
+                continue;
+            };
+            if let (Some(s), Some(n)) = (
+                ep.get("season").and_then(serde_json::Value::as_u64),
+                ep.get("number").and_then(serde_json::Value::as_u64),
+            ) {
+                if let (Ok(s), Ok(n)) = (u32::try_from(s), u32::try_from(n)) {
+                    history.season_episodes.insert((s, n));
+                }
+            }
+            if let Some(ids) = ep.get("ids") {
+                if let Some(tvdb) = ids.get("tvdb").and_then(serde_json::Value::as_u64) {
+                    history.tvdb_ids.insert(tvdb);
+                }
+                if let Some(tmdb) = ids.get("tmdb").and_then(serde_json::Value::as_u64) {
+                    history.tmdb_ids.insert(tmdb);
+                }
+                if let Some(imdb) = ids.get("imdb").and_then(serde_json::Value::as_str) {
+                    let trimmed = imdb.trim();
+                    if !trimmed.is_empty() {
+                        history.imdb_ids.insert(trimmed.to_owned());
+                    }
+                }
+            }
+        }
+        Ok(history)
     }
 
     /// Fetch the authenticated user's completed-episode progress for a show.
@@ -1507,5 +1639,75 @@ mod tests {
         }];
         let count = sync_history(&api, items).await.unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ── TraktShowHistory ──────────────────────────────────────────────────────
+
+    #[test]
+    fn trakt_show_history_is_watched_matching() {
+        let mut history = TraktShowHistory::default();
+        history.tvdb_ids.insert(12345);
+        history.tmdb_ids.insert(67890);
+        history.imdb_ids.insert("tt9999999".into());
+        history.season_episodes.insert((1, 5));
+
+        // Matches by TVDB ID regardless of season/number
+        let mut p1 = std::collections::BTreeMap::new();
+        p1.insert("Tvdb".into(), "12345".into());
+        assert!(history.is_watched(&p1, Some(2), Some(1)));
+
+        // Matches by TMDB ID
+        let mut p2 = std::collections::BTreeMap::new();
+        p2.insert("tmdb".into(), "67890".into());
+        assert!(history.is_watched(&p2, None, None));
+
+        // Matches by IMDb ID
+        let mut p3 = std::collections::BTreeMap::new();
+        p3.insert("IMDb".into(), "tt9999999".into());
+        assert!(history.is_watched(&p3, None, None));
+
+        // Fallback to (season, number)
+        let empty_map = std::collections::BTreeMap::new();
+        assert!(history.is_watched(&empty_map, Some(1), Some(5)));
+        assert!(!history.is_watched(&empty_map, Some(1), Some(6)));
+        assert!(!history.is_watched(&empty_map, Some(2), Some(5)));
+    }
+
+    #[tokio::test]
+    async fn show_watch_history_parses_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/sync/history/shows/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    {
+                        "id": 100,
+                        "watched_at": "2026-01-01T00:00:00Z",
+                        "action": "watch",
+                        "type": "episode",
+                        "episode": {
+                            "season": 1,
+                            "number": 2,
+                            "title": "Ep 2",
+                            "ids": {
+                                "trakt": 200,
+                                "tvdb": 11869967,
+                                "tmdb": 7451589,
+                                "imdb": "tt1234567"
+                            }
+                        }
+                    }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        let mut api = make_api(&server).await;
+        api.token = Some(test_token());
+        let hist = api.show_watch_history(42).await.unwrap();
+        assert!(hist.tvdb_ids.contains(&11869967));
+        assert!(hist.tmdb_ids.contains(&7451589));
+        assert!(hist.imdb_ids.contains("tt1234567"));
+        assert!(hist.season_episodes.contains(&(1, 2)));
     }
 }

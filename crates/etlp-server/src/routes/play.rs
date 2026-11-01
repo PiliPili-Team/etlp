@@ -1164,53 +1164,61 @@ async fn backfill_trakt_episodes(
     // current one (handled by the direct /sync/history path above). The query
     // also emits the media-server watch-history debug line.
     let ms_episodes = emby_played_backfill(state, data).await;
-    let ms_watched: std::collections::BTreeSet<u32> = ms_episodes
+    let earlier_episodes: Vec<&PlayedEpisode> = ms_episodes
         .iter()
         .filter(|p| p.index != cur_index)
-        .filter_map(|p| u32::try_from(p.index).ok())
         .collect();
 
-    // The show's episodes already on Trakt (one whole-show progress query).
+    if earlier_episodes.is_empty() {
+        return;
+    }
+
+    // The show's history on Trakt (one whole-show history query).
     let Some(show_id) = api.resolve_show_trakt_id(&show_ids).await else {
         debug!(item = %data.media_title, "trakt: show unresolved, skip backfill");
         return;
     };
-    let trakt_watched: std::collections::BTreeSet<u32> = api
-        .show_watched_episodes(show_id)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|e| e.season == season)
-        .map(|e| e.number)
-        .collect();
+    let show_history = match api.show_watch_history(show_id).await {
+        Ok(h) => h,
+        Err(e) => {
+            warn!("trakt: fetch show watch history failed, skip backfill: {e}");
+            return;
+        }
+    };
+
+    let mut already_watched: Vec<i64> = Vec::new();
+    let mut to_mark_eps: Vec<&PlayedEpisode> = Vec::new();
+
+    for ep in earlier_episodes {
+        let ep_num = u32::try_from(ep.index).ok();
+        if show_history.is_watched(&ep.provider_ids, Some(season), ep_num) {
+            already_watched.push(ep.index);
+        } else {
+            to_mark_eps.push(ep);
+        }
+    }
+
     debug!(
         "trakt: show \"{}\", {} already watched on Trakt: {}",
         data.media_title,
         season_label(data.season_number),
-        format_season_episodes(
-            data.season_number,
-            trakt_watched.iter().map(|n| i64::from(*n)).collect(),
-        ),
+        format_season_episodes(data.season_number, already_watched),
     );
 
-    // Gap = media-server watched − Trakt watched, ascending (BTreeSet order).
-    let to_mark: Vec<u32> =
-        ms_watched.difference(&trakt_watched).copied().collect();
     debug!(
         "trakt: show \"{}\", {} to backfill: {}",
         data.media_title,
         season_label(data.season_number),
         format_season_episodes(
             data.season_number,
-            to_mark.iter().map(|n| i64::from(*n)).collect(),
+            to_mark_eps.iter().map(|p| p.index).collect(),
         ),
     );
 
-    for number in to_mark {
-        let ep_item = ms_episodes.iter().find(|p| p.index == i64::from(number));
-        if let Some(ep) = ep_item
-            && let Some(item) =
-                trakt_item_from_ids(TraktItemKind::Episode, &ep.provider_ids)
+    for ep in to_mark_eps {
+        let number = u32::try_from(ep.index).unwrap_or_default();
+        if let Some(item) =
+            trakt_item_from_ids(TraktItemKind::Episode, &ep.provider_ids)
         {
             out.push(item);
         } else {

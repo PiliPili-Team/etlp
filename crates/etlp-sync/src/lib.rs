@@ -34,7 +34,8 @@ pub use error::{Result, SyncError};
 pub use tmdb::TmdbClient;
 pub use trakt::{
     DeviceCodeResponse, ScrobbleAction, TraktApi, TraktEpisode,
-    TraktHistoryItem, TraktIds, TraktItemKind, TraktToken, sync_history,
+    TraktHistoryItem, TraktIds, TraktItemKind, TraktShowHistory, TraktToken,
+    sync_history,
     trakt_authorize_url,
 };
 
