@@ -2250,7 +2250,7 @@ async fn resolve_bangumi_subject(
     if is_movie {
         let tmdb_movie_id = tmdb_id_for_gate.unwrap_or(0);
         let release_date: Option<String> = if ep_premiere_date.is_some() {
-            ep_premiere_date
+            ep_premiere_date.clone()
         } else {
             let date = tmdb.movie_release_date(tmdb_movie_id).await;
             if date.is_none() {
@@ -2373,7 +2373,7 @@ async fn resolve_bangumi_subject(
 
     // Episode-level premiere date: fallback anchor when S×E1 cannot be
     // resolved. Source: Emby → TMDB specific episode → None.
-    let premiere_date: Option<String> = if let Some(d) = ep_premiere_date {
+    let premiere_date: Option<String> = if let Some(ref d) = ep_premiere_date {
         debug!(
             series = %data.series_name,
             season,
@@ -2381,7 +2381,7 @@ async fn resolve_bangumi_subject(
             air_date = %d,
             "bangumi: episode air_date from media server"
         );
-        Some(d)
+        Some(d.clone())
     } else {
         if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
         {
