@@ -1501,7 +1501,7 @@ async fn sync_trakt(state: &SharedState, entries: &[SyncEntry<'_>]) {
 /// regenerate it.
 async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     use etlp_sync::{
-        BackfillCache, BangumiApi, SubjectCache, SyncError, new_bgm_read_cache,
+        BangumiApi, SubjectCache, SyncError, new_bgm_read_cache,
         sync_movie_subject,
     };
 
@@ -1605,9 +1605,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     let _ = std::fs::create_dir_all(&bangumi_cache_dir);
     let cache_path = bangumi_cache_dir.join(BangumiApi::SUBJECT_CACHE_FILE);
     let mut cache = SubjectCache::load(&cache_path);
-    let backfill_cache_path =
-        bangumi_cache_dir.join(BangumiApi::BACKFILL_CACHE_FILE);
-    let mut backfill_cache = BackfillCache::load(&backfill_cache_path);
 
     // TMDB client used to look up episode air dates when Emby does not supply
     // PremiereDate. Constructed once and shared across all entries in this pass.
@@ -1799,21 +1796,14 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // wasteful, so each *collection* is resolved once and the whole pending
         // set is matched against it by air date in one batch.
         let backfill = emby_played_backfill(state, data).await;
-        let season = data.season_number.unwrap_or(1);
 
-        // High-water gate: a prior pass already handled everything up to this
-        // index, so only newer history needs work. Honoured only when the stored
-        // scope matches the current one (see `BackfillCache`).
-        let high_water =
-            backfill_cache.high_water(&data.series_id, season, history_follow);
-
-        // Pending = played history (excluding the current episode), gated by the
-        // high-water mark. The current episode is added unconditionally once it
-        // crosses the watched threshold so it is always the resolution anchor.
+        // Pending = played history (excluding the current episode). The
+        // current episode is added unconditionally once it crosses the
+        // watched threshold so it is always the resolution anchor.
         let mut pending: std::collections::BTreeMap<i64, Option<String>> =
             backfill
                 .iter()
-                .filter(|p| p.index != ep_index && p.index > high_water)
+                .filter(|p| p.index != ep_index)
                 .map(|p| (p.index, p.premiere_date.clone()))
                 .collect();
         if current_watched && ep_index > 0 {
@@ -1861,7 +1851,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             continue;
         }
 
-        let mut processed_max = high_water;
         let mut touched: std::collections::HashSet<u64> =
             std::collections::HashSet::new();
         // Safety bound: a season never splits into this many BGM collections.
@@ -1896,7 +1885,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 t.subject_id,
                 t.ep_offset,
                 &mut pending,
-                &mut processed_max,
                 &mut touched,
             )
             .await;
@@ -1938,7 +1926,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                     t.subject_id,
                     t.ep_offset,
                     &mut pending,
-                    &mut processed_max,
                     &mut touched,
                 )
                 .await;
@@ -1963,33 +1950,6 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 }
             }
         }
-
-        // Advance the high-water mark so a later pass skips this history.
-        // In follow mode the mark is held just below the lowest episode we
-        // could not mark, so unresolved collections are retried without leaving
-        // a gap; in per-collection mode lower episodes belong to collections we
-        // deliberately skip and the current episode always bypasses the gate,
-        // so the processed maximum is safe.
-        let new_high_water = if history_follow {
-            match pending.keys().next() {
-                Some(&min_remaining) => (min_remaining - 1).max(high_water),
-                None => processed_max,
-            }
-        } else {
-            processed_max
-        };
-        if new_high_water > high_water
-            && !data.series_id.is_empty()
-            && let Err(e) = backfill_cache.record(
-                &data.series_id,
-                season,
-                new_high_water,
-                history_follow,
-                &backfill_cache_path,
-            )
-        {
-            warn!("bangumi: backfill cache write failed: {e}");
-        }
     }
 }
 
@@ -2001,15 +1961,13 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 /// indices from `pending`. Returns how many entries the subject consumed (0
 /// means it matched nothing, e.g. the pending episodes belong elsewhere).
 ///
-/// `processed_max` is advanced to the highest consumed index and `touched`
-/// gains the subject id when at least one episode was freshly marked (so the
-/// caller can run the Stage-7 completion check on it).
+/// `touched` gains the subject id when at least one episode was freshly marked
+/// (so the caller can run the Stage-7 completion check on it).
 async fn process_backfill_collection(
     api: &etlp_sync::BangumiApi,
     subject_id: u64,
     ep_offset: i64,
     pending: &mut std::collections::BTreeMap<i64, Option<String>>,
-    processed_max: &mut i64,
     touched: &mut std::collections::HashSet<u64>,
 ) -> usize {
     let candidates: Vec<(i64, Option<String>)> =
@@ -2025,7 +1983,6 @@ async fn process_backfill_collection(
         Ok(outcome) => {
             for idx in &outcome.consumed {
                 let _ = pending.remove(idx);
-                *processed_max = (*processed_max).max(*idx);
             }
             if !outcome.marked.is_empty() {
                 info!(
