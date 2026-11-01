@@ -878,13 +878,12 @@ impl TraktApi {
             let Some(ep) = item.get("episode") else {
                 continue;
             };
-            if let (Some(s), Some(n)) = (
-                ep.get("season").and_then(serde_json::Value::as_u64),
-                ep.get("number").and_then(serde_json::Value::as_u64),
-            ) {
-                if let (Ok(s), Ok(n)) = (u32::try_from(s), u32::try_from(n)) {
-                    history.season_episodes.insert((s, n));
-                }
+            let season = ep.get("season").and_then(serde_json::Value::as_u64);
+            let number = ep.get("number").and_then(serde_json::Value::as_u64);
+            if let (Some(s), Some(n)) = (season, number)
+                && let (Ok(s), Ok(n)) = (u32::try_from(s), u32::try_from(n))
+            {
+                history.season_episodes.insert((s, n));
             }
             if let Some(ids) = ep.get("ids") {
                 if let Some(tvdb) =
