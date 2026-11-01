@@ -324,9 +324,7 @@ impl TmdbClient {
     /// `"动画"` when the animation genre ID 16 is present).
     pub async fn movie_genres(&self, tmdb_id: u64) -> Vec<String> {
         let key = (true, tmdb_id);
-        if let Some(cached) =
-            self.genre_cache.lock().await.get(&key).cloned()
-        {
+        if let Some(cached) = self.genre_cache.lock().await.get(&key).cloned() {
             debug!(tmdb_id, "tmdb: movie genres cache hit");
             return cached;
         }
@@ -339,9 +337,7 @@ impl TmdbClient {
     /// `"Animation"` and `"动画"` when the animation genre ID 16 is present).
     pub async fn series_genres(&self, tmdb_id: u64) -> Vec<String> {
         let key = (false, tmdb_id);
-        if let Some(cached) =
-            self.genre_cache.lock().await.get(&key).cloned()
-        {
+        if let Some(cached) = self.genre_cache.lock().await.get(&key).cloned() {
             debug!(tmdb_id, "tmdb: series genres cache hit");
             return cached;
         }
