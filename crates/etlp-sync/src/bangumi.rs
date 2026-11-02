@@ -700,33 +700,6 @@ impl BangumiApi {
             "bangumi: marking episodes watched"
         );
 
-        if ep_ids.len() == 1 {
-            let ep_id = ep_ids
-                .first()
-                .copied()
-                .ok_or(SyncError::MissingField { field: "ep_id" })?;
-            let body =
-                serde_json::json!({ "type": CollectionState::Watched as u8 });
-            let resp = crate::curl::send_logged(
-                DOMAIN,
-                self.http
-                    .put(self.url(&format!(
-                        "users/-/collections/-/episodes/{ep_id}"
-                    )))
-                    .headers(self.auth_headers())
-                    .json(&body),
-            )
-            .await?;
-            let (status, text) = crate::curl::read_logged(DOMAIN, resp).await?;
-            if status.is_success() {
-                return Ok(());
-            }
-            return Err(SyncError::Api {
-                status: status.as_u16(),
-                body: text,
-            });
-        }
-
         // BGM's PATCH endpoint rejects payloads with more than 100 episode IDs.
         // Split into chunks and send sequentially; first error aborts the loop.
         const PATCH_CHUNK: usize = 100;
@@ -2959,10 +2932,10 @@ mod tests {
     // ── mark_episodes_watched ─────────────────────────────────────────────────
 
     #[tokio::test]
-    async fn mark_single_episode_watched_uses_put() {
+    async fn mark_single_episode_watched_uses_patch() {
         let server = MockServer::start().await;
-        Mock::given(method("PUT"))
-            .and(path("/users/-/collections/-/episodes/1001"))
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/42/episodes"))
             .respond_with(ResponseTemplate::new(204))
             .mount(&server)
             .await;
@@ -3188,8 +3161,8 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        Mock::given(method("PUT"))
-            .and(path("/users/-/collections/-/episodes/3002"))
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/300/episodes"))
             .respond_with(ResponseTemplate::new(204))
             .mount(&server)
             .await;
@@ -3245,9 +3218,9 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        // Only the single unwatched episode (88) is freshly marked → PUT.
-        Mock::given(method("PUT"))
-            .and(path("/users/-/collections/-/episodes/8801"))
+        // Only the single unwatched episode (88) is freshly marked → PATCH.
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/400/episodes"))
             .respond_with(ResponseTemplate::new(204))
             .expect(1)
             .mount(&server)
@@ -3388,8 +3361,8 @@ mod tests {
             .mount(&server)
             .await;
         // The correct episode is E02 (id 1227088), not E01.
-        Mock::given(method("PUT"))
-            .and(path("/users/-/collections/-/episodes/1227088"))
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/400602/episodes"))
             .respond_with(ResponseTemplate::new(204))
             .expect(1)
             .mount(&server)

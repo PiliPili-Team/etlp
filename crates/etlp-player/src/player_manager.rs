@@ -572,7 +572,9 @@ pub async fn playlist_completion_loop(
                 .command("get_property", &[json!("media-title")])
                 .await
             {
-                Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
+                Ok(Some(v)) => {
+                    v.as_str().map(str::to_owned).unwrap_or_default()
+                }
                 Ok(None) => String::new(),
                 Err(_) => break,
             }
@@ -607,7 +609,14 @@ pub async fn playlist_completion_loop(
             *act = Some(title.clone());
         }
 
-        tracker.observe(playlist_pos, &title, pos_sec, &playlist, &stops, &completed);
+        tracker.observe(
+            playlist_pos,
+            &title,
+            pos_sec,
+            &playlist,
+            &stops,
+            &completed,
+        );
 
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
@@ -763,7 +772,9 @@ pub async fn realtime_playing_feedback_loop(
                 .command("get_property", &[serde_json::json!("media-title")])
                 .await
             {
-                Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
+                Ok(Some(v)) => {
+                    v.as_str().map(str::to_owned).unwrap_or_default()
+                }
                 Ok(None) => String::new(),
                 Err(_) => break,
             };
@@ -843,8 +854,9 @@ pub async fn realtime_playing_feedback_loop(
                 }
             }
             let start_pos = pos_sec_opt.unwrap_or(0);
-            let _ = realtime_progress(&http, ep, start_pos, PlaybackEvent::Start)
-                .await;
+            let _ =
+                realtime_progress(&http, ep, start_pos, PlaybackEvent::Start)
+                    .await;
             realtime_started.store(true, Ordering::Release);
             last_key = Some(title.clone());
             last_ep = Some(ep.clone());
@@ -1344,6 +1356,7 @@ mod tests {
         let mut tracker = VisitTracker::default();
         for (title, pos) in polls {
             tracker.observe(
+                None,
                 title,
                 *pos,
                 &mgr.playlist,

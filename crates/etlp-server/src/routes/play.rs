@@ -210,30 +210,33 @@ async fn run_player_chain(
     // that all entries (including those before the current episode) appear in
     // the playlist panel immediately, and titles come from #EXTINF rather than
     // a post-launch IPC write (which is silently discarded in mpv ≥0.38).
-    let (launch_media_path, launch_playlist_start, launch_cur_idx, ordered_episodes) =
-        if play_multiple && kind.is_mpv_family() {
-            let cur_idx = episode_list
-                .iter()
-                .position(|e| {
-                    e.item_id == data.item_id
-                        || e.media_source_id == data.media_source_id
-                })
-                .unwrap_or_else(|| {
-                    warn!(
-                        item_id = %data.item_id,
-                        media_source_id = %data.media_source_id,
-                        "current episode not found; defaulting cur_idx=0"
-                    );
-                    0
-                });
-            debug!(cur_idx, "current episode index in assembled playlist");
+    let (
+        launch_media_path,
+        launch_playlist_start,
+        launch_cur_idx,
+        ordered_episodes,
+    ) = if play_multiple && kind.is_mpv_family() {
+        let cur_idx = episode_list
+            .iter()
+            .position(|e| {
+                e.item_id == data.item_id
+                    || e.media_source_id == data.media_source_id
+            })
+            .unwrap_or_else(|| {
+                warn!(
+                    item_id = %data.item_id,
+                    media_source_id = %data.media_source_id,
+                    "current episode not found; defaulting cur_idx=0"
+                );
+                0
+            });
+        debug!(cur_idx, "current episode index in assembled playlist");
 
-            // Window the episode list around the current episode.
-            // Fill forward first, then backfill with earlier episodes up to
-            // the limit. Total entries never exceeds `cfg.playlist_limit`.
-            let (window_start, windowed_cur_idx) = if cfg.playlist_limit
-                >= episode_list.len()
-            {
+        // Window the episode list around the current episode.
+        // Fill forward first, then backfill with earlier episodes up to
+        // the limit. Total entries never exceeds `cfg.playlist_limit`.
+        let (window_start, windowed_cur_idx) =
+            if cfg.playlist_limit >= episode_list.len() {
                 (0, cur_idx)
             } else {
                 let limit = cfg.playlist_limit;
@@ -242,56 +245,53 @@ async fn run_player_chain(
                 let backward = cur_idx.min(limit.saturating_sub(1) - forward);
                 (cur_idx - backward, backward)
             };
-            let window_end =
-                (window_start + cfg.playlist_limit).min(episode_list.len());
-            let windowed = episode_list
-                .get(window_start..window_end)
-                .unwrap_or(&episode_list[..]);
+        let window_end =
+            (window_start + cfg.playlist_limit).min(episode_list.len());
+        let windowed = episode_list
+            .get(window_start..window_end)
+            .unwrap_or(&episode_list[..]);
 
-            let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
-            debug!(
-                path = %m3u8_path.display(),
-                entries = windowed.len(),
-                cur_idx = windowed_cur_idx,
-                "M3U8 playlist path for launch"
-            );
-            let mut m3u8 = String::from("#EXTM3U\n");
-            for ep in windowed {
-                let title = ep.media_title.replace(['\n', '\r'], " ");
-                m3u8.push_str(&format!(
-                    "#EXTINF:-1,{title}\n{}\n",
-                    ep.media_path
-                ));
+        let m3u8_path = std::env::temp_dir().join(&playlist_m3u8);
+        debug!(
+            path = %m3u8_path.display(),
+            entries = windowed.len(),
+            cur_idx = windowed_cur_idx,
+            "M3U8 playlist path for launch"
+        );
+        let mut m3u8 = String::from("#EXTM3U\n");
+        for ep in windowed {
+            let title = ep.media_title.replace(['\n', '\r'], " ");
+            m3u8.push_str(&format!("#EXTINF:-1,{title}\n{}\n", ep.media_path));
+        }
+        let m3u8_span = Span::new("m3u8_write").with_session(session_id);
+        match std::fs::write(&m3u8_path, &m3u8) {
+            Ok(()) => {
+                metrics.m3u8_write_ms = Some(m3u8_span.finish());
+                debug!(
+                    path = %m3u8_path.display(),
+                    entries = windowed.len(),
+                    cur_idx = windowed_cur_idx,
+                    "M3U8 playlist written for launch"
+                );
+                (
+                    m3u8_path.display().to_string(),
+                    Some(windowed_cur_idx),
+                    cur_idx,
+                    windowed.to_vec(),
+                )
             }
-            let m3u8_span = Span::new("m3u8_write").with_session(session_id);
-            match std::fs::write(&m3u8_path, &m3u8) {
-                Ok(()) => {
-                    metrics.m3u8_write_ms = Some(m3u8_span.finish());
-                    debug!(
-                        path = %m3u8_path.display(),
-                        entries = windowed.len(),
-                        cur_idx = windowed_cur_idx,
-                        "M3U8 playlist written for launch"
-                    );
-                    (
-                        m3u8_path.display().to_string(),
-                        Some(windowed_cur_idx),
-                        cur_idx,
-                        windowed.to_vec(),
-                    )
-                }
-                Err(e) => {
-                    let _ = m3u8_span.finish();
-                    warn!(
-                        "M3U8 write failed ({e}); \
-                         falling back to direct media path"
-                    );
-                    (data.media_path.clone(), None, cur_idx, episode_list.clone())
-                }
+            Err(e) => {
+                let _ = m3u8_span.finish();
+                warn!(
+                    "M3U8 write failed ({e}); \
+                     falling back to direct media path"
+                );
+                (data.media_path.clone(), None, cur_idx, episode_list.clone())
             }
-        } else {
-            (data.media_path.clone(), None, 0, episode_list.clone())
-        };
+        }
+    } else {
+        (data.media_path.clone(), None, 0, episode_list.clone())
+    };
 
     // `media_path` is the resolved play URL (HTTP stream or translated local path).
     let args = LaunchArgs {
@@ -1642,6 +1642,8 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
     // In-pass scrape cache: search results and subject details are reused
     // across all entries in this sync call to avoid redundant HTTP requests.
     let mut scrape_cache = etlp_sync::bangumi_web::ScrapeCache::default();
+    let mut seen_seasons: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     for entry in entries {
         let data = entry.data;
@@ -1651,13 +1653,76 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
 
         let is_movie = data.item_type.eq_ignore_ascii_case("movie");
 
-        // TV path requires an episode index to address individual episodes.
-        // Movies carry no episode index, so the check is gated on item type.
-        // For movies, ep_index is set to 0 as a dummy value; it is never
-        // read by the movie branch (which continues before any TV code runs).
-        let ep_index: i64 = if is_movie {
-            0
-        } else {
+        // ── Movie path ─────────────────────────────────────────────────────
+        // Movies have no season/episode structure on BGM: resolve the subject,
+        // mark it Watching (first-screen activity wake-up), then mark all main episodes
+        // Watched in one batch. No backfill needed — a movie is a single unit.
+        if is_movie {
+            let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
+            if entry.completed
+                && !bangumi_allow_dup
+                && state.sync_recently_done(&key, bangumi_throttle)
+            {
+                debug!(item = %data.media_title, "bangumi: throttled, skip");
+                continue;
+            }
+            if !entry.completed {
+                info!(
+                    item = %data.media_title,
+                    progress = entry.progress as i64,
+                    threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
+                    "bangumi: progress below completion threshold, current episode not marked"
+                );
+                continue;
+            }
+            let series_provider_ids = std::collections::BTreeMap::new();
+            let subject = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                data,
+                0, // 0 dummy — not used in the movie branch
+                data.premiere_date.clone(),
+                None, // movie path has no S01E01 floor
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await;
+            let Some(t) = subject else {
+                continue;
+            };
+            match sync_movie_subject(&api, t.subject_id).await {
+                Ok(ids) => {
+                    info!(
+                        "bangumi: movie marked {} episode(s) for subject {}",
+                        ids.len(),
+                        t.subject_id
+                    );
+                    if auto_mark_subject_watched
+                        && let Err(e) =
+                            api.maybe_mark_subject_watched(t.subject_id).await
+                    {
+                        warn!(
+                            "bangumi: Stage7 check failed for \
+                             movie subject {}: {e}",
+                            t.subject_id
+                        );
+                    }
+                }
+                Err(e) => warn!(
+                    "bangumi movie sync error for subject {}: {e}",
+                    t.subject_id
+                ),
+            }
+            continue;
+        }
+
+        // ── TV episode path ────────────────────────────────────────────────
+        let ep_index: i64 = {
             let Some(idx) = data.index else {
                 debug!(item = %data.media_title, "bangumi: no episode index, skip");
                 continue;
@@ -1668,15 +1733,62 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             idx
         };
 
-        // Throttle only once the episode is finished; while it is still in
-        // progress, keep reporting so newer progress always reaches Bangumi.
-        let key = format!("bangumi:{}:{}", data.netloc, data.item_id);
-        if entry.completed
-            && !bangumi_allow_dup
-            && state.sync_recently_done(&key, bangumi_throttle)
-        {
-            debug!(item = %data.media_title, "bangumi: throttled, skip");
+        // De-duplicate per (netloc, series, season) so binge playlists or
+        // multi-episode sessions are pre-aggregated and marked in single PATCH calls.
+        let season_key = format!(
+            "{}:{}:{:?}",
+            data.netloc,
+            if data.series_id.is_empty() {
+                &data.item_id
+            } else {
+                &data.series_id
+            },
+            data.season_number
+        );
+        if !seen_seasons.insert(season_key) {
             continue;
+        }
+
+        // Collect all completed entries belonging to this season in this session.
+        let season_entries: Vec<&SyncEntry<'_>> = entries
+            .iter()
+            .filter(|e| {
+                let d = e.data;
+                !d.item_type.eq_ignore_ascii_case("movie")
+                    && d.netloc == data.netloc
+                    && (if data.series_id.is_empty() {
+                        d.item_id == data.item_id
+                    } else {
+                        d.series_id == data.series_id
+                    })
+                    && d.season_number == data.season_number
+            })
+            .collect();
+
+        let mut season_completed: Vec<(&PlaybackData, i64)> = Vec::new();
+        for e in &season_entries {
+            let d = e.data;
+            let Some(idx) = d.index else {
+                continue;
+            };
+            if idx <= 0 || u32::try_from(idx).is_err() {
+                continue;
+            }
+            let key = format!("bangumi:{}:{}", d.netloc, d.item_id);
+            if !e.completed {
+                info!(
+                    item = %d.media_title,
+                    progress = e.progress as i64,
+                    threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
+                    "bangumi: progress below completion threshold, current episode not marked"
+                );
+            } else if !bangumi_allow_dup
+                && state.sync_recently_done(&key, bangumi_throttle)
+            {
+                debug!(item = %d.media_title, "bangumi: throttled, skip");
+            } else {
+                season_completed.push((d, idx));
+            }
         }
 
         // Fetch series-level provider IDs so user mappings keyed on the
@@ -1723,93 +1835,29 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 (std::collections::BTreeMap::new(), None)
             };
 
-        // Bangumi has no per-episode progress, so it cannot represent a partial
-        // view of an episode: the current episode is marked watched only once
-        // playback passes the completion threshold, and left unmarked below it
-        // rather than recorded on a brief sample.
-        let current_watched = entry.completed;
-        if !current_watched {
-            info!(
-                item = %data.media_title,
-                progress = entry.progress as i64,
-                threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
-                "bangumi: progress below completion threshold, current episode \
-                 not marked"
-            );
-        }
+        // Choose the highest-index completed episode as the anchor for backfill query.
+        let (anchor_data, anchor_ep_index) = season_completed
+            .iter()
+            .max_by_key(|(_, idx)| *idx)
+            .copied()
+            .unwrap_or((data, ep_index));
 
-        // ── Movie path ─────────────────────────────────────────────────────
-        // Movies have no season/episode structure on BGM: resolve the subject,
-        // mark it Watching (first-screen activity wake-up), then mark all main episodes
-        // Watched in one batch. No backfill needed — a movie is a single unit.
-        if is_movie {
-            if !current_watched {
-                continue;
-            }
-            let subject = resolve_bangumi_subject(
-                &api,
-                &tmdb,
-                data,
-                ep_index, // 0 dummy — not used in the movie branch
-                data.premiere_date.clone(),
-                None, // movie path has no S01E01 floor
-                title_fallback,
-                &genres,
-                &mappings,
-                &series_provider_ids,
-                &mut cache,
-                &cache_path,
-                &mut scrape_cache,
-            )
-            .await;
-            let Some(t) = subject else {
-                continue;
-            };
-            match sync_movie_subject(&api, t.subject_id).await {
-                Ok(ids) => {
-                    info!(
-                        "bangumi: movie marked {} episode(s) for subject {}",
-                        ids.len(),
-                        t.subject_id
-                    );
-                    if auto_mark_subject_watched
-                        && let Err(e) =
-                            api.maybe_mark_subject_watched(t.subject_id).await
-                    {
-                        warn!(
-                            "bangumi: Stage7 check failed for \
-                             movie subject {}: {e}",
-                            t.subject_id
-                        );
-                    }
-                }
-                Err(e) => warn!(
-                    "bangumi movie sync error for subject {}: {e}",
-                    t.subject_id
-                ),
-            }
-            continue;
-        }
-
-        // ── TV episode path ────────────────────────────────────────────────
         // Collect every episode the media server reports finished (the current
-        // one plus earlier played ones). A single season can map to several
-        // Bangumi collections (split arcs); resolving each episode separately is
-        // wasteful, so each *collection* is resolved once and the whole pending
-        // set is matched against it by air date in one batch.
-        let backfill = emby_played_backfill(state, data).await;
+        // one plus earlier played ones).
+        let backfill = emby_played_backfill(state, anchor_data).await;
 
-        // Pending = played history (excluding the current episode). The
-        // current episode is added unconditionally once it crosses the
-        // watched threshold so it is always the resolution anchor.
         let mut pending: std::collections::BTreeMap<i64, Option<String>> =
-            backfill
-                .iter()
-                .filter(|p| p.index != ep_index)
-                .map(|p| (p.index, p.premiere_date.clone()))
-                .collect();
-        if current_watched && ep_index > 0 {
-            let _ = pending.insert(ep_index, data.premiere_date.clone());
+            if history_follow {
+                backfill
+                    .iter()
+                    .filter(|p| p.index != anchor_ep_index)
+                    .map(|p| (p.index, p.premiere_date.clone()))
+                    .collect()
+            } else {
+                std::collections::BTreeMap::new()
+            };
+        for (d, idx) in &season_completed {
+            let _ = pending.insert(*idx, d.premiere_date.clone());
         }
 
         // Nothing to mark: register the subject as "watching" when enabled.
@@ -1867,19 +1915,14 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             .filter(|v| !v.is_empty())
             .and_then(|v| v.parse::<u64>().ok());
 
-        // Phase 1 — the current episode's collection. It defines the
-        // per-collection scope used when `history_follow` is false, and is the
-        // natural first collection in follow mode. It is resolved even when the
-        // current episode is below the watched threshold: it then only scopes
-        // the backfill (the episode itself is absent from `pending`, so it is
-        // not marked).
-        if ep_index > 0
+        // Phase 1 — anchor episode's collection.
+        if anchor_ep_index > 0
             && let Some(t) = resolve_bangumi_subject(
                 &api,
                 &tmdb,
-                data,
-                ep_index,
-                data.premiere_date.clone(),
+                anchor_data,
+                anchor_ep_index,
+                anchor_data.premiere_date.clone(),
                 media_server_series_premiere.clone(),
                 title_fallback,
                 &genres,
@@ -1904,53 +1947,48 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             .await;
         }
 
-        // Phase 2 — remaining collections, only when following the media
-        // server. Each iteration resolves the lowest still-pending episode's
-        // collection and marks every pending episode that belongs to it, so the
-        // resolve count equals the number of collections, not episodes.
-        if history_follow {
-            for _ in 0..MAX_COLLECTIONS {
-                let Some(&anchor_index) = pending.keys().next() else {
-                    break;
-                };
-                let anchor_date = pending.get(&anchor_index).cloned().flatten();
-                let Some(t) = resolve_bangumi_subject(
-                    &api,
-                    &tmdb,
-                    data,
-                    anchor_index,
-                    anchor_date,
-                    media_server_series_premiere.clone(),
-                    title_fallback,
-                    &genres,
-                    &mappings,
-                    &series_provider_ids,
-                    &mut cache,
-                    &cache_path,
-                    &mut scrape_cache,
-                )
-                .await
-                else {
-                    // Unresolvable: drop it so the loop always makes progress.
-                    let _ = pending.remove(&anchor_index);
-                    continue;
-                };
-                let consumed = process_backfill_collection(
-                    &api,
-                    &tmdb,
-                    tmdb_series_id,
-                    s_u32,
-                    t.subject_id,
-                    t.ep_offset,
-                    &mut pending,
-                    &mut touched,
-                )
-                .await;
-                if consumed == 0 {
-                    // Matched nothing in this subject: drop the anchor so the
-                    // loop cannot spin on the same episode.
-                    let _ = pending.remove(&anchor_index);
-                }
+        // Phase 2 — remaining collections (for split arcs or backfilled history).
+        for _ in 0..MAX_COLLECTIONS {
+            let Some(&rem_index) = pending.keys().next() else {
+                break;
+            };
+            let rem_date = pending.get(&rem_index).cloned().flatten();
+            let Some(t) = resolve_bangumi_subject(
+                &api,
+                &tmdb,
+                anchor_data,
+                rem_index,
+                rem_date,
+                media_server_series_premiere.clone(),
+                title_fallback,
+                &genres,
+                &mappings,
+                &series_provider_ids,
+                &mut cache,
+                &cache_path,
+                &mut scrape_cache,
+            )
+            .await
+            else {
+                // Unresolvable: drop it so the loop always makes progress.
+                let _ = pending.remove(&rem_index);
+                continue;
+            };
+            let consumed = process_backfill_collection(
+                &api,
+                &tmdb,
+                tmdb_series_id,
+                s_u32,
+                t.subject_id,
+                t.ep_offset,
+                &mut pending,
+                &mut touched,
+            )
+            .await;
+            if consumed == 0 {
+                // Matched nothing in this subject: drop the anchor so the
+                // loop cannot spin on the same episode.
+                let _ = pending.remove(&rem_index);
             }
         }
 

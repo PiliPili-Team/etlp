@@ -51,7 +51,8 @@ async fn emby_realtime(
     // When sending Playing heartbeats (Sessions/Playing/Progress), clamp ticks to at most 85% of total runtime
     // so Emby's server-side auto-completion threshold (usually >= 90%) is never prematurely triggered by in-flight seeking.
     // Full completion and watched status are explicitly controlled by PlaybackEvent::End and mark_as_played.
-    let reported_sec = if event == PlaybackEvent::Playing && data.total_sec > 0 {
+    let reported_sec = if event == PlaybackEvent::Playing && data.total_sec > 0
+    {
         let max_heartbeat_sec = (data.total_sec as f64 * 0.85) as i64;
         pos_sec.min(max_heartbeat_sec)
     } else {
@@ -93,7 +94,8 @@ async fn jellyfin_realtime(
     pos_sec: i64,
     event: PlaybackEvent,
 ) -> Result<()> {
-    let reported_sec = if event == PlaybackEvent::Playing && data.total_sec > 0 {
+    let reported_sec = if event == PlaybackEvent::Playing && data.total_sec > 0
+    {
         let max_heartbeat_sec = (data.total_sec as f64 * 0.85) as i64;
         pos_sec.min(max_heartbeat_sec)
     } else {
