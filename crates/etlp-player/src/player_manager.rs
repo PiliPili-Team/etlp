@@ -119,6 +119,8 @@ pub struct PlayerManager {
     pub handle: PlayerHandle,
     /// Primary episode data (the first file played).
     pub data: PlaybackData,
+    /// Ordered playlist items passed to the player (e.g. m3u8 entries).
+    pub ordered_playlist: Vec<PlaybackData>,
     /// Playlist: key (media_title) → episode data.
     ///
     /// Populated by the server layer via `register_playlist`.
@@ -161,6 +163,7 @@ impl PlayerManager {
         Self {
             handle,
             data,
+            ordered_playlist: Vec::new(),
             playlist: HashMap::new(),
             stop_times: HashMap::new(),
             total_secs: HashMap::new(),
@@ -170,6 +173,11 @@ impl PlayerManager {
             realtime_started: Arc::new(AtomicBool::new(false)),
             disable_progress_report: false,
         }
+    }
+
+    /// Set the ordered playlist items (mirroring the order passed to the player).
+    pub fn set_ordered_playlist(&mut self, list: Vec<PlaybackData>) {
+        self.ordered_playlist = list;
     }
 
     /// Register playlist episode data for progress tracking.
@@ -395,6 +403,7 @@ impl PlayerManager {
         let http2 = http.clone();
         let realtime_started = self.realtime_started.clone();
         let disable_progress_report = self.disable_progress_report;
+        let ordered_playlist = self.ordered_playlist.clone();
 
         if !disable_progress_report {
             tokio::spawn(realtime_playing_feedback_loop(
@@ -402,6 +411,7 @@ impl PlayerManager {
                 client.clone(),
                 http2,
                 playlist.clone(),
+                ordered_playlist.clone(),
                 cancel_tx,
                 realtime_started,
                 self.playlist_stops.clone(),
@@ -414,6 +424,7 @@ impl PlayerManager {
         tokio::spawn(playlist_completion_loop(
             client.clone(),
             self.playlist.clone(),
+            ordered_playlist,
             self.playlist_stops.clone(),
             self.completed_episodes.clone(),
             self.active_episode.clone(),
@@ -452,12 +463,13 @@ fn effective_stop_sec(
 /// episode is revisited later.
 #[derive(Debug, Default)]
 struct VisitTracker {
-    current: Option<String>,
+    current: Option<(Option<i64>, String)>,
 }
 
 impl VisitTracker {
     fn observe(
         &mut self,
+        pos_idx: Option<i64>,
         title: &str,
         pos_sec: Option<i64>,
         playlist: &HashMap<String, PlaybackData>,
@@ -468,12 +480,25 @@ impl VisitTracker {
         if !playlist.contains_key(title) {
             return;
         }
-        if self.current.as_deref() != Some(title) {
-            if let Some(prev) = self.current.take() {
-                Self::settle(&prev, playlist, stops, completed);
+
+        let is_different = match &self.current {
+            Some((prev_idx, prev_title)) => {
+                if let (Some(a), Some(b)) = (prev_idx, pos_idx) {
+                    a != &b
+                } else {
+                    prev_title != title
+                }
             }
-            self.current = Some(title.to_owned());
+            None => true,
+        };
+
+        if is_different {
+            if let Some((_, prev_title)) = self.current.take() {
+                Self::settle(&prev_title, playlist, stops, completed);
+            }
+            self.current = Some((pos_idx, title.to_owned()));
         }
+
         if let Some(pos) = pos_sec.filter(|p| *p >= 0)
             && let Ok(mut map) = stops.lock()
         {
@@ -517,6 +542,7 @@ impl VisitTracker {
 pub async fn playlist_completion_loop(
     client: MpvClient,
     playlist: HashMap<String, PlaybackData>,
+    ordered_playlist: Vec<PlaybackData>,
     stops: Arc<Mutex<HashMap<String, i64>>>,
     completed: Arc<Mutex<HashMap<String, i64>>>,
     active_episode: Arc<Mutex<Option<String>>>,
@@ -529,14 +555,29 @@ pub async fn playlist_completion_loop(
 
     let mut tracker = VisitTracker::default();
     loop {
-        let title = match client
-            .command("get_property", &[json!("media-title")])
+        let playlist_pos = match client
+            .command("get_property", &[json!("playlist-pos")])
             .await
         {
-            Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
-            Ok(None) => String::new(),
-            Err(_) => break,
+            Ok(Some(v)) => v.as_i64(),
+            _ => None,
         };
+
+        let title = if let Some(idx) = playlist_pos
+            && let Some(ep) = ordered_playlist.get(idx as usize)
+        {
+            ep.media_title.clone()
+        } else {
+            match client
+                .command("get_property", &[json!("media-title")])
+                .await
+            {
+                Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
+                Ok(None) => String::new(),
+                Err(_) => break,
+            }
+        };
+
         // `None` while mpv has no position yet (file still loading); a real
         // `0` (seeked back to the start) is kept so it overwrites stale values.
         let mut pos_sec: Option<i64> =
@@ -566,12 +607,12 @@ pub async fn playlist_completion_loop(
             *act = Some(title.clone());
         }
 
-        tracker.observe(&title, pos_sec, &playlist, &stops, &completed);
+        tracker.observe(playlist_pos, &title, pos_sec, &playlist, &stops, &completed);
 
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
-    if let Some(last) = tracker.current.take() {
+    if let Some((_, last)) = tracker.current.take() {
         VisitTracker::settle(&last, &playlist, &stops, &completed);
     }
 }
@@ -681,6 +722,7 @@ pub async fn realtime_playing_feedback_loop(
     client: MpvClient,
     http: HttpClient,
     playlist: HashMap<String, PlaybackData>,
+    ordered_playlist: Vec<PlaybackData>,
     cancel_tx: Option<UnboundedSender<String>>,
     realtime_started: Arc<AtomicBool>,
     stops: Arc<Mutex<HashMap<String, i64>>>,
@@ -704,23 +746,48 @@ pub async fn realtime_playing_feedback_loop(
     let mut pause_started_at: Option<std::time::Instant> = None;
 
     loop {
-        // Poll mpv: only Err means IPC disconnected. Ok(None) means the
-        // property is not yet available (mpv still loading) — treat as a
-        // safe default and retry rather than exiting the loop prematurely.
-        let title = match client
-            .command("get_property", &[serde_json::json!("media-title")])
+        let playlist_pos = match client
+            .command("get_property", &[serde_json::json!("playlist-pos")])
             .await
         {
-            Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
-            Ok(None) => String::new(),
-            Err(_) => break,
+            Ok(Some(v)) => v.as_i64(),
+            _ => None,
         };
-        let pos_sec: i64 = match client
+
+        let (title, ep) = if let Some(idx) = playlist_pos
+            && let Some(ep) = ordered_playlist.get(idx as usize)
+        {
+            (ep.media_title.clone(), Some(ep))
+        } else {
+            let title = match client
+                .command("get_property", &[serde_json::json!("media-title")])
+                .await
+            {
+                Ok(Some(v)) => v.as_str().map(str::to_owned).unwrap_or_default(),
+                Ok(None) => String::new(),
+                Err(_) => break,
+            };
+            let ep = playlist.get(&title).or_else(|| {
+                if data.media_title == title {
+                    Some(&data)
+                } else {
+                    None
+                }
+            });
+            (title, ep)
+        };
+
+        let Some(ep) = ep else {
+            tokio::time::sleep(poll_interval).await;
+            continue;
+        };
+
+        let pos_sec_opt: Option<i64> = match client
             .command("get_property", &[serde_json::json!("time-pos")])
             .await
         {
-            Ok(Some(v)) => v.as_f64().unwrap_or(0.0) as i64,
-            Ok(None) => 0,
+            Ok(Some(v)) => Some(v.as_f64().unwrap_or(0.0) as i64),
+            Ok(None) => None,
             Err(_) => break,
         };
         let paused: bool = match client
@@ -733,18 +800,6 @@ pub async fn realtime_playing_feedback_loop(
         };
 
         let pause_changed = paused != was_paused;
-
-        let ep = playlist.get(&title).or_else(|| {
-            if data.media_title == title {
-                Some(&data)
-            } else {
-                None
-            }
-        });
-        let Some(ep) = ep else {
-            tokio::time::sleep(poll_interval).await;
-            continue;
-        };
 
         if last_key.as_deref() != Some(&title) {
             // Episode changed: cancel stale download, send End + Start.
@@ -787,17 +842,24 @@ pub async fn realtime_playing_feedback_loop(
                     let _ = mark_as_played(&http, &prev_ep).await;
                 }
             }
-            let _ = realtime_progress(&http, ep, pos_sec, PlaybackEvent::Start)
+            let start_pos = pos_sec_opt.unwrap_or(0);
+            let _ = realtime_progress(&http, ep, start_pos, PlaybackEvent::Start)
                 .await;
             realtime_started.store(true, Ordering::Release);
             last_key = Some(title.clone());
             last_ep = Some(ep.clone());
-            req_sec = pos_sec;
+            req_sec = start_pos;
             was_paused = paused;
             last_heartbeat = std::time::Instant::now();
             tokio::time::sleep(poll_interval).await;
             continue;
         }
+
+        // Within the same episode, do not report fake 0s while mpv is still loading/opening
+        let Some(pos_sec) = pos_sec_opt else {
+            tokio::time::sleep(poll_interval).await;
+            continue;
+        };
 
         // Pause/resume transition: report exactly once, then switch cadence.
         if pause_changed {

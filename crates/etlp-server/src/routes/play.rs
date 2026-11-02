@@ -210,7 +210,7 @@ async fn run_player_chain(
     // that all entries (including those before the current episode) appear in
     // the playlist panel immediately, and titles come from #EXTINF rather than
     // a post-launch IPC write (which is silently discarded in mpv ≥0.38).
-    let (launch_media_path, launch_playlist_start, launch_cur_idx) =
+    let (launch_media_path, launch_playlist_start, launch_cur_idx, ordered_episodes) =
         if play_multiple && kind.is_mpv_family() {
             let cur_idx = episode_list
                 .iter()
@@ -277,6 +277,7 @@ async fn run_player_chain(
                         m3u8_path.display().to_string(),
                         Some(windowed_cur_idx),
                         cur_idx,
+                        windowed.to_vec(),
                     )
                 }
                 Err(e) => {
@@ -285,11 +286,11 @@ async fn run_player_chain(
                         "M3U8 write failed ({e}); \
                          falling back to direct media path"
                     );
-                    (data.media_path.clone(), None, cur_idx)
+                    (data.media_path.clone(), None, cur_idx, episode_list.clone())
                 }
             }
         } else {
-            (data.media_path.clone(), None, 0)
+            (data.media_path.clone(), None, 0, episode_list.clone())
         };
 
     // `media_path` is the resolved play URL (HTTP stream or translated local path).
@@ -586,6 +587,7 @@ async fn run_player_chain(
     }
 
     // Register all episodes for progress tracking.
+    mgr.set_ordered_playlist(ordered_episodes);
     for ep in &episode_list {
         mgr.register_playlist(ep.media_title.clone(), ep.clone());
     }
