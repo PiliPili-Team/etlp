@@ -41,9 +41,6 @@ const DOMAIN: &str = "bangumi";
 const PATH_SUBJECTS: &str = "subjects";
 const PATH_EPISODES: &str = "episodes";
 const PATH_SEARCH_SUBJECTS: &str = "search/subjects";
-/// Legacy (non-v0) search path: `GET /search/subject/{keyword}`.
-/// Not under `/v0/` — must be joined against the root host.
-const PATH_LEGACY_SEARCH: &str = "search/subject";
 const PATH_ME: &str = "me";
 
 // ── Shared read cache ─────────────────────────────────────────────────────────
@@ -1107,174 +1104,6 @@ impl BangumiApi {
         );
         candidates
     }
-
-    /// Fallback keyword search using the legacy (non-v0) BGM API.
-    ///
-    /// Called when the v0 `POST /v0/search/subjects` returns zero candidates.
-    /// The legacy endpoint lives at `GET /search/subject/{keyword}` — **outside**
-    /// the `/v0/` namespace — so the base URL must be stripped of its `/v0` suffix
-    /// before constructing the request.  `responseGroup=large` ensures the
-    /// response includes `air_date` and rank/score fields needed for filtering.
-    ///
-    /// Results are cached under `"legacy_search:{keyword}"` in the shared Moka
-    /// cache to avoid hammering the API on repeated calls for the same keyword.
-    pub(crate) async fn search_subjects_legacy_api(
-        &self,
-        keyword: &str,
-        all_keywords: &[&str],
-    ) -> Vec<crate::bangumi_web::SubjectCandidate> {
-        let cache_key: Arc<str> = format!("legacy_search:{keyword}").into();
-        if let Some(cached) = self.cache.get(&cache_key).await {
-            return Self::parse_legacy_candidates(cached, all_keywords);
-        }
-
-        // Strip the `/v0` suffix: legacy API is at the host root.
-        let root = self
-            .base_url
-            .trim_end_matches('/')
-            .strip_suffix("/v0")
-            .unwrap_or_else(|| self.base_url.trim_end_matches('/'));
-
-        // Percent-encode the keyword for safe embedding in a URL path segment.
-        let encoded = Self::percent_encode_path(keyword);
-        let url = format!("{root}/{PATH_LEGACY_SEARCH}/{encoded}");
-
-        debug!(keyword, url, "bangumi: legacy_search GET");
-
-        let resp = match self
-            .http
-            .get(&url)
-            .headers(self.auth_headers())
-            .query(&[("type", "2"), ("responseGroup", "large")])
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                debug!(keyword, "bangumi: legacy_search failed: {e}");
-                return Vec::new();
-            }
-        };
-
-        if !resp.status().is_success() {
-            debug!(
-                keyword,
-                status = resp.status().as_u16(),
-                "bangumi: legacy_search non-200"
-            );
-            return Vec::new();
-        }
-
-        let val: serde_json::Value = match resp.json().await {
-            Ok(v) => v,
-            Err(e) => {
-                debug!(keyword, "bangumi: legacy_search parse failed: {e}");
-                return Vec::new();
-            }
-        };
-
-        self.cache.insert(cache_key, val.clone()).await;
-
-        let candidates = Self::parse_legacy_candidates(val, all_keywords);
-        debug!(keyword, hits = candidates.len(), "bangumi: legacy_search");
-        candidates
-    }
-
-    /// Parse the legacy `{ "list": [...] }` response into `SubjectCandidate`s.
-    ///
-    /// Candidates are scored against the full `all_keywords` set (original title
-    /// + series name) and the highest similarity wins, mirroring the v0 path.
-    fn parse_legacy_candidates(
-        val: serde_json::Value,
-        all_keywords: &[&str],
-    ) -> Vec<crate::bangumi_web::SubjectCandidate> {
-        use crate::bangumi_web::{
-            BANGUMI_CANDIDATE_PRESCREEN_SCORE, SubjectCandidate,
-            base_match_score,
-        };
-
-        #[derive(serde::Deserialize)]
-        struct LegacyEntry {
-            id: u64,
-            name: String,
-            #[serde(default)]
-            name_cn: String,
-        }
-
-        let items: Vec<LegacyEntry> = val
-            .get("list")
-            .and_then(|l| serde_json::from_value(l.clone()).ok())
-            .unwrap_or_default();
-
-        items
-            .into_iter()
-            .filter_map(|e| {
-                let (name, name_jp) = if e.name_cn.is_empty() {
-                    (e.name.clone(), None)
-                } else {
-                    (e.name_cn.clone(), Some(e.name.clone()))
-                };
-                let score = all_keywords
-                    .iter()
-                    .map(|k| {
-                        base_match_score(
-                            k,
-                            &name,
-                            name_jp.as_deref().unwrap_or(""),
-                        )
-                    })
-                    .fold(0.0_f64, f64::max);
-                let pass = score >= BANGUMI_CANDIDATE_PRESCREEN_SCORE;
-                debug!(
-                    subject_id = e.id,
-                    name = %name,
-                    score,
-                    result = if pass { "pass" } else { "skip" },
-                    "bangumi: legacy_candidate_prescreen"
-                );
-                pass.then_some(SubjectCandidate {
-                    subject_id: e.id,
-                    name,
-                    name_jp,
-                })
-            })
-            .collect()
-    }
-
-    /// Percent-encode a string for safe use in a URL path segment.
-    ///
-    /// Unreserved characters (`A-Z a-z 0-9 - _ . ~`) pass through unchanged;
-    /// everything else (including spaces and non-ASCII) is encoded as `%XX`.
-    fn percent_encode_path(s: &str) -> String {
-        let mut out = String::with_capacity(s.len() * 2);
-        for byte in s.bytes() {
-            match byte {
-                b'A'..=b'Z'
-                | b'a'..=b'z'
-                | b'0'..=b'9'
-                | b'-'
-                | b'_'
-                | b'.'
-                | b'~' => {
-                    out.push(byte as char);
-                }
-                b => {
-                    out.push('%');
-                    out.push(
-                        char::from_digit(u32::from(b >> 4), 16)
-                            .unwrap_or('0')
-                            .to_ascii_uppercase(),
-                    );
-                    out.push(
-                        char::from_digit(u32::from(b & 0x0f), 16)
-                            .unwrap_or('0')
-                            .to_ascii_uppercase(),
-                    );
-                }
-            }
-        }
-        out
-    }
 }
 
 // ── Web-scrape resolution algorithm ────────────────────────────────────────────
@@ -1361,48 +1190,6 @@ async fn search_and_collect_keyword_v0(
     }
 }
 
-async fn search_and_collect_keyword_legacy(
-    keyword: &str,
-    all_keywords: &[&str],
-    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
-    api: &BangumiApi,
-    seen: &mut std::collections::HashSet<u64>,
-    details: &mut Vec<crate::bangumi_web::SubjectDetail>,
-) {
-    use std::collections::hash_map::Entry;
-
-    debug!(
-        keyword,
-        "bangumi: v0 search empty, trying legacy API fallback"
-    );
-    let key = format!("legacy:{}", keyword);
-    if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone()) {
-        let results =
-            api.search_subjects_legacy_api(keyword, all_keywords).await;
-        e.insert(results);
-    }
-    let candidates = scrape_cache
-        .search_results
-        .get(&key)
-        .map(|v| v.to_vec())
-        .unwrap_or_default();
-
-    for candidate in candidates {
-        let id = candidate.subject_id;
-        if !seen.insert(id) {
-            continue;
-        }
-        if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
-            && let Some(d) = api.fetch_subject_detail_api(id).await
-        {
-            e.insert(d);
-        }
-        if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
-            details.push(d);
-        }
-    }
-}
-
 /// Collect [`SubjectDetail`]s for all candidates found by `keywords` (and fallback `alt_titles`).
 ///
 /// `air_date_from` / `air_date_to` are pre-computed `"YYYY-MM-DD"` bounds passed
@@ -1453,24 +1240,6 @@ async fn collect_details(
                 scrape_cache,
                 api,
                 air_dates,
-                &mut seen,
-                &mut details,
-            )
-            .await;
-            if !details.is_empty() {
-                break;
-            }
-        }
-    }
-
-    // ── Phase 3: Legacy pure-text API fallback (when v0 search yielded nothing) ──
-    if details.is_empty() {
-        for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
-            search_and_collect_keyword_legacy(
-                keyword.trim(),
-                &all_keywords,
-                scrape_cache,
-                api,
                 &mut seen,
                 &mut details,
             )
@@ -1952,9 +1721,9 @@ fn select_subject_by_start_date_fuzzy(
 /// Steps:
 /// 1. Compute the search window: `search_floor_date ± 2 days` (the series'
 ///    first air date; falls back to `season_premiere_date`).
-/// 2. Search the BGM JSON API with that filter; fallback to legacy API
-///    when v0 returns nothing (Stage 2.3); retry with ±15 day window when
-///    both return nothing (Stage 2.4).
+/// 2. Search the BGM v0 JSON API with that filter (Stage 1); retry with ±15 day
+///    fuzzy window when normal window returns nothing (Stage 2); fallback to
+///    unbounded pure-text v0 search when both return nothing (Stage 3).
 /// 3. Enrich results via prequel/sequel relation chain.
 /// 4. Select the subject with `start_date` closest to `season_premiere_date`;
 ///    break ties by TMDB alternative-title similarity.
@@ -1983,6 +1752,7 @@ pub async fn resolve_by_web_scrape_with_chain(
         "bangumi: searching subjects"
     );
 
+    // Stage 1: Windowed v0 search (floor ± 2 days)
     let mut details = collect_details(
         req.keywords,
         req.alt_titles,
@@ -1993,6 +1763,59 @@ pub async fn resolve_by_web_scrape_with_chain(
     )
     .await;
 
+    // Stage 2: Fuzzy date retry (floor ± 15 days) if normal window returned nothing
+    let mut is_fuzzy = false;
+    if details.is_empty() {
+        let fuzzy_window = floor.and_then(|d| {
+            Some((date_subtract_days(d, 15)?, date_add_days(d, 15)?))
+        });
+        if let Some((fuzzy_from, fuzzy_to)) = fuzzy_window {
+            warn!(
+                series = req.series,
+                fuzzy_from = %fuzzy_from,
+                fuzzy_to = %fuzzy_to,
+                "bangumi: no subjects found with normal window;                  retrying with ±15 day fuzzy window"
+            );
+            details = collect_details(
+                req.keywords,
+                req.alt_titles,
+                scrape_cache,
+                api,
+                Some(&fuzzy_from),
+                Some(&fuzzy_to),
+            )
+            .await;
+            if !details.is_empty() {
+                is_fuzzy = true;
+            }
+        }
+    }
+
+    // Stage 3: Unbounded pure-text v0 search fallback if date-windowed searches returned nothing
+    if details.is_empty() {
+        warn!(
+            series = req.series,
+            "bangumi: no subjects found within date windows;              falling back to unbounded pure-text v0 search"
+        );
+        details = collect_details(
+            req.keywords,
+            req.alt_titles,
+            scrape_cache,
+            api,
+            None,
+            None,
+        )
+        .await;
+    }
+
+    if details.is_empty() {
+        warn!(
+            series = req.series,
+            "bangumi: no subjects found —              add an ID mapping in Settings → Bangumi"
+        );
+        return None;
+    }
+
     enrich_with_chain(api, &mut details, scrape_cache).await;
 
     info!(
@@ -2000,56 +1823,6 @@ pub async fn resolve_by_web_scrape_with_chain(
         count = details.len(),
         "bangumi: candidate pool after chain enrichment"
     );
-
-    // Stage 2.4: fuzzy date retry — if v0 + legacy search both returned
-    // nothing, widen the premiere lower-bound from −2 days to −15 days and
-    // repeat with a fresh per-call cache (the existing cache would serve the
-    // previous empty v0 result and bypass the retry).  The title similarity
-    // threshold is raised to compensate for the wider date window.
-    if details.is_empty() {
-        // Selection anchor stays the current season's premiere (falling back to
-        // the floor); only the search window is widened, floor − 15 days.
-        let anchor = req.season_premiere_date.or(req.search_floor_date);
-        let fuzzy_window = floor.and_then(|d| {
-            Some((date_subtract_days(d, 15)?, date_add_days(d, 15)?))
-        });
-        if let Some((fuzzy_from, fuzzy_to)) = fuzzy_window {
-            warn!(
-                series = req.series,
-                fuzzy_from,
-                fuzzy_to,
-                "bangumi: no subjects found with normal window; \
-                 retrying with ±15 day fuzzy window"
-            );
-            let mut fuzzy_cache = crate::bangumi_web::ScrapeCache::default();
-            let fuzzy_details = collect_details(
-                req.keywords,
-                req.alt_titles,
-                &mut fuzzy_cache,
-                api,
-                Some(&fuzzy_from),
-                Some(&fuzzy_to),
-            )
-            .await;
-            if let Some(anchor) = anchor
-                && !fuzzy_details.is_empty()
-            {
-                return select_subject_by_start_date_fuzzy(
-                    req.series,
-                    req.keywords,
-                    req.alt_titles,
-                    anchor,
-                    &fuzzy_details,
-                );
-            }
-        }
-        warn!(
-            series = req.series,
-            "bangumi: no subjects found — \
-             add an ID mapping in Settings → Bangumi"
-        );
-        return None;
-    }
 
     // Primary path: match the target episode's air_date against each subject's
     // episode list. Candidates are pre-ranked by (date_diff ASC, title_score
@@ -2247,6 +2020,15 @@ pub async fn resolve_by_web_scrape_with_chain(
     // Fallback when no episode air_date is available: rank by start_date
     // proximity, then by title similarity.
     if let Some(anchor) = req.season_premiere_date {
+        if is_fuzzy {
+            return select_subject_by_start_date_fuzzy(
+                req.series,
+                req.keywords,
+                req.alt_titles,
+                anchor,
+                &details,
+            );
+        }
         let id = select_subject_by_start_date(
             req.series,
             req.keywords,
@@ -4567,15 +4349,35 @@ mod tests {
         assert!(results.is_empty());
     }
 
-    // ── legacy search fallback (Stage 2.3) ───────────────────────────────────
+    // ── pure-text v0 fallback (Stage 3) ──────────────────────────────────────
 
     #[tokio::test]
-    async fn legacy_search_fallback_fires_when_v0_empty() {
+    async fn pure_text_v0_fallback_fires_when_windowed_search_empty() {
         let server = MockServer::start().await;
 
-        // v0 returns nothing.
+        // Stage 3 unbounded search (no air_date in filter) returns subject 999.
         Mock::given(method("POST"))
             .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "keyword": "AnimeA",
+                "filter": { "type": [2] }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{ "id": 999, "name": "AnimeA", "name_cn": "",
+                               "rank": 100, "rating": { "score": 8.0 } }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        // Normal window (premiere ± 2 days = 2024-04-05) returns nothing.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "filter": { "air_date": [">=2024-04-05"] }
+            })))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(
                     serde_json::json!({ "total": 0, "data": [] }),
@@ -4584,17 +4386,20 @@ mod tests {
             .mount(&server)
             .await;
 
-        // Legacy API returns one hit.
-        Mock::given(method("GET"))
-            .and(path("/search/subject/AnimeA"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({
-                    "results": 1,
-                    "list": [{ "id": 999, "name": "AnimeA", "name_cn": "" }]
-                }),
-            ))
+        // Fuzzy window (premiere ± 15 days = 2024-03-23) also returns nothing.
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "filter": { "air_date": [">=2024-03-23"] }
+            })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
             .mount(&server)
             .await;
+
         // Subject / episode details needed by collect_details.
         mount_api_subject(&server, 999, "AnimeA", Some("2024-04-07")).await;
         mount_api_episodes(&server, 999, (1..=12).collect()).await;
@@ -4611,21 +4416,16 @@ mod tests {
             episode_air_date: None,
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
-        // Legacy fallback should deliver subject 999.
         assert_eq!(id, Some(999));
     }
 
-    // ── fuzzy date retry (Stage 2.4) ─────────────────────────────────────────
+    // ── fuzzy date retry (Stage 2) ───────────────────────────────────────────
 
     #[tokio::test]
-    async fn fuzzy_retry_fires_when_both_v0_and_legacy_empty() {
+    async fn fuzzy_retry_fires_when_normal_window_empty() {
         let server = MockServer::start().await;
 
-        // First v0 call (normal window): returns nothing.
-        // Second v0 call (fuzzy window, 15 days): returns the subject.
-        // Wiremock can't distinguish by request body easily in sequence, so
-        // we accept any POST to /search/subjects — the first returns empty,
-        // the rest return the subject. Using `up_to` to allow both calls.
+        // Second v0 call (fuzzy window, 15 days): returns subject 777.
         Mock::given(method("POST"))
             .and(path("/search/subjects"))
             .and(wiremock::matchers::body_partial_json(serde_json::json!({
@@ -4642,7 +4442,8 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        // The first call (premiere − 2 days = 2024-04-05) returns nothing.
+
+        // First v0 call (normal window, premiere − 2 days = 2024-04-05) returns nothing.
         Mock::given(method("POST"))
             .and(path("/search/subjects"))
             .and(wiremock::matchers::body_partial_json(serde_json::json!({
@@ -4655,16 +4456,7 @@ mod tests {
             )
             .mount(&server)
             .await;
-        // Legacy search also returns nothing.
-        Mock::given(method("GET"))
-            .and(path("/search/subject/RareFuzzyAnime"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(
-                    serde_json::json!({ "results": 0, "list": [] }),
-                ),
-            )
-            .mount(&server)
-            .await;
+
         // Subject/episode details for the fuzzy-found subject.
         mock_subject_and_episodes(&server, 777, "RareFuzzyAnime", "2024-04-07")
             .await;
@@ -5041,25 +4833,6 @@ mod tests {
         let api = make_api(&server).await;
         api.maybe_mark_subject_watched(10).await.unwrap();
         // Verification: if the mock's .expect(0) fires a POST, it panics at drop.
-    }
-
-    // ── percent_encode_path ───────────────────────────────────────────────────
-
-    #[test]
-    fn percent_encode_path_encodes_spaces_and_special_chars() {
-        assert_eq!(
-            BangumiApi::percent_encode_path("進撃の巨人"),
-            "%E9%80%B2%E6%92%83%E3%81%AE%E5%B7%A8%E4%BA%BA"
-        );
-        assert_eq!(BangumiApi::percent_encode_path("Re:Zero"), "Re%3AZero");
-        assert_eq!(
-            BangumiApi::percent_encode_path("unreserved-_.~"),
-            "unreserved-_.~"
-        );
-        assert_eq!(
-            BangumiApi::percent_encode_path("hello world"),
-            "hello%20world"
-        );
     }
 
     #[tokio::test]

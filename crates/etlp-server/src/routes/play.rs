@@ -2420,16 +2420,33 @@ async fn resolve_bangumi_subject(
         };
 
         // Use the media server's clean metadata: the localised `Name` and the
-        // native `OriginalTitle`. The player-facing `media_title` is avoided
-        // because it carries year/quality/filename noise that pollutes the
-        // BGM keyword search.
-        let mut movie_keywords: Vec<&str> = Vec::new();
+        // native `OriginalTitle`, augmented with TMDB's `original_title`.
+        let mut movie_keywords: Vec<String> = Vec::new();
         for s in [data.original_title.as_str(), data.item_name.as_str()] {
-            if !s.trim().is_empty() && !movie_keywords.contains(&s) {
-                movie_keywords.push(s);
+            let s_trimmed = s.trim();
+            if !s_trimmed.is_empty()
+                && !movie_keywords
+                    .iter()
+                    .any(|k| k.eq_ignore_ascii_case(s_trimmed))
+            {
+                movie_keywords.push(s_trimmed.to_string());
             }
         }
-        if movie_keywords.is_empty() {
+        if tmdb_movie_id > 0
+            && let Some(orig) = tmdb.movie_original_title(tmdb_movie_id).await
+        {
+            let orig_trimmed = orig.trim();
+            if !orig_trimmed.is_empty()
+                && !movie_keywords
+                    .iter()
+                    .any(|k| k.eq_ignore_ascii_case(orig_trimmed))
+            {
+                movie_keywords.push(orig_trimmed.to_string());
+            }
+        }
+        let movie_keyword_refs: Vec<&str> =
+            movie_keywords.iter().map(|s| s.as_str()).collect();
+        if movie_keyword_refs.is_empty() {
             debug!("bangumi: no title keywords for movie, skip");
             return None;
         }
@@ -2439,7 +2456,7 @@ async fn resolve_bangumi_subject(
         let alt_titles = tmdb.movie_alternative_titles(tmdb_movie_id).await;
         let req = etlp_sync::WebScrapeReq {
             series: &data.item_name,
-            keywords: &movie_keywords,
+            keywords: &movie_keyword_refs,
             alt_titles: &alt_titles,
             // Movies have no S01E01; the release date is the only anchor.
             search_floor_date: None,
@@ -2533,23 +2550,34 @@ async fn resolve_bangumi_subject(
         return Some(BangumiTarget::auto(id));
     }
 
-    // Keyword base is the media server's series name only. The episode item's
-    // `original_title` is the single episode's native title (not the series
-    // name), so it is intentionally excluded; the series' native names come
-    // from the best-effort TMDB alternate titles below instead.
-    let keywords: Vec<&str> = [data.series_name.as_str()]
-        .into_iter()
-        .filter(|s| !s.trim().is_empty())
-        .collect();
-    if keywords.is_empty() {
-        debug!("bangumi: no title keywords for fallback, skip");
-        return None;
-    }
-
     let tmdb_series_id: Option<u64> = series_provider_ids
         .get("Tmdb")
         .filter(|v| !v.is_empty())
         .and_then(|v| v.parse::<u64>().ok());
+
+    // Primary keywords: media server's series name + TMDB's original series name.
+    let mut keywords: Vec<String> = Vec::new();
+    let series_name = data.series_name.trim();
+    if !series_name.is_empty() {
+        keywords.push(series_name.to_string());
+    }
+    if let Some(tid) = tmdb_series_id
+        && let Some(orig) = tmdb.series_original_name(tid).await
+    {
+        let orig_trimmed = orig.trim();
+        if !orig_trimmed.is_empty()
+            && !keywords
+                .iter()
+                .any(|k| k.eq_ignore_ascii_case(orig_trimmed))
+        {
+            keywords.push(orig_trimmed.to_string());
+        }
+    }
+    let keyword_refs: Vec<&str> = keywords.iter().map(|s| s.as_str()).collect();
+    if keyword_refs.is_empty() {
+        debug!("bangumi: no title keywords for fallback, skip");
+        return None;
+    }
 
     let s_u32 = data.season_number.and_then(|s| u32::try_from(s).ok());
     let ep_u32 = u32::try_from(ep_index).ok();
@@ -2673,7 +2701,7 @@ async fn resolve_bangumi_subject(
 
     let req = etlp_sync::WebScrapeReq {
         series: &data.series_name,
-        keywords: &keywords,
+        keywords: &keyword_refs,
         alt_titles: &alt_titles,
         search_floor_date: search_floor_date.as_deref(),
         season_premiere_date: season_premiere_date.as_deref(),

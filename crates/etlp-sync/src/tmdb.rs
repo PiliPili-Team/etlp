@@ -54,7 +54,13 @@ pub enum TmdbCacheKey {
     Movie {
         tmdb_id: u64,
     },
+    MovieOriginalTitle {
+        tmdb_id: u64,
+    },
     Series {
+        tmdb_id: u64,
+    },
+    SeriesOriginalName {
         tmdb_id: u64,
     },
     Season {
@@ -81,12 +87,16 @@ struct TmdbGenre {
 struct TmdbMovieDetail {
     release_date: Option<String>,
     #[serde(default)]
+    original_title: Option<String>,
+    #[serde(default)]
     genres: Vec<TmdbGenre>,
 }
 
 #[derive(Debug, Deserialize)]
 struct TmdbSeriesDetail {
     first_air_date: Option<String>,
+    #[serde(default)]
+    original_name: Option<String>,
     #[serde(default)]
     genres: Vec<TmdbGenre>,
 }
@@ -179,6 +189,28 @@ impl TmdbClient {
     }
 
     // ── Public lookup methods ─────────────────────────────────────────────────
+
+    /// Return the original title of a movie (TMDB `original_title`), or `None`.
+    pub async fn movie_original_title(&self, tmdb_id: u64) -> Option<String> {
+        let key = TmdbCacheKey::MovieOriginalTitle { tmdb_id };
+        if let Some(cached) = self.cache.lock().await.get(&key).cloned() {
+            debug!(tmdb_id, "tmdb: movie original title cache hit");
+            return cached;
+        }
+        let (_, orig, _) = self.fetch_movie_detail(tmdb_id).await;
+        orig
+    }
+
+    /// Return the original name of a TV series (TMDB `original_name`), or `None`.
+    pub async fn series_original_name(&self, tmdb_id: u64) -> Option<String> {
+        let key = TmdbCacheKey::SeriesOriginalName { tmdb_id };
+        if let Some(cached) = self.cache.lock().await.get(&key).cloned() {
+            debug!(tmdb_id, "tmdb: series original name cache hit");
+            return cached;
+        }
+        let (_, orig, _) = self.fetch_series_detail(tmdb_id).await;
+        orig
+    }
 
     /// Return the release date of a movie as `"YYYY-MM-DD"`, or `None`.
     ///
@@ -312,8 +344,11 @@ impl TmdbClient {
                 let others: Vec<String> = resp
                     .titles
                     .iter()
-                    .filter(|t| t.country != "JP" && !t.title.is_empty())
-                    .map(|t| t.title.clone())
+                    .filter(|t| {
+                        matches!(t.country.as_str(), "CN" | "TW" | "HK")
+                            && !t.title.trim().is_empty()
+                    })
+                    .map(|t| t.title.trim().to_string())
                     .collect();
                 jp.extend(others);
                 jp.dedup();
@@ -359,8 +394,11 @@ impl TmdbClient {
                 let others: Vec<String> = resp
                     .results
                     .iter()
-                    .filter(|t| t.country != "JP" && !t.title.is_empty())
-                    .map(|t| t.title.clone())
+                    .filter(|t| {
+                        matches!(t.country.as_str(), "CN" | "TW" | "HK")
+                            && !t.title.trim().is_empty()
+                    })
+                    .map(|t| t.title.trim().to_string())
                     .collect();
                 jp.extend(others);
                 jp.dedup();
@@ -386,7 +424,7 @@ impl TmdbClient {
             debug!(tmdb_id, "tmdb: movie genres cache hit");
             return cached;
         }
-        let genres = self.fetch_movie_detail(tmdb_id).await.1;
+        let genres = self.fetch_movie_detail(tmdb_id).await.2;
         self.genre_cache.lock().await.put(key, genres.clone());
         genres
     }
@@ -399,7 +437,7 @@ impl TmdbClient {
             debug!(tmdb_id, "tmdb: series genres cache hit");
             return cached;
         }
-        let genres = self.fetch_series_detail(tmdb_id).await.1;
+        let genres = self.fetch_series_detail(tmdb_id).await.2;
         self.genre_cache.lock().await.put(key, genres.clone());
         genres
     }
@@ -413,40 +451,44 @@ impl TmdbClient {
     async fn fetch_movie_detail(
         &self,
         tmdb_id: u64,
-    ) -> (Option<String>, Vec<String>) {
+    ) -> (Option<String>, Option<String>, Vec<String>) {
         let url = self.url(&format!("movie/{tmdb_id}"));
         let builder = self.http.get(&url).query(&self.params());
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
                 note_tmdb_error("movie detail", &e);
-                return (None, Vec::new());
+                return (None, None, Vec::new());
             }
         };
         match curl::json_logged::<TmdbMovieDetail>(DOMAIN, logged).await {
             Ok(detail) => {
                 let date = detail.release_date.filter(|d| !d.is_empty());
+                let orig =
+                    detail.original_title.filter(|t| !t.trim().is_empty());
                 if date.is_none() {
                     warn!(tmdb_id, "tmdb: movie has no release_date");
                 } else {
                     debug!(tmdb_id, date = ?date, "tmdb: movie date resolved");
                 }
                 let genres = extract_genre_names(&detail.genres);
-                self.cache
-                    .lock()
-                    .await
-                    .put(TmdbCacheKey::Movie { tmdb_id }, date.clone());
-                (date, genres)
+                let mut cache = self.cache.lock().await;
+                cache.put(TmdbCacheKey::Movie { tmdb_id }, date.clone());
+                cache.put(
+                    TmdbCacheKey::MovieOriginalTitle { tmdb_id },
+                    orig.clone(),
+                );
+                (date, orig, genres)
             }
             Err(e) => {
                 note_tmdb_error("movie detail", &e);
-                (None, Vec::new())
+                (None, None, Vec::new())
             }
         }
     }
 
     async fn fetch_movie_date(&self, tmdb_id: u64) -> Option<String> {
-        let (date, genres) = self.fetch_movie_detail(tmdb_id).await;
+        let (date, _, genres) = self.fetch_movie_detail(tmdb_id).await;
         self.genre_cache.lock().await.put((true, tmdb_id), genres);
         date
     }
@@ -454,40 +496,44 @@ impl TmdbClient {
     async fn fetch_series_detail(
         &self,
         tmdb_id: u64,
-    ) -> (Option<String>, Vec<String>) {
+    ) -> (Option<String>, Option<String>, Vec<String>) {
         let url = self.url(&format!("tv/{tmdb_id}"));
         let builder = self.http.get(&url).query(&self.params());
         let logged = match curl::send_logged(DOMAIN, builder).await {
             Ok(l) => l,
             Err(e) => {
                 note_tmdb_error("series detail", &e);
-                return (None, Vec::new());
+                return (None, None, Vec::new());
             }
         };
         match curl::json_logged::<TmdbSeriesDetail>(DOMAIN, logged).await {
             Ok(detail) => {
                 let date = detail.first_air_date.filter(|d| !d.is_empty());
+                let orig =
+                    detail.original_name.filter(|n| !n.trim().is_empty());
                 if date.is_none() {
                     warn!(tmdb_id, "tmdb: series has no first_air_date");
                 } else {
                     debug!(tmdb_id, date = ?date, "tmdb: series date resolved");
                 }
                 let genres = extract_genre_names(&detail.genres);
-                self.cache
-                    .lock()
-                    .await
-                    .put(TmdbCacheKey::Series { tmdb_id }, date.clone());
-                (date, genres)
+                let mut cache = self.cache.lock().await;
+                cache.put(TmdbCacheKey::Series { tmdb_id }, date.clone());
+                cache.put(
+                    TmdbCacheKey::SeriesOriginalName { tmdb_id },
+                    orig.clone(),
+                );
+                (date, orig, genres)
             }
             Err(e) => {
                 note_tmdb_error("series detail", &e);
-                (None, Vec::new())
+                (None, None, Vec::new())
             }
         }
     }
 
     async fn fetch_series_date(&self, tmdb_id: u64) -> Option<String> {
-        let (date, genres) = self.fetch_series_detail(tmdb_id).await;
+        let (date, _, genres) = self.fetch_series_detail(tmdb_id).await;
         self.genre_cache.lock().await.put((false, tmdb_id), genres);
         date
     }
@@ -820,6 +866,10 @@ mod tests {
                 serde_json::json!({
                     "id": 286361,
                     "results": [
+                        { "iso_3166_1": "KR", "title": "루루와 리리",
+                          "type": "" },
+                        { "iso_3166_1": "DE", "title": "Lulu und Lili",
+                          "type": "" },
                         { "iso_3166_1": "CN", "title": "魔法的姐妹露露和莉莉",
                           "type": "" },
                         { "iso_3166_1": "JP", "title": "魔法の姉妹ルルットリリィ",
@@ -834,12 +884,14 @@ mod tests {
 
         let client = make_client(&server).await;
         let titles = client.series_alternative_titles(286361).await;
-        // JP title must come first.
+        // JP title must come first, non-CJK (KR, DE) must be filtered out.
         assert_eq!(
             titles.first().map(String::as_str),
             Some("魔法の姉妹ルルットリリィ")
         );
         assert!(titles.contains(&"魔法姐妹露露特莉莉".to_owned()));
+        assert!(!titles.contains(&"루루와 리리".to_owned()));
+        assert!(!titles.contains(&"Lulu und Lili".to_owned()));
         assert_eq!(titles.len(), 3);
     }
 
@@ -896,5 +948,71 @@ mod tests {
         let client = make_client(&server).await;
         let date = client.movie_release_date(55).await;
         assert!(date.is_some());
+    }
+
+    #[tokio::test]
+    async fn series_original_name_cached_on_detail_fetch() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/61415"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "id": 61415,
+                    "first_air_date": "2014-10-12",
+                    "original_name": "Fate/stay night [Unlimited Blade Works]",
+                    "genres": []
+                }),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let name = client.series_original_name(61415).await;
+        assert_eq!(
+            name.as_deref(),
+            Some("Fate/stay night [Unlimited Blade Works]")
+        );
+        // Second call hits cache
+        let name2 = client.series_original_name(61415).await;
+        assert_eq!(
+            name2.as_deref(),
+            Some("Fate/stay night [Unlimited Blade Works]")
+        );
+        // first_air_date is also populated in cache without a second network call
+        let date = client.series_first_air_date(61415).await;
+        assert_eq!(date.as_deref(), Some("2014-10-12"));
+    }
+
+    #[tokio::test]
+    async fn movie_original_title_cached_on_detail_fetch() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/movie/999"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "id": 999,
+                    "release_date": "2010-01-23",
+                    "original_title": "Fate/stay night UNLIMITED BLADE WORKS",
+                    "genres": []
+                }),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let title = client.movie_original_title(999).await;
+        assert_eq!(
+            title.as_deref(),
+            Some("Fate/stay night UNLIMITED BLADE WORKS")
+        );
+        let title2 = client.movie_original_title(999).await;
+        assert_eq!(
+            title2.as_deref(),
+            Some("Fate/stay night UNLIMITED BLADE WORKS")
+        );
+        let date = client.movie_release_date(999).await;
+        assert_eq!(date.as_deref(), Some("2010-01-23"));
     }
 }
