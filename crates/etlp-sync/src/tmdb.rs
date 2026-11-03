@@ -57,6 +57,10 @@ pub enum TmdbCacheKey {
     Series {
         tmdb_id: u64,
     },
+    Season {
+        tmdb_id: u64,
+        season: u32,
+    },
     Episode {
         tmdb_id: u64,
         season: u32,
@@ -85,6 +89,19 @@ struct TmdbSeriesDetail {
     first_air_date: Option<String>,
     #[serde(default)]
     genres: Vec<TmdbGenre>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TmdbSeasonEpisodeItem {
+    #[serde(default)]
+    episode_number: Option<u32>,
+    air_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TmdbSeasonDetail {
+    #[serde(default)]
+    episodes: Vec<TmdbSeasonEpisodeItem>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +233,47 @@ impl TmdbClient {
             debug!(tmdb_id, season, episode, "tmdb: episode date cache hit");
             return cached;
         }
+
+        // Try season-level fetch first so an entire season's air dates are populated in one request.
+        let season_key = TmdbCacheKey::Season { tmdb_id, season };
+        let season_attempted =
+            self.cache.lock().await.get(&season_key).is_some();
+
+        if !season_attempted {
+            if let Some(eps) = self.fetch_season_episodes(tmdb_id, season).await
+            {
+                let mut cache = self.cache.lock().await;
+                cache.put(season_key, Some("loaded".into()));
+                for ep in eps {
+                    if let (Some(num), Some(d)) =
+                        (ep.episode_number, ep.air_date)
+                        && !d.is_empty()
+                    {
+                        cache.put(
+                            TmdbCacheKey::Episode {
+                                tmdb_id,
+                                season,
+                                episode: num,
+                            },
+                            Some(d),
+                        );
+                    }
+                }
+                if let Some(cached) = cache.get(&key).cloned() {
+                    debug!(
+                        tmdb_id,
+                        season,
+                        episode,
+                        date = ?cached,
+                        "tmdb: episode date resolved via season prefetch"
+                    );
+                    return cached;
+                }
+            } else {
+                self.cache.lock().await.put(season_key, None);
+            }
+        }
+
         let result = self.fetch_episode_date(tmdb_id, season, episode).await;
         self.cache.lock().await.put(key, result.clone());
         result
@@ -434,6 +492,29 @@ impl TmdbClient {
         date
     }
 
+    async fn fetch_season_episodes(
+        &self,
+        tmdb_id: u64,
+        season: u32,
+    ) -> Option<Vec<TmdbSeasonEpisodeItem>> {
+        let url = self.url(&format!("tv/{tmdb_id}/season/{season}"));
+        let builder = self.http.get(&url).query(&self.params());
+        let logged = match curl::send_logged(DOMAIN, builder).await {
+            Ok(l) => l,
+            Err(e) => {
+                note_tmdb_error("season detail", &e);
+                return None;
+            }
+        };
+        match curl::json_logged::<TmdbSeasonDetail>(DOMAIN, logged).await {
+            Ok(detail) => Some(detail.episodes),
+            Err(e) => {
+                note_tmdb_error("season detail", &e);
+                None
+            }
+        }
+    }
+
     async fn fetch_episode_date(
         &self,
         tmdb_id: u64,
@@ -631,6 +712,35 @@ mod tests {
 
         let client = make_client(&server).await;
         assert!(client.series_first_air_date(2).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn episode_air_date_prefetches_and_caches_entire_season() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/tv/999/season/1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "episodes": [
+                        { "episode_number": 1, "air_date": "2024-01-01" },
+                        { "episode_number": 2, "air_date": "2024-01-08" },
+                        { "episode_number": 3, "air_date": "2024-01-15" }
+                    ]
+                }),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = make_client(&server).await;
+        let d1 = client.episode_air_date(999, 1, 1).await;
+        assert_eq!(d1.as_deref(), Some("2024-01-01"));
+
+        let d2 = client.episode_air_date(999, 1, 2).await;
+        assert_eq!(d2.as_deref(), Some("2024-01-08"));
+
+        let d3 = client.episode_air_date(999, 1, 3).await;
+        assert_eq!(d3.as_deref(), Some("2024-01-15"));
     }
 
     #[tokio::test]

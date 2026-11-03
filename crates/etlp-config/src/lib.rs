@@ -404,6 +404,19 @@ fn default_bangumi_throttle_secs() -> u64 {
     DEFAULT_BANGUMI_THROTTLE_SECS
 }
 
+/// Source preference for an episode or movie's air date during Bangumi synchronization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DatePreference {
+    /// Prefer the locally-reported premiere date from the media server (Emby / Jellyfin);
+    /// fall back to TMDB when absent.
+    #[default]
+    Emby,
+    /// Prefer the canonical air date from TMDB; fall back to the media server
+    /// when absent or when the item has no TMDB ID.
+    Tmdb,
+}
+
 /// `[bangumi]` section — bgm.tv integration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -465,6 +478,13 @@ pub struct BangumiSection {
     /// [`MIN_BANGUMI_THROTTLE_SECS`] on load.
     #[serde(default = "default_bangumi_throttle_secs")]
     pub duplicate_throttle_secs: u64,
+    /// Source preference for an episode/movie's air date during Bangumi synchronization.
+    /// - `"emby"` (default): Prefer the locally-reported premiere date from Emby / Jellyfin;
+    ///   fall back to TMDB when absent.
+    /// - `"tmdb"`: Prefer the canonical air date from TMDB; fall back to the media server
+    ///   when absent or when the item has no TMDB ID.
+    #[serde(default)]
+    pub date_preference: DatePreference,
 }
 
 impl BangumiSection {
@@ -491,6 +511,7 @@ impl Default for BangumiSection {
             history_follow_media_server: false,
             allow_duplicate: false,
             duplicate_throttle_secs: DEFAULT_BANGUMI_THROTTLE_SECS,
+            date_preference: DatePreference::Emby,
         }
     }
 }
@@ -1022,6 +1043,18 @@ speed_dummy = 1.5
     }
 
     #[test]
+    fn bangumi_date_preference_parses_tmdb() {
+        let dir = tempdir().expect("tempdir");
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[bangumi]\ndate_preference = \"tmdb\"\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.bangumi.date_preference, DatePreference::Tmdb);
+    }
+
+    #[test]
     fn bangumi_new_fields_default() {
         let dir = tempdir().expect("tempdir");
         write_config(dir.path(), "config.toml", "[bangumi]\n");
@@ -1038,6 +1071,7 @@ speed_dummy = 1.5
             cfg.bangumi.duplicate_throttle().as_secs(),
             DEFAULT_BANGUMI_THROTTLE_SECS
         );
+        assert_eq!(cfg.bangumi.date_preference, DatePreference::Emby);
     }
 
     #[test]

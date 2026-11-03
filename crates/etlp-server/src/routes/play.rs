@@ -1524,6 +1524,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         history_follow,
         bangumi_allow_dup,
         bangumi_throttle,
+        date_preference,
         tmdb_api_key,
         sync_proxy,
     ) = {
@@ -1550,6 +1551,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
             cfg.bangumi.history_follow_media_server,
             cfg.bangumi.allow_duplicate,
             cfg.bangumi.duplicate_throttle(),
+            cfg.bangumi.date_preference,
             cfg.tmdb.effective_api_key().to_owned(),
             etlp_sync::SyncProxy::new(
                 cfg.dev.proxy_http.clone(),
@@ -1684,6 +1686,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data.premiere_date.clone(),
                 None, // movie path has no S01E01 floor
                 title_fallback,
+                date_preference,
                 &genres,
                 &mappings,
                 &series_provider_ids,
@@ -1870,6 +1873,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 data.premiere_date.clone(),
                 media_server_series_premiere.clone(),
                 title_fallback,
+                date_preference,
                 &genres,
                 &mappings,
                 &series_provider_ids,
@@ -1925,6 +1929,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 anchor_data.premiere_date.clone(),
                 media_server_series_premiere.clone(),
                 title_fallback,
+                date_preference,
                 &genres,
                 &mappings,
                 &series_provider_ids,
@@ -1941,6 +1946,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 s_u32,
                 t.subject_id,
                 t.ep_offset,
+                date_preference,
                 &mut pending,
                 &mut touched,
             )
@@ -1961,6 +1967,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 rem_date,
                 media_server_series_premiere.clone(),
                 title_fallback,
+                date_preference,
                 &genres,
                 &mappings,
                 &series_provider_ids,
@@ -1981,6 +1988,7 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 s_u32,
                 t.subject_id,
                 t.ep_offset,
+                date_preference,
                 &mut pending,
                 &mut touched,
             )
@@ -2026,11 +2034,26 @@ async fn process_backfill_collection(
     season: u32,
     subject_id: u64,
     ep_offset: i64,
+    date_preference: etlp_config::DatePreference,
     pending: &mut std::collections::BTreeMap<i64, Option<String>>,
     touched: &mut std::collections::HashSet<u64>,
 ) -> usize {
     let candidates: Vec<(i64, Option<String>)> =
-        pending.iter().map(|(i, d)| (*i, d.clone())).collect();
+        match (date_preference, tmdb_series_id) {
+            (etlp_config::DatePreference::Tmdb, Some(tid)) => {
+                let mut list = Vec::with_capacity(pending.len());
+                for (&i, d) in pending.iter() {
+                    let tmdb_d = if let Ok(ep_num) = u32::try_from(i) {
+                        tmdb.episode_air_date(tid, season, ep_num).await
+                    } else {
+                        None
+                    };
+                    list.push((i, tmdb_d.or_else(|| d.clone())));
+                }
+                list
+            }
+            _ => pending.iter().map(|(i, d)| (*i, d.clone())).collect(),
+        };
     let mut consumed_count = match etlp_sync::mark_backfill_in_subject(
         api,
         subject_id,
@@ -2059,52 +2082,93 @@ async fn process_backfill_collection(
         }
     };
 
-    // If any episodes remain pending in this collection and we have a TMDB
-    // series ID, check if their Emby air_dates were mismatched/fake and retry
-    // with TMDB air_dates.
-    if !pending.is_empty()
-        && let Some(tid) = tmdb_series_id
-    {
-        let mut tmdb_candidates: Vec<(i64, Option<String>)> = Vec::new();
-        for (&idx, emby_date) in pending.iter() {
-            if let Ok(ep_num) = u32::try_from(idx)
-                && let Some(tmdb_date) =
-                    tmdb.episode_air_date(tid, season, ep_num).await
-                && emby_date.as_deref() != Some(&tmdb_date)
-            {
-                debug!(
-                    subject_id,
-                    episode = idx,
-                    emby_date = ?emby_date,
-                    tmdb_date = %tmdb_date,
-                    "bangumi: retrying pending backfill episode \
-                     with TMDB air_date fallback"
-                );
-                tmdb_candidates.push((idx, Some(tmdb_date)));
+    // If any episodes remain pending in this collection, retry with the alternate date source.
+    if !pending.is_empty() {
+        match date_preference {
+            etlp_config::DatePreference::Tmdb => {
+                let mut emby_candidates: Vec<(i64, Option<String>)> =
+                    Vec::new();
+                for (&idx, emby_date) in pending.iter() {
+                    if emby_date.is_some() {
+                        debug!(
+                            subject_id,
+                            episode = idx,
+                            emby_date = ?emby_date,
+                            "bangumi: retrying pending backfill episode with Emby air_date fallback"
+                        );
+                        emby_candidates.push((idx, emby_date.clone()));
+                    }
+                }
+                if !emby_candidates.is_empty()
+                    && let Ok(outcome) = etlp_sync::mark_backfill_in_subject(
+                        api,
+                        subject_id,
+                        &emby_candidates,
+                        ep_offset,
+                    )
+                    .await
+                {
+                    for idx in &outcome.consumed {
+                        let _ = pending.remove(idx);
+                    }
+                    if !outcome.marked.is_empty() {
+                        info!(
+                            "bangumi: backfill marked {} episode(s) for subject {} via Emby air_date fallback",
+                            outcome.marked.len(),
+                            subject_id
+                        );
+                        let _ = touched.insert(subject_id);
+                    }
+                    consumed_count += outcome.consumed.len();
+                }
             }
-        }
-        if !tmdb_candidates.is_empty()
-            && let Ok(outcome) = etlp_sync::mark_backfill_in_subject(
-                api,
-                subject_id,
-                &tmdb_candidates,
-                ep_offset,
-            )
-            .await
-        {
-            for idx in &outcome.consumed {
-                let _ = pending.remove(idx);
+            etlp_config::DatePreference::Emby => {
+                if let Some(tid) = tmdb_series_id {
+                    let mut tmdb_candidates: Vec<(i64, Option<String>)> =
+                        Vec::new();
+                    for (&idx, emby_date) in pending.iter() {
+                        if let Ok(ep_num) = u32::try_from(idx)
+                            && let Some(tmdb_date) =
+                                tmdb.episode_air_date(tid, season, ep_num).await
+                            && emby_date.as_deref() != Some(&tmdb_date)
+                        {
+                            debug!(
+                                subject_id,
+                                episode = idx,
+                                emby_date = ?emby_date,
+                                tmdb_date = %tmdb_date,
+                                "bangumi: retrying pending backfill episode \
+                                 with TMDB air_date fallback"
+                            );
+                            tmdb_candidates.push((idx, Some(tmdb_date)));
+                        }
+                    }
+                    if !tmdb_candidates.is_empty()
+                        && let Ok(outcome) =
+                            etlp_sync::mark_backfill_in_subject(
+                                api,
+                                subject_id,
+                                &tmdb_candidates,
+                                ep_offset,
+                            )
+                            .await
+                    {
+                        for idx in &outcome.consumed {
+                            let _ = pending.remove(idx);
+                        }
+                        if !outcome.marked.is_empty() {
+                            info!(
+                                "bangumi: backfill marked {} episode(s) for subject \
+                                 {} via TMDB air_date fallback",
+                                outcome.marked.len(),
+                                subject_id
+                            );
+                            let _ = touched.insert(subject_id);
+                        }
+                        consumed_count += outcome.consumed.len();
+                    }
+                }
             }
-            if !outcome.marked.is_empty() {
-                info!(
-                    "bangumi: backfill marked {} episode(s) for subject \
-                     {} via TMDB air_date fallback",
-                    outcome.marked.len(),
-                    subject_id
-                );
-                let _ = touched.insert(subject_id);
-            }
-            consumed_count += outcome.consumed.len();
         }
     }
 
@@ -2148,6 +2212,7 @@ async fn resolve_bangumi_subject(
     ep_premiere_date: Option<String>,
     media_server_series_premiere: Option<String>,
     title_fallback: bool,
+    date_preference: etlp_config::DatePreference,
     genres: &str,
     mappings: &[etlp_sync::SubjectMapping],
     series_provider_ids: &std::collections::BTreeMap<String, String>,
@@ -2286,18 +2351,51 @@ async fn resolve_bangumi_subject(
     // release date (Emby → TMDB) and scored by TMDB alternate title similarity.
     if is_movie {
         let tmdb_movie_id = tmdb_id_for_gate.unwrap_or(0);
-        let release_date: Option<String> = if ep_premiere_date.is_some() {
-            ep_premiere_date.clone()
-        } else {
-            let date = tmdb.movie_release_date(tmdb_movie_id).await;
-            if date.is_none() {
-                info!(
-                    title = %data.media_title,
-                    "bangumi: no release date from Emby or TMDB, \
-                     searching without date filter"
-                );
+        let release_date: Option<String> = match date_preference {
+            etlp_config::DatePreference::Tmdb => {
+                let tmdb_date = if tmdb_movie_id > 0 {
+                    tmdb.movie_release_date(tmdb_movie_id).await
+                } else {
+                    None
+                };
+                if let Some(ref d) = tmdb_date {
+                    debug!(
+                        title = %data.media_title,
+                        release_date = %d,
+                        "bangumi: movie release_date from TMDB (date_preference=tmdb)"
+                    );
+                    tmdb_date
+                } else if ep_premiere_date.is_some() {
+                    debug!(
+                        title = %data.media_title,
+                        release_date = ?ep_premiere_date,
+                        "bangumi: movie release_date fallback from media server (date_preference=tmdb)"
+                    );
+                    ep_premiere_date.clone()
+                } else {
+                    info!(
+                        title = %data.media_title,
+                        "bangumi: no release date from TMDB or Emby, \
+                         searching without date filter"
+                    );
+                    None
+                }
             }
-            date
+            etlp_config::DatePreference::Emby => {
+                if ep_premiere_date.is_some() {
+                    ep_premiere_date.clone()
+                } else {
+                    let date = tmdb.movie_release_date(tmdb_movie_id).await;
+                    if date.is_none() {
+                        info!(
+                            title = %data.media_title,
+                            "bangumi: no release date from Emby or TMDB, \
+                             searching without date filter"
+                        );
+                    }
+                    date
+                }
+            }
         };
 
         // Use the media server's clean metadata: the localised `Name` and the
@@ -2337,29 +2435,58 @@ async fn resolve_bangumi_subject(
         )
         .await;
 
-        if id.is_none() && ep_premiere_date.is_some() && tmdb_movie_id > 0 {
-            let tmdb_date = tmdb.movie_release_date(tmdb_movie_id).await;
-            if let Some(ref tmdb_d) = tmdb_date
-                && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
-            {
-                info!(
-                    title = %data.media_title,
-                    emby_date = ?ep_premiere_date,
-                    tmdb_date = %tmdb_d,
-                    "bangumi: movie resolution with Emby release_date \
-                     yielded no subject; retrying with TMDB release_date \
-                     fallback"
-                );
-                let retry_req = etlp_sync::WebScrapeReq {
-                    season_premiere_date: Some(tmdb_d),
-                    ..req
-                };
-                id = etlp_sync::resolve_by_web_scrape_with_chain(
-                    &retry_req,
-                    scrape_cache,
-                    api,
-                )
-                .await;
+        if id.is_none() && tmdb_movie_id > 0 {
+            match date_preference {
+                etlp_config::DatePreference::Tmdb
+                    if ep_premiere_date.is_some() =>
+                {
+                    info!(
+                        title = %data.media_title,
+                        emby_date = ?ep_premiere_date,
+                        "bangumi: movie resolution with TMDB release_date \
+                         yielded no subject; retrying with Emby release_date \
+                         fallback"
+                    );
+                    let retry_req = etlp_sync::WebScrapeReq {
+                        season_premiere_date: ep_premiere_date.as_deref(),
+                        ..req
+                    };
+                    id = etlp_sync::resolve_by_web_scrape_with_chain(
+                        &retry_req,
+                        scrape_cache,
+                        api,
+                    )
+                    .await;
+                }
+                etlp_config::DatePreference::Emby
+                    if ep_premiere_date.is_some() =>
+                {
+                    let tmdb_date =
+                        tmdb.movie_release_date(tmdb_movie_id).await;
+                    if let Some(ref tmdb_d) = tmdb_date
+                        && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
+                    {
+                        info!(
+                            title = %data.media_title,
+                            emby_date = ?ep_premiere_date,
+                            tmdb_date = %tmdb_d,
+                            "bangumi: movie resolution with Emby release_date \
+                             yielded no subject; retrying with TMDB release_date \
+                             fallback"
+                        );
+                        let retry_req = etlp_sync::WebScrapeReq {
+                            season_premiere_date: Some(tmdb_d),
+                            ..req
+                        };
+                        id = etlp_sync::resolve_by_web_scrape_with_chain(
+                            &retry_req,
+                            scrape_cache,
+                            api,
+                        )
+                        .await;
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -2408,50 +2535,88 @@ async fn resolve_bangumi_subject(
 
     // Episode-level premiere date: fallback anchor when S×E1 cannot be
     // resolved. Source: Emby → TMDB specific episode → None.
-    let premiere_date: Option<String> = if let Some(ref d) = ep_premiere_date {
-        debug!(
-            series = %data.series_name,
-            season,
-            episode = ep_index,
-            air_date = %d,
-            "bangumi: episode air_date from media server"
-        );
-        Some(d.clone())
-    } else {
-        if let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
-        {
-            let date = tmdb.episode_air_date(tid, s, ep).await;
-            match &date {
-                Some(d) => debug!(
+    let premiere_date: Option<String> = match date_preference {
+        etlp_config::DatePreference::Tmdb => {
+            let tmdb_date = if let (Some(tid), Some(ep), Some(s)) =
+                (tmdb_series_id, ep_u32, s_u32)
+            {
+                tmdb.episode_air_date(tid, s, ep).await
+            } else {
+                None
+            };
+            if let Some(d) = tmdb_date {
+                debug!(
                     series = %data.series_name,
                     season,
                     episode = ep_index,
                     air_date = %d,
-                    "bangumi: episode air_date from TMDB"
-                ),
-                None => warn!(
+                    "bangumi: episode air_date from TMDB (date_preference=tmdb)"
+                );
+                Some(d)
+            } else if let Some(ref d) = ep_premiere_date {
+                debug!(
                     series = %data.series_name,
                     season,
                     episode = ep_index,
-                    "bangumi: no air date from Emby or TMDB; \
+                    air_date = %d,
+                    "bangumi: episode air_date fallback from media server (date_preference=tmdb)"
+                );
+                Some(d.clone())
+            } else {
+                warn!(
+                    series = %data.series_name,
+                    season,
+                    episode = ep_index,
+                    "bangumi: no air date from TMDB or media server; \
                      falling back to title-only resolution"
-                ),
+                );
+                None
             }
-            date
-        } else {
-            warn!(
-                series = %data.series_name,
-                season,
-                episode = ep_index,
-                "bangumi: no TMDB series id or episode number available; \
-                 falling back to title-only resolution"
-            );
-            None
+        }
+        etlp_config::DatePreference::Emby => {
+            if let Some(ref d) = ep_premiere_date {
+                debug!(
+                    series = %data.series_name,
+                    season,
+                    episode = ep_index,
+                    air_date = %d,
+                    "bangumi: episode air_date from media server"
+                );
+                Some(d.clone())
+            } else if let (Some(tid), Some(ep), Some(s)) =
+                (tmdb_series_id, ep_u32, s_u32)
+            {
+                let date = tmdb.episode_air_date(tid, s, ep).await;
+                match &date {
+                    Some(d) => debug!(
+                        series = %data.series_name,
+                        season,
+                        episode = ep_index,
+                        air_date = %d,
+                        "bangumi: episode air_date from TMDB"
+                    ),
+                    None => warn!(
+                        series = %data.series_name,
+                        season,
+                        episode = ep_index,
+                        "bangumi: no air date from Emby or TMDB; \
+                         falling back to title-only resolution"
+                    ),
+                }
+                date
+            } else {
+                warn!(
+                    series = %data.series_name,
+                    season,
+                    episode = ep_index,
+                    "bangumi: no TMDB series id or episode number available; \
+                     falling back to title-only resolution"
+                );
+                None
+            }
         }
     };
 
-    // Season premiere date: air date of S×E1, used as the BGM ranking anchor.
-    // Source: TMDB S×E1 → episode premiere date → None.
     let season_premiere_date: Option<String> =
         if let (Some(tid), Some(s)) = (tmdb_series_id, s_u32) {
             let date = tmdb.episode_air_date(tid, s, 1).await;
@@ -2500,33 +2665,59 @@ async fn resolve_bangumi_subject(
         etlp_sync::resolve_by_web_scrape_with_chain(&req, scrape_cache, api)
             .await;
 
-    if id.is_none()
-        && ep_premiere_date.is_some()
-        && let (Some(tid), Some(ep), Some(s)) = (tmdb_series_id, ep_u32, s_u32)
-    {
-        let tmdb_ep_date = tmdb.episode_air_date(tid, s, ep).await;
-        if let Some(ref tmdb_d) = tmdb_ep_date
-            && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
-        {
-            info!(
-                series = %data.series_name,
-                season,
-                episode = ep_index,
-                emby_date = ?ep_premiere_date,
-                tmdb_date = %tmdb_d,
-                "bangumi: resolution with Emby air_date yielded no subject; \
-                 retrying with TMDB air_date fallback"
-            );
-            let retry_req = etlp_sync::WebScrapeReq {
-                episode_air_date: Some(tmdb_d),
-                ..req
-            };
-            id = etlp_sync::resolve_by_web_scrape_with_chain(
-                &retry_req,
-                scrape_cache,
-                api,
-            )
-            .await;
+    if id.is_none() {
+        match date_preference {
+            etlp_config::DatePreference::Tmdb if ep_premiere_date.is_some() => {
+                info!(
+                    series = %data.series_name,
+                    season,
+                    episode = ep_index,
+                    emby_date = ?ep_premiere_date,
+                    "bangumi: resolution with TMDB air_date yielded no subject; \
+                     retrying with Emby air_date fallback"
+                );
+                let retry_req = etlp_sync::WebScrapeReq {
+                    episode_air_date: ep_premiere_date.as_deref(),
+                    ..req
+                };
+                id = etlp_sync::resolve_by_web_scrape_with_chain(
+                    &retry_req,
+                    scrape_cache,
+                    api,
+                )
+                .await;
+            }
+            etlp_config::DatePreference::Emby
+                if ep_premiere_date.is_some()
+                    && let (Some(tid), Some(ep), Some(s)) =
+                        (tmdb_series_id, ep_u32, s_u32) =>
+            {
+                let tmdb_ep_date = tmdb.episode_air_date(tid, s, ep).await;
+                if let Some(ref tmdb_d) = tmdb_ep_date
+                    && Some(tmdb_d.as_str()) != ep_premiere_date.as_deref()
+                {
+                    info!(
+                        series = %data.series_name,
+                        season,
+                        episode = ep_index,
+                        emby_date = ?ep_premiere_date,
+                        tmdb_date = %tmdb_d,
+                        "bangumi: resolution with Emby air_date yielded no subject; \
+                         retrying with TMDB air_date fallback"
+                    );
+                    let retry_req = etlp_sync::WebScrapeReq {
+                        episode_air_date: Some(tmdb_d),
+                        ..req
+                    };
+                    id = etlp_sync::resolve_by_web_scrape_with_chain(
+                        &retry_req,
+                        scrape_cache,
+                        api,
+                    )
+                    .await;
+                }
+            }
+            _ => {}
         }
     }
 
