@@ -982,12 +982,12 @@ impl BangumiApi {
             }
             let body = if air_date.is_empty() {
                 serde_json::json!({
-                    "keyword": keyword,
+                    "keyword": keyword.trim(),
                     "filter": { "type": [2], "nsfw": true }
                 })
             } else {
                 serde_json::json!({
-                    "keyword": keyword,
+                    "keyword": keyword.trim(),
                     "filter": {
                         "type": [2],
                         "nsfw": true,
@@ -1309,70 +1309,178 @@ pub struct WebScrapeReq<'a> {
     pub episode_air_date: Option<&'a str>,
 }
 
-/// Collect [`SubjectDetail`]s for all candidates found by `keywords`.
+async fn search_and_collect_keyword_v0(
+    keyword: &str,
+    all_keywords: &[&str],
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    api: &BangumiApi,
+    air_dates: (Option<&str>, Option<&str>),
+    seen: &mut std::collections::HashSet<u64>,
+    details: &mut Vec<crate::bangumi_web::SubjectDetail>,
+) {
+    use std::collections::hash_map::Entry;
+
+    let (air_date_from, air_date_to) = air_dates;
+    let key = format!(
+        "v0:{}:{}:{}",
+        keyword,
+        air_date_from.unwrap_or("none"),
+        air_date_to.unwrap_or("none")
+    );
+    if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone()) {
+        let results = api
+            .search_subjects_api(
+                keyword,
+                all_keywords,
+                50,
+                air_date_from,
+                air_date_to,
+            )
+            .await;
+        e.insert(results);
+    }
+    let candidates = scrape_cache
+        .search_results
+        .get(&key)
+        .map(|v| v.to_vec())
+        .unwrap_or_default();
+
+    for candidate in candidates {
+        let id = candidate.subject_id;
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
+            && let Some(d) = api.fetch_subject_detail_api(id).await
+        {
+            e.insert(d);
+        }
+        if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
+            details.push(d);
+        }
+    }
+}
+
+async fn search_and_collect_keyword_legacy(
+    keyword: &str,
+    all_keywords: &[&str],
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    api: &BangumiApi,
+    seen: &mut std::collections::HashSet<u64>,
+    details: &mut Vec<crate::bangumi_web::SubjectDetail>,
+) {
+    use std::collections::hash_map::Entry;
+
+    debug!(
+        keyword,
+        "bangumi: v0 search empty, trying legacy API fallback"
+    );
+    let key = format!("legacy:{}", keyword);
+    if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone()) {
+        let results =
+            api.search_subjects_legacy_api(keyword, all_keywords).await;
+        e.insert(results);
+    }
+    let candidates = scrape_cache
+        .search_results
+        .get(&key)
+        .map(|v| v.to_vec())
+        .unwrap_or_default();
+
+    for candidate in candidates {
+        let id = candidate.subject_id;
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
+            && let Some(d) = api.fetch_subject_detail_api(id).await
+        {
+            e.insert(d);
+        }
+        if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
+            details.push(d);
+        }
+    }
+}
+
+/// Collect [`SubjectDetail`]s for all candidates found by `keywords` (and fallback `alt_titles`).
 ///
 /// `air_date_from` / `air_date_to` are pre-computed `"YYYY-MM-DD"` bounds passed
 /// directly to the BGM search API filter. Pass `None` for an unbounded edge.
 async fn collect_details(
     keywords: &[&str],
+    alt_titles: &[String],
     scrape_cache: &mut crate::bangumi_web::ScrapeCache,
     api: &BangumiApi,
     air_date_from: Option<&str>,
     air_date_to: Option<&str>,
 ) -> Vec<crate::bangumi_web::SubjectDetail> {
-    use std::collections::hash_map::Entry;
+    let all_keywords: Vec<&str> = keywords
+        .iter()
+        .copied()
+        .chain(alt_titles.iter().map(|s| s.as_str()))
+        .collect();
 
     let mut seen: std::collections::HashSet<u64> =
         std::collections::HashSet::new();
     let mut details = Vec::new();
+    let air_dates = (air_date_from, air_date_to);
 
+    // ── Phase 1: v0 search with primary keywords (within premiere air_date window) ──
     for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
-        let key = (*keyword).to_owned();
-        if let Entry::Vacant(e) = scrape_cache.search_results.entry(key.clone())
-        {
-            let mut results = api
-                .search_subjects_api(
-                    keyword,
-                    keywords,
-                    50,
-                    air_date_from,
-                    air_date_to,
-                )
-                .await;
-            // Stage 2.3: if v0 search returns nothing, fall back to the
-            // legacy (non-v0) keyword search endpoint as it handles titles
-            // that contain special characters or are not yet indexed by v0.
-            if results.is_empty() {
-                debug!(
-                    keyword,
-                    "bangumi: v0 search empty, trying legacy API fallback"
-                );
-                results =
-                    api.search_subjects_legacy_api(keyword, keywords).await;
-            }
-            e.insert(results);
-        }
-        let candidates = scrape_cache
-            .search_results
-            .get(&key)
-            .map(|v| v.to_vec())
-            .unwrap_or_default();
+        search_and_collect_keyword_v0(
+            keyword.trim(),
+            &all_keywords,
+            scrape_cache,
+            api,
+            air_dates,
+            &mut seen,
+            &mut details,
+        )
+        .await;
+    }
 
-        for candidate in candidates {
-            let id = candidate.subject_id;
-            if !seen.insert(id) {
+    // ── Phase 2: v0 search with TMDB alt_titles fallback (within same air_date window) ──
+    // Triggered only when primary keywords returned 0 candidates (e.g. rare localized titles).
+    if details.is_empty() {
+        for alt in alt_titles.iter().filter(|a| !a.trim().is_empty()) {
+            if keywords.contains(&alt.as_str()) {
                 continue;
             }
-            if let Entry::Vacant(e) = scrape_cache.subject_details.entry(id)
-                && let Some(d) = api.fetch_subject_detail_api(id).await
-            {
-                e.insert(d);
-            }
-            if let Some(d) = scrape_cache.subject_details.get(&id).cloned() {
-                details.push(d);
+            search_and_collect_keyword_v0(
+                alt.trim(),
+                &all_keywords,
+                scrape_cache,
+                api,
+                air_dates,
+                &mut seen,
+                &mut details,
+            )
+            .await;
+            if !details.is_empty() {
+                break;
             }
         }
     }
+
+    // ── Phase 3: Legacy pure-text API fallback (when v0 search yielded nothing) ──
+    if details.is_empty() {
+        for keyword in keywords.iter().filter(|k| !k.trim().is_empty()) {
+            search_and_collect_keyword_legacy(
+                keyword.trim(),
+                &all_keywords,
+                scrape_cache,
+                api,
+                &mut seen,
+                &mut details,
+            )
+            .await;
+            if !details.is_empty() {
+                break;
+            }
+        }
+    }
+
     details
 }
 
@@ -1877,6 +1985,7 @@ pub async fn resolve_by_web_scrape_with_chain(
 
     let mut details = collect_details(
         req.keywords,
+        req.alt_titles,
         scrape_cache,
         api,
         air_date_from.as_deref(),
@@ -1915,6 +2024,7 @@ pub async fn resolve_by_web_scrape_with_chain(
             let mut fuzzy_cache = crate::bangumi_web::ScrapeCache::default();
             let fuzzy_details = collect_details(
                 req.keywords,
+                req.alt_titles,
                 &mut fuzzy_cache,
                 api,
                 Some(&fuzzy_from),
@@ -4097,6 +4207,92 @@ mod tests {
         };
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(200));
+    }
+
+    #[tokio::test]
+    async fn resolve_preserves_candidate_matching_alt_titles_when_primary_keyword_differs()
+     {
+        let server = MockServer::start().await;
+        // Search API returns Fate/Zero when searching for "命运之夜 前传".
+        // Subject 10639 has name "Fate/Zero", name_cn "".
+        mount_api_search(&server, vec![(10639, "Fate/Zero")]).await;
+        mount_api_subject(&server, 10639, "Fate/Zero", Some("2011-10-02"))
+            .await;
+        mount_api_episodes(&server, 10639, (1..=13).collect()).await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["命运之夜 前传"];
+        let alt: Vec<String> =
+            vec!["Fate/Zero".to_string(), "命运守护之夜前传".to_string()];
+        let req = WebScrapeReq {
+            series: "命运之夜 前传",
+            keywords: kws,
+            alt_titles: &alt,
+            search_floor_date: Some("2011-10-02"),
+            season_premiere_date: Some("2011-10-02"),
+            episode_air_date: None,
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(10639));
+    }
+
+    #[tokio::test]
+    async fn resolve_falls_back_to_alt_titles_in_v0_when_primary_title_returns_no_candidates()
+     {
+        let server = MockServer::start().await;
+        // Primary keyword returns total: 0
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "keyword": "终物语 第二季"
+            })))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({ "total": 0, "data": [] }),
+                ),
+            )
+            .mount(&server)
+            .await;
+
+        // Fallback alt_title returns subject 1671
+        Mock::given(method("POST"))
+            .and(path("/search/subjects"))
+            .and(wiremock::matchers::body_partial_json(serde_json::json!({
+                "keyword": "化物语"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 1,
+                    "data": [{
+                        "id": 1671,
+                        "name": "化物語",
+                        "name_cn": "化物语",
+                        "rank": 50,
+                        "rating": { "score": 8.2 }
+                    }]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        mount_api_subject(&server, 1671, "化物語", Some("2009-07-03")).await;
+        mount_api_episodes(&server, 1671, (1..=15).collect()).await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["终物语 第二季"];
+        let alt: Vec<String> = vec!["化物语".to_string()];
+        let req = WebScrapeReq {
+            series: "终物语 第二季",
+            keywords: kws,
+            alt_titles: &alt,
+            search_floor_date: Some("2009-07-03"),
+            season_premiere_date: Some("2009-07-03"),
+            episode_air_date: None,
+        };
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(1671));
     }
 
     #[tokio::test]
