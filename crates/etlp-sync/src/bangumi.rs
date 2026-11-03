@@ -251,9 +251,9 @@ pub(crate) fn is_special_or_recap(ep: &BangumiEpisode) -> bool {
 ///    `target_sort` — this handles same-day batch releases (e.g. Netflix drops
 ///    or premiere weeks where episodes 1-4 all carry the same airdate).
 /// 4. If no sort-match exists in the group, take the first minimum-diff entry.
-/// 5. Forward Jump Guard: if the candidate jumps forward by 1 (+1.0) and the
+/// 5. Single-Episode Drift Guard: if the candidate drifts by 1 (±1.0) and the
 ///    exact-sort episode exists as a regular episode within 7-day weekly
-///    tolerance, prevent the jump (fixes TMDB 1-week metadata shifts).
+///    tolerance, prevent the drift (fixes TMDB 1-week metadata shifts).
 /// 6. When no air-date candidates pass, fall back to exact `sort` lookup.
 #[allow(dead_code)]
 fn pick_episode_id(
@@ -300,12 +300,11 @@ fn pick_episode<'a>(
                 .or_else(|| group.clone().next());
 
             if let Some(ep) = chosen {
-                // Tier 2: Forward Jump Guard (前向防窜守护)
-                // If candidate sort is strictly greater than target_sort:
-                // When forward step == 1.0 (e.g. 10 -> 11.0), check if
-                // target_sort exists in subject with date diff <= 7 days.
-                // If so, TMDB/server erroneously shifted date by 1 week.
-                // Intercept and lock target_sort!
+                // Tier 2: Single-Episode Drift Guard (单集跨周防漂移守护)
+                // When single-episode drift step == 1.0 (i.e.
+                // |ep.sort - target_sort| == 1.0), check if target_sort exists
+                // in subject with date diff <= 7 days. If so, TMDB/server
+                // shifted air date by 1 week (+1 or -1 week). Intercept!
                 let is_step_one =
                     ((ep.sort - target_sort as f64).abs() - 1.0).abs() < 1e-4;
                 if is_step_one {
@@ -323,16 +322,18 @@ fn pick_episode<'a>(
                             .as_deref()
                             .and_then(|d| date_diff_days(d, date))
                             .unwrap_or(0);
+                        let drift_step = ep.sort - target_sort as f64;
                         debug!(
                             target_sort,
                             target_air_date = date,
+                            drift_step,
                             skipped_ep_id = ep.id,
                             skipped_ep_sort = ep.sort,
                             same_sort_id = same_sort_ep.id,
                             same_sort_date =
                                 same_sort_ep.date.as_deref().unwrap_or(""),
                             same_sort_diff = same_diff,
-                            "bangumi: forward jump prevented — \
+                            "bangumi: episode drift prevented — \
                              retained exact-sort episode within \
                              7-day weekly tolerance"
                         );
