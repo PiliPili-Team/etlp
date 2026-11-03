@@ -275,6 +275,11 @@ export const zhTW: typeof zhCN = {
     bgm_history_follow_media_server: "歷史跟隨媒體伺服器",
     bgm_history_follow_media_server_desc:
         "當媒體伺服器的一季對應多個 Bangumi 合集時，一併回填伺服器標記為已播放的較早合集；關閉時，僅回填目前觀看集所在的合集。",
+    bgm_date_preference: "首映日期來源",
+    bgm_date_preference_desc:
+        "比對 Bangumi 條目與劇集時的首映日期來源優先級。選擇媒體伺服器則優先使用本地元數據，缺失或查無條目時回退至 TMDB；選擇 TMDB 則優先使用 TMDB 權威首映日期，缺失時回退至媒體伺服器",
+    bgm_date_preference_emby: "媒體伺服器（Emby / Jellyfin，預設）",
+    bgm_date_preference_tmdb: "TMDB",
     bgm_mark_watching: "標記在看",
     bgm_mark_watching_desc:
         "開啟後，未播完一集仍將對應劇集標記為在看；關閉後，僅當有已看過的集數時才將劇集置為在看",

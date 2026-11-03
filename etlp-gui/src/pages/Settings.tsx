@@ -67,6 +67,7 @@ interface ConfigDto {
     bangumi_history_follow_media_server: boolean;
     bangumi_allow_duplicate: boolean;
     bangumi_duplicate_throttle_secs: number;
+    bangumi_date_preference: string;
     tmdb_api_key: string;
     config_path: string;
 }
@@ -3663,6 +3664,16 @@ function BangumiSection({
                     desc={t("bgm_history_follow_media_server_desc")}
                     checked={cfg.bangumi_history_follow_media_server}
                     onChange={(v) => update("bangumi", "history_follow_media_server", v)}
+                />
+                <SelectRow
+                    label={t("bgm_date_preference")}
+                    desc={t("bgm_date_preference_desc")}
+                    value={cfg.bangumi_date_preference || "emby"}
+                    options={[
+                        { value: "emby", label: t("bgm_date_preference_emby") },
+                        { value: "tmdb", label: t("bgm_date_preference_tmdb") },
+                    ]}
+                    onChange={(v) => update("bangumi", "date_preference", v)}
                 />
                 <InputRow
                     label={t("sys_bangumi_genres")}

@@ -310,6 +310,7 @@ pub struct ConfigDto {
     pub bangumi_history_follow_media_server: bool,
     pub bangumi_allow_duplicate: bool,
     pub bangumi_duplicate_throttle_secs: u64,
+    pub bangumi_date_preference: String,
     // [tmdb]
     pub tmdb_api_key: String,
     // runtime (not from config file)
@@ -380,6 +381,10 @@ impl From<&Config> for ConfigDto {
                 .history_follow_media_server,
             bangumi_allow_duplicate: c.bangumi.allow_duplicate,
             bangumi_duplicate_throttle_secs: c.bangumi.duplicate_throttle_secs,
+            bangumi_date_preference: match c.bangumi.date_preference {
+                etlp_config::DatePreference::Emby => "emby".to_string(),
+                etlp_config::DatePreference::Tmdb => "tmdb".to_string(),
+            },
             tmdb_api_key: c.tmdb.api_key.clone().unwrap_or_default(),
             config_path: c.path().to_string_lossy().into_owned(),
         }
