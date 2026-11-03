@@ -1849,15 +1849,17 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
         // one plus earlier played ones).
         let backfill = emby_played_backfill(state, anchor_data).await;
 
+        // If no episode reached completion in this session, leave pending empty
+        // so the branch below only marks the subject as "watching".
         let mut pending: std::collections::BTreeMap<i64, Option<String>> =
-            if history_follow {
+            if season_completed.is_empty() {
+                std::collections::BTreeMap::new()
+            } else {
                 backfill
                     .iter()
                     .filter(|p| p.index != anchor_ep_index)
                     .map(|p| (p.index, p.premiere_date.clone()))
                     .collect()
-            } else {
-                std::collections::BTreeMap::new()
             };
         for (d, idx) in &season_completed {
             let _ = pending.insert(*idx, d.premiere_date.clone());
@@ -1951,6 +1953,15 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 &mut touched,
             )
             .await;
+        }
+
+        // When not following media server history across split collections,
+        // prune any remaining history from earlier collections and only retain
+        // episodes that were actually watched in this player session.
+        if !history_follow {
+            let season_completed_indices: std::collections::HashSet<i64> =
+                season_completed.iter().map(|(_, idx)| *idx).collect();
+            pending.retain(|idx, _| season_completed_indices.contains(idx));
         }
 
         // Phase 2 — remaining collections (for split arcs or backfilled history).
