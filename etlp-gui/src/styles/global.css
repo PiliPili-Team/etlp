@@ -1131,6 +1131,7 @@ body.platform-windows .content {
 
 /* ── Select ────────────────────────────────────────────────────────────── */
 .select {
+    color-scheme: dark;
     background-color: rgba(255, 255, 255, 0.045);
     border: 1px solid rgba(216, 238, 245, 0.065);
     border-radius: 8px;
@@ -1151,9 +1152,52 @@ body.platform-windows .content {
         box-shadow 0.15s;
 }
 
+.select option {
+    background-color: var(--surface-strong, #1f232b);
+    color: var(--text);
+}
+
 .select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Segmented Control ─────────────────────────────────────────────────── */
+.segmented-tabs {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(216, 238, 245, 0.065);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+    user-select: none;
+    -webkit-app-region: no-drag;
+}
+
+.segmented-tab {
+    padding: 5px 12px;
+    font-size: 13px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+        background 0.15s,
+        color 0.15s,
+        box-shadow 0.15s;
+    white-space: nowrap;
+}
+
+.segmented-tab:hover:not(.active) {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.segmented-tab.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 /* ── Proxy row ─────────────────────────────────────────────────────────── */

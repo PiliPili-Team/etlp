@@ -497,6 +497,43 @@ function SelectRow({
     );
 }
 
+function SegmentedRow({
+    label,
+    desc,
+    value,
+    options,
+    onChange,
+}: {
+    label: string;
+    desc?: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (v: string) => void;
+}) {
+    return (
+        <div className="row">
+            <div className="row-label">
+                <div>{label}</div>
+                {desc && <div className="row-desc">{desc}</div>}
+            </div>
+            <div className="row-control">
+                <div className="segmented-tabs">
+                    {options.map((o) => (
+                        <button
+                            key={o.value}
+                            type="button"
+                            className={`segmented-tab ${value === o.value ? "active" : ""}`}
+                            onClick={() => onChange(o.value)}
+                        >
+                            {o.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function SliderRow({
     label,
     desc,
@@ -3665,7 +3702,7 @@ function BangumiSection({
                     checked={cfg.bangumi_history_follow_media_server}
                     onChange={(v) => update("bangumi", "history_follow_media_server", v)}
                 />
-                <SelectRow
+                <SegmentedRow
                     label={t("bgm_date_preference")}
                     desc={t("bgm_date_preference_desc")}
                     value={cfg.bangumi_date_preference || "emby"}

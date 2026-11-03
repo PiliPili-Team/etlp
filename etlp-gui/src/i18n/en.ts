@@ -288,10 +288,10 @@ export const en: typeof zhCN = {
     bgm_history_follow_media_server: "History Follows Media Server",
     bgm_history_follow_media_server_desc:
         "When a media-server season maps to several Bangumi collections, also backfill the earlier collections the server reports as played. When off, only the collection containing the episode you're watching is backfilled.",
-    bgm_date_preference: "Premiere Date Source",
+    bgm_date_preference: "Episode Matching Air Date",
     bgm_date_preference_desc:
-        "Source priority for episode and movie premiere dates when matching Bangumi subjects. 'Media Server' prefers local metadata, falling back to TMDB. 'TMDB' prefers canonical TMDB air dates, falling back to the media server.",
-    bgm_date_preference_emby: "Media Server (Emby / Jellyfin, Default)",
+        "Air-date source used to accurately map episodes when media server seasons differ from Bangumi collections (e.g. split arcs, movies, or continuous long runs). Selecting TMDB corrects mismatched episode numbers caused by local metadata errors.",
+    bgm_date_preference_emby: "Media Server (Default)",
     bgm_date_preference_tmdb: "TMDB",
     bgm_mark_watching: "Mark as Watching",
     bgm_mark_watching_desc:

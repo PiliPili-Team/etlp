@@ -272,10 +272,10 @@ export const zhCN = {
     bgm_history_follow_media_server: "历史跟随媒体服务器",
     bgm_history_follow_media_server_desc:
         "当媒体服务器的一季对应多个 Bangumi 合集时，同时回填服务器标记为已播放的较早合集；关闭时，仅回填当前观看集所在的合集。",
-    bgm_date_preference: "首映日期来源",
+    bgm_date_preference: "剧集标定日期基准",
     bgm_date_preference_desc:
-        "匹配 Bangumi 条目与剧集时的首映日期来源优先级。选择媒体服务器则优先使用本地元数据，缺失或查无条目时回退至 TMDB；选择 TMDB 则优先使用 TMDB 权威首映日期，缺失时回退至媒体服务器",
-    bgm_date_preference_emby: "媒体服务器（Emby / Jellyfin，默认）",
+        "当媒体服务器与 Bangumi 季集划分不一致（如分季拆分、剧场版、长篇连载）时，通过首映日期精准匹配并锁定对应单集。选择 TMDB 可纠正媒体服务器元数据错误导致的集数错标。",
+    bgm_date_preference_emby: "媒体服务器 (默认)",
     bgm_date_preference_tmdb: "TMDB",
     bgm_mark_watching: "标记在看",
     bgm_mark_watching_desc:
