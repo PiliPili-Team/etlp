@@ -12,10 +12,14 @@ use serde::{Deserialize, Serialize};
 use crate::{IntroMarkers, Server, Subtitle};
 
 /// Fraction of a media item's runtime required to treat playback as complete.
-pub const PLAYBACK_COMPLETION_RATIO: f64 = 0.8;
+pub const PLAYBACK_COMPLETION_RATIO: f64 = 0.9;
 
 /// Playback completion threshold expressed as a percentage.
 pub const PLAYBACK_COMPLETION_PERCENT: f64 = PLAYBACK_COMPLETION_RATIO * 100.0;
+
+fn default_completion_percent() -> f64 {
+    PLAYBACK_COMPLETION_PERCENT
+}
 
 /// A full playback context for one media item.
 ///
@@ -79,6 +83,9 @@ pub struct PlaybackData {
     pub position: f64,
     #[serde(default)]
     pub size: i64,
+    /// Playback completion threshold percentage (default 90.0).
+    #[serde(default = "default_completion_percent")]
+    pub completion_percent: f64,
 
     // ---- mode flags ----
     #[serde(default)]
@@ -179,16 +186,33 @@ impl PlaybackData {
         (self.progress_fraction(stop_sec) * 100.0).clamp(0.0, 100.0)
     }
 
-    /// Whether `stop_sec` reaches the shared completion threshold.
+    /// Watched percentage threshold required to treat playback as complete.
+    /// Falls back to [`PLAYBACK_COMPLETION_PERCENT`] when unconfigured or <= 0.
     #[must_use]
-    pub fn is_complete_at(&self, stop_sec: i64) -> bool {
-        self.progress_fraction(stop_sec) >= PLAYBACK_COMPLETION_RATIO
+    pub fn completion_threshold(&self) -> f64 {
+        if self.completion_percent > 0.0 {
+            self.completion_percent
+        } else {
+            PLAYBACK_COMPLETION_PERCENT
+        }
     }
 
-    /// Whether a watched percentage reaches the shared completion threshold.
+    /// Whether `stop_sec` reaches the completion threshold.
     #[must_use]
-    pub fn is_complete_percent(progress: f64) -> bool {
-        progress >= PLAYBACK_COMPLETION_PERCENT
+    pub fn is_complete_at(&self, stop_sec: i64) -> bool {
+        self.progress_percent(stop_sec) + 1e-9 >= self.completion_threshold()
+    }
+
+    /// Whether a watched percentage reaches the completion threshold.
+    #[must_use]
+    pub fn is_complete_percent(&self, progress: f64) -> bool {
+        progress + 1e-9 >= self.completion_threshold()
+    }
+
+    /// Whether a watched percentage reaches the default completion threshold.
+    #[must_use]
+    pub fn is_complete_percent_default(progress: f64) -> bool {
+        progress + 1e-9 >= PLAYBACK_COMPLETION_PERCENT
     }
 }
 
@@ -223,16 +247,31 @@ mod tests {
     }
 
     #[test]
-    fn completion_threshold_is_eighty_percent() {
+    fn completion_threshold_defaults_to_ninety_percent() {
         let d = PlaybackData {
             total_sec: 100,
             ..PlaybackData::default()
         };
-        assert!(!d.is_complete_at(79));
-        assert!(d.is_complete_at(80));
-        assert_eq!(PLAYBACK_COMPLETION_PERCENT, 80.0);
-        assert!(!PlaybackData::is_complete_percent(79.9));
-        assert!(PlaybackData::is_complete_percent(80.0));
+        assert!(!d.is_complete_at(89));
+        assert!(d.is_complete_at(90));
+        assert_eq!(PLAYBACK_COMPLETION_PERCENT, 90.0);
+        assert!(!d.is_complete_percent(89.9));
+        assert!(d.is_complete_percent(90.0));
+        assert!(!PlaybackData::is_complete_percent_default(89.9));
+        assert!(PlaybackData::is_complete_percent_default(90.0));
+    }
+
+    #[test]
+    fn custom_completion_threshold_is_respected() {
+        let d = PlaybackData {
+            total_sec: 100,
+            completion_percent: 75.0,
+            ..PlaybackData::default()
+        };
+        assert!(!d.is_complete_at(74));
+        assert!(d.is_complete_at(75));
+        assert!(!d.is_complete_percent(74.9));
+        assert!(d.is_complete_percent(75.0));
     }
 
     #[test]

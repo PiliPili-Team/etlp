@@ -353,7 +353,7 @@ impl PlayerManager {
                 SyncEntry {
                     stop_sec,
                     progress,
-                    completed: PlaybackData::is_complete_percent(progress)
+                    completed: ep.is_complete_percent(progress)
                         || is_historical_completed,
                     data: ep,
                 }
@@ -458,9 +458,9 @@ fn effective_stop_sec(
 /// Each poll records the current entry's position into `stops`. When the
 /// playing entry changes, the entry being left is judged on the position it
 /// was *left at*: only if that reaches the completion threshold is it added to
-/// `completed`. Watching past 80 % and then seeking back before leaving
-/// therefore does not count, while leaving at 80 %+ is remembered even if the
-/// episode is revisited later.
+/// `completed`. Watching past completion threshold and then seeking back before
+/// leaving therefore does not count, while leaving at threshold+ is remembered
+/// even if the episode is revisited later.
 #[derive(Debug, Default)]
 struct VisitTracker {
     current: Option<(Option<i64>, String)>,
@@ -1188,6 +1188,7 @@ mod tests {
             total_sec: 3600,
             position: 0.0,
             size: 0,
+            completion_percent: 0.0,
             mount_disk_mode: false,
             is_multiple_episodes: false,
             is_strm: false,
@@ -1323,6 +1324,21 @@ mod tests {
     }
 
     #[test]
+    fn completed_entries_respects_custom_completion_threshold() {
+        let mut d1 = dummy_data("Anime S01E01", 0);
+        d1.completion_percent = 80.0;
+        let mut mgr = make_mgr(d1.clone());
+        mgr.register_playlist("Anime S01E01".into(), d1);
+        mgr.stop_times.insert("Anime S01E01".into(), 2880); // 80 % of 3600
+
+        let entries = mgr.completed_entries();
+        assert!(
+            entries.first().is_some_and(|e| e.completed),
+            "80 % must complete when threshold is 80 %"
+        );
+    }
+
+    #[test]
     fn completed_entries_progress_zero_when_duration_unknown() {
         let mut data = dummy_data("Movie", 0);
         data.total_sec = 0; // unknown runtime
@@ -1340,8 +1356,8 @@ mod tests {
     const EP1: &str = "Anime S01E01";
     const EP2: &str = "Anime S01E02";
     const EP3: &str = "Anime S01E03";
-    /// 85 % of the 3600 s fixture runtime.
-    const DONE: i64 = 3060;
+    /// 90 % of the 3600 s fixture runtime.
+    const DONE: i64 = 3240;
 
     fn playlist_mgr() -> PlayerManager {
         let mut mgr = make_mgr(dummy_data(EP1, 0));
@@ -1399,7 +1415,7 @@ mod tests {
         assert!(!mgr.stop_times.contains_key(EP2));
     }
 
-    /// 错标: seeking past 80 % and back to the start *before* leaving the
+    /// 错标: seeking past threshold and back to the start *before* leaving
     /// episode must not mark it watched.
     #[tokio::test]
     async fn seek_past_threshold_then_back_is_not_completed() {

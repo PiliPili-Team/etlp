@@ -75,6 +75,15 @@ pub const LOG_MAX_SIZE_MB_MAX: u64 = 200;
 pub const LOG_MAX_FILES_MIN: usize = 1;
 pub const LOG_MAX_FILES_MAX: usize = 14;
 
+/// Default completion threshold percentage.
+pub const DEFAULT_COMPLETION_PERCENT: u32 = 90;
+
+/// Smallest valid completion threshold percentage.
+pub const COMPLETION_PERCENT_MIN: u32 = 1;
+
+/// Largest valid completion threshold percentage.
+pub const COMPLETION_PERCENT_MAX: u32 = 100;
+
 /// Default local HTTP listen port. Kept at the historical value so existing
 /// userscripts and installations continue to work after migration.
 pub const DEFAULT_LISTEN_PORT: u32 = 58_000;
@@ -175,6 +184,8 @@ pub struct DevSection {
     /// When true, etlp will not report playback progress back to the
     /// Emby / Jellyfin server (no `/Sessions/Playing/Progress` calls).
     pub disable_progress_report: bool,
+    /// Playback completion threshold percentage (1–100, default 90).
+    pub completion_percent: u32,
 }
 
 impl Default for DevSection {
@@ -207,6 +218,7 @@ impl Default for DevSection {
             media_title_translate: String::new(),
             user_agent: None,
             disable_progress_report: false,
+            completion_percent: DEFAULT_COMPLETION_PERCENT,
         }
     }
 }
@@ -680,6 +692,9 @@ impl Config {
         dev.log_max_files = dev
             .log_max_files
             .clamp(LOG_MAX_FILES_MIN, LOG_MAX_FILES_MAX);
+        dev.completion_percent = dev
+            .completion_percent
+            .clamp(COMPLETION_PERCENT_MIN, COMPLETION_PERCENT_MAX);
 
         let playlist = raw.playlist;
 
@@ -872,6 +887,7 @@ speed_dummy = 1.5
              [dev]\n\
              log_max_size_mb = 99999\n\
              log_max_files = 0\n\
+             completion_percent = 0\n\
              [playlist]\n\
              item_limit = 5000\n",
         );
@@ -879,6 +895,7 @@ speed_dummy = 1.5
         assert_eq!(cfg.server.listen_port, LISTEN_PORT_MAX);
         assert_eq!(cfg.dev.log_max_size_mb, LOG_MAX_SIZE_MB_MAX);
         assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
+        assert_eq!(cfg.dev.completion_percent, COMPLETION_PERCENT_MIN);
         // item_limit has no upper cap; value is stored as-is.
         assert_eq!(cfg.playlist.item_limit, 5000);
 

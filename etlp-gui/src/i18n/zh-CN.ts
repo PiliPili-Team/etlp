@@ -76,6 +76,11 @@ export const zhCN = {
     pl_path_error: "路径不存在，请检查输入",
     pl_progress_support:
         "进度上报：mpv / IINA 完整支持——播放中实时上报、退出写回续播位置、标记已看并同步 Trakt / Bangumi、多集逐集跟踪。其他播放器仅在退出时写回最终进度并同步，无播放中的实时上报；其中 VLC 支持整季连播，MPC 与 dandanplay 为单集，PotPlayer 的进度获取仅 Windows 可用",
+    pl_playback: "播放与标记",
+    pl_completion_percent: "已播放判定阈值 (%)",
+    pl_completion_percent_desc:
+        "观看进度达到或超过该百分比时，标记为已播放并同步 Bangumi / Trakt；低于该百分比时保留当前播放进度用于续播（默认 90%，范围 1–100）",
+    pl_completion_percent_invalid: "已播放判定阈值必须在 1 到 100 之间",
 
     // Version prefer
     page_vp: "版本偏好",

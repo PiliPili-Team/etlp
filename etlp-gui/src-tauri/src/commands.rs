@@ -281,6 +281,7 @@ pub struct ConfigDto {
     pub user_agent: String,
     pub mix_log: bool,
     pub disable_progress_report: bool,
+    pub completion_percent: u32,
     // [playlist]
     pub item_limit: u32,
     pub version_filter: String,
@@ -343,6 +344,7 @@ impl From<&Config> for ConfigDto {
             user_agent: c.dev.user_agent.clone().unwrap_or_default(),
             mix_log: c.dev.mix_log,
             disable_progress_report: c.dev.disable_progress_report,
+            completion_percent: c.dev.completion_percent,
             item_limit: c.playlist.item_limit,
             version_filter: c.playlist.version_filter.clone(),
             speed_limit_mb: c.gui.speed_limit_mb,

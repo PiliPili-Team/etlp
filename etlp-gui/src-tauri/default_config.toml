@@ -37,6 +37,11 @@ kill_process_at_start = false
 
 # Prepend the Emby title to the player window title (mpv / PotPlayer only).
 pretty_title = true
+
+# Playback completion threshold percentage (1–100, default 90).
+# Watched past this threshold marks as played and syncs to Bangumi / Trakt;
+# below this threshold saves resume progress.
+completion_percent = 90
 redirect_check_host = []
 
 # Disable the playlist when the current episode is the last available one.

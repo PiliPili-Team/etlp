@@ -48,6 +48,7 @@ interface ConfigDto {
     silent_start: boolean;
     check_update: boolean;
     disable_progress_report: boolean;
+    completion_percent: number;
     trakt_client_id: string;
     trakt_client_secret: string;
     trakt_user_name: string;
@@ -1366,7 +1367,8 @@ export default function Settings({
         );
     }
 
-    if (section === "player") return <PlayerSection cfg={cfg} update={update} />;
+    if (section === "player")
+        return <PlayerSection cfg={cfg} update={update} addToast={addToast} />;
     if (section === "version-prefer")
         return <VersionPreferSection cfg={cfg} update={update} />;
     if (section === "network") return <NetworkSection cfg={cfg} update={update} />;
@@ -1400,9 +1402,11 @@ export default function Settings({
 function PlayerSection({
     cfg,
     update,
+    addToast,
 }: {
     cfg: ConfigDto;
     update: (s: string, k: string, v: unknown) => void;
+    addToast: (msg: string, err?: boolean) => void;
 }) {
     const t = useI18n();
 
@@ -1457,6 +1461,18 @@ function PlayerSection({
                     desc={t("pl_kill_start_desc")}
                     checked={cfg.kill_process_at_start}
                     onChange={(v) => update("dev", "kill_process_at_start", v)}
+                />
+            </div>
+            <div className="settings-group-title">{t("pl_playback")}</div>
+            <div className="settings-group">
+                <NumberRow
+                    label={t("pl_completion_percent")}
+                    desc={t("pl_completion_percent_desc")}
+                    value={cfg.completion_percent ?? 90}
+                    min={1}
+                    max={100}
+                    onCommit={(v) => update("dev", "completion_percent", v)}
+                    onClamp={() => addToast(t("pl_completion_percent_invalid"), true)}
                 />
             </div>
         </>

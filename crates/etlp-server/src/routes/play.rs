@@ -111,6 +111,7 @@ struct LaunchCfg {
     dandan: DanDanConfig,
     playlist_limit: usize,
     disable_progress_report: bool,
+    completion_percent: f64,
 }
 
 fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
@@ -139,6 +140,7 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         n => n as usize,
     };
     let disable_progress_report = cfg.dev.disable_progress_report;
+    let completion_percent = cfg.dev.completion_percent as f64;
     Some(LaunchCfg {
         player_exe,
         fullscreen,
@@ -148,6 +150,7 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
         dandan,
         playlist_limit,
         disable_progress_report,
+        completion_percent,
     })
 }
 
@@ -163,8 +166,8 @@ fn read_launch_cfg(state: &SharedState) -> Option<LaunchCfg> {
 /// and per-session M3U8 file naming.
 async fn run_player_chain(
     state: SharedState,
-    data: PlaybackData,
-    episode_list: Vec<PlaybackData>,
+    mut data: PlaybackData,
+    mut episode_list: Vec<PlaybackData>,
     session_id: usize,
     mut metrics: PlayMetrics,
 ) {
@@ -181,6 +184,11 @@ async fn run_player_chain(
             return;
         }
     };
+
+    data.completion_percent = cfg.completion_percent;
+    for ep in &mut episode_list {
+        ep.completion_percent = cfg.completion_percent;
+    }
 
     // A macOS `.app` is a directory; spawning it fails with "Permission denied"
     // (os error 13). Unwrap such a bundle to the executable inside it (e.g.
@@ -1672,8 +1680,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 info!(
                     item = %data.media_title,
                     progress = entry.progress as i64,
-                    threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
-                    "bangumi: progress below completion threshold, current episode not marked"
+                    threshold = data.completion_percent as i64,
+                    "bangumi: progress below completion threshold, \
+                     current episode not marked"
                 );
                 continue;
             }
@@ -1782,8 +1791,9 @@ async fn sync_bangumi(state: &SharedState, entries: &[SyncEntry<'_>]) {
                 info!(
                     item = %d.media_title,
                     progress = e.progress as i64,
-                    threshold = etlp_core::PLAYBACK_COMPLETION_PERCENT as i64,
-                    "bangumi: progress below completion threshold, current episode not marked"
+                    threshold = d.completion_percent as i64,
+                    "bangumi: progress below completion threshold, \
+                     current episode not marked"
                 );
             } else if !bangumi_allow_dup
                 && state.sync_recently_done(&key, bangumi_throttle)

@@ -80,6 +80,11 @@ export const en: typeof zhCN = {
     pl_path_error: "Path not found — please check the input",
     pl_progress_support:
         "Progress reporting: mpv / IINA are fully supported — live updates while playing, resume position written back on exit, watched marking, Trakt / Bangumi sync and per-episode tracking. Other players only write the final position and sync on exit, with no live reporting during playback; VLC plays the whole season continuously, MPC and dandanplay are single-episode, and PotPlayer position read-back is Windows-only",
+    pl_playback: "Playback & Marking",
+    pl_completion_percent: "Completion Threshold (%)",
+    pl_completion_percent_desc:
+        "Mark item as played and sync to Bangumi / Trakt once watched progress reaches or exceeds this percentage; below this percentage the playback position is saved for resume (default 90%, range 1–100).",
+    pl_completion_percent_invalid: "Completion threshold must be between 1 and 100",
 
     // Version prefer
     page_vp: "Version Preference",
