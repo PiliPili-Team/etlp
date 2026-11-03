@@ -216,6 +216,32 @@ fn date_diff_days(a: &str, b: &str) -> Option<i64> {
     Some((date_to_days(a)? - date_to_days(b)?).abs())
 }
 
+/// Check if an episode's float `sort` exactly matches `target_sort` as an
+/// integer. Avoids `float as u32` truncation (which would cause `6.5` to match
+/// `6`).
+#[inline]
+pub(crate) fn is_exact_sort(sort: f64, target_sort: u32) -> bool {
+    (sort - target_sort as f64).abs() < 1e-4
+}
+
+/// Identify if an episode is a recap (总集篇) or special (SP/OVA/bonus),
+/// rather than a regular season main episode.
+pub(crate) fn is_special_or_recap(ep: &BangumiEpisode) -> bool {
+    if ep.sort.fract() != 0.0 || ep.sort <= 0.0 || ep.ep <= 0.0 {
+        return true;
+    }
+    let is_keyword = |s: &str| {
+        s.contains("总集")
+            || s.contains("総集")
+            || s.contains("特别篇")
+            || s.contains("特別編")
+            || s.contains("SP")
+            || s.contains("Recap")
+            || s.contains("recap")
+    };
+    is_keyword(&ep.name) || is_keyword(&ep.name_cn)
+}
+
 /// Resolve a target episode to a Bangumi episode ID by air-date proximity.
 ///
 /// Steps:
@@ -225,7 +251,11 @@ fn date_diff_days(a: &str, b: &str) -> Option<i64> {
 ///    `target_sort` — this handles same-day batch releases (e.g. Netflix drops
 ///    or premiere weeks where episodes 1-4 all carry the same airdate).
 /// 4. If no sort-match exists in the group, take the first minimum-diff entry.
-/// 5. When no air-date candidates pass, fall back to exact `sort` lookup.
+/// 5. Forward Jump Guard: if the candidate jumps forward by 1 (+1.0) and the
+///    exact-sort episode exists as a regular episode within 7-day weekly
+///    tolerance, prevent the jump (fixes TMDB 1-week metadata shifts).
+/// 6. When no air-date candidates pass, fall back to exact `sort` lookup.
+#[allow(dead_code)]
 fn pick_episode_id(
     episodes: &[BangumiEpisode],
     target_sort: u32,
@@ -263,16 +293,54 @@ fn pick_episode<'a>(
                 .map(|(_, ep)| *ep);
 
             // Prefer the episode in the tie group whose sort matches the
-            // Emby index number; fall back to the first element in the group.
+            // target sort; fall back to the first element in the group.
             let chosen = group
                 .clone()
-                .find(|ep| ep.sort as u32 == target_sort)
+                .find(|ep| is_exact_sort(ep.sort, target_sort))
                 .or_else(|| group.clone().next());
 
             if let Some(ep) = chosen {
-                // Log only when sort tiebreak chose a different episode than
-                // expected — a silent success is not actionable.
-                if ep.sort as u32 != target_sort {
+                // Tier 2: Forward Jump Guard (前向防窜守护)
+                // If candidate sort is strictly greater than target_sort:
+                // When forward step == 1.0 (e.g. 10 -> 11.0), check if
+                // target_sort exists in subject with date diff <= 7 days.
+                // If so, TMDB/server erroneously shifted date by 1 week.
+                // Intercept and lock target_sort!
+                let is_step_one =
+                    ((ep.sort - target_sort as f64).abs() - 1.0).abs() < 1e-4;
+                if is_step_one {
+                    let same_sort_ep = episodes.iter().find(|e| {
+                        is_exact_sort(e.sort, target_sort)
+                            && !is_special_or_recap(e)
+                            && e.date
+                                .as_deref()
+                                .and_then(|d| date_diff_days(d, date))
+                                .is_some_and(|diff| diff <= 7)
+                    });
+                    if let Some(same_sort_ep) = same_sort_ep {
+                        let same_diff = same_sort_ep
+                            .date
+                            .as_deref()
+                            .and_then(|d| date_diff_days(d, date))
+                            .unwrap_or(0);
+                        debug!(
+                            target_sort,
+                            target_air_date = date,
+                            skipped_ep_id = ep.id,
+                            skipped_ep_sort = ep.sort,
+                            same_sort_id = same_sort_ep.id,
+                            same_sort_date =
+                                same_sort_ep.date.as_deref().unwrap_or(""),
+                            same_sort_diff = same_diff,
+                            "bangumi: forward jump prevented — \
+                             retained exact-sort episode within \
+                             7-day weekly tolerance"
+                        );
+                        return Some(same_sort_ep);
+                    }
+                }
+
+                if !is_exact_sort(ep.sort, target_sort) {
                     debug!(
                         target_sort,
                         target_air_date = date,
@@ -291,13 +359,14 @@ fn pick_episode<'a>(
                 target_sort,
                 target_air_date = date,
                 fuzzy_days,
-                "bangumi: no episodes within air_date window, \
-                 fallback to sort"
+                "bangumi: no episodes within air_date window,                  fallback to sort"
             );
         }
     }
     // No air-date match: fall back to exact sort lookup.
-    let ep = episodes.iter().find(|ep| ep.sort as u32 == target_sort);
+    let ep = episodes
+        .iter()
+        .find(|ep| is_exact_sort(ep.sort, target_sort));
     match ep {
         Some(_) => {}
         None => {
@@ -2370,10 +2439,65 @@ pub async fn sync_episodes(
         "bangumi: fetched episode list"
     );
 
+    let batch_targets: std::collections::HashSet<u32> =
+        eps.iter().map(|(sort, _)| *sort).collect();
+    let mut claimed_ids: std::collections::HashSet<u64> =
+        std::collections::HashSet::new();
+
     let ep_ids: Vec<u64> = eps
         .iter()
         .filter_map(|(sort, air_date)| {
-            pick_episode_id(&ep_list.data, *sort, air_date.as_deref(), 2)
+            let mut ep =
+                pick_episode(&ep_list.data, *sort, air_date.as_deref(), 2)?;
+            // Tier 1 Preemptive Target Claim Prohibition (前车不准抢后车的坑):
+            if !is_exact_sort(ep.sort, *sort) && ep.sort > *sort as f64 {
+                let cand_int = ep.sort.round() as u32;
+                let is_preempted = is_exact_sort(ep.sort, cand_int)
+                    && batch_targets.contains(&cand_int);
+                let fallback = if is_preempted {
+                    ep_list.data.iter().find(|e| is_exact_sort(e.sort, *sort))
+                } else {
+                    None
+                };
+                if let Some(same) = fallback {
+                    debug!(
+                        subject_id,
+                        target_sort = sort,
+                        stolen_sort = ep.sort,
+                        fallback_id = same.id,
+                        "bangumi: preempted forward theft of \
+                         subsequent batch target — reverted to exact sort"
+                    );
+                    ep = same;
+                }
+            }
+            if claimed_ids.contains(&ep.id) {
+                let fallback = ep_list.data.iter().find(|e| {
+                    is_exact_sort(e.sort, *sort) && !claimed_ids.contains(&e.id)
+                });
+                if let Some(same) = fallback {
+                    debug!(
+                        subject_id,
+                        target_sort = sort,
+                        stolen_id = ep.id,
+                        fallback_id = same.id,
+                        "bangumi: candidate already claimed in batch — \
+                         reverted to exact sort"
+                    );
+                    ep = same;
+                } else {
+                    debug!(
+                        subject_id,
+                        target_sort = sort,
+                        ep_id = ep.id,
+                        "bangumi: episode already claimed in this batch, \
+                         skipping duplicate"
+                    );
+                    return None;
+                }
+            }
+            claimed_ids.insert(ep.id);
+            Some(ep.id)
         })
         .collect();
 
@@ -2486,7 +2610,19 @@ pub async fn mark_backfill_in_subject(
         .await
         .unwrap_or_default();
 
+    let batch_targets: std::collections::HashSet<u32> = pending
+        .iter()
+        .filter_map(|(idx, _)| {
+            idx.checked_add(ep_offset)
+                .and_then(|s| u32::try_from(s).ok())
+                .filter(|&s| s > 0)
+        })
+        .collect();
+
     let mut to_mark: Vec<u64> = Vec::new();
+    let mut claimed_ids: std::collections::HashSet<u64> =
+        std::collections::HashSet::new();
+
     for (index, air_date) in pending {
         // The sort fallback only applies when index + offset is a valid sort.
         let Some(target_sort) = index
@@ -2496,11 +2632,74 @@ pub async fn mark_backfill_in_subject(
         else {
             continue;
         };
-        let Some(ep) =
+        let Some(mut ep) =
             pick_episode(&ep_list.data, target_sort, air_date.as_deref(), 2)
         else {
             continue;
         };
+
+        // Tier 1 Preemptive Target Claim Prohibition (前车不准抢后车的坑):
+        // If pick_episode chose an episode whose sort is strictly greater than
+        // target_sort, and that sort is also one of the target sorts in this
+        // batch, the earlier episode must not steal the slot from the
+        // subsequent episode. Fall back to exact sort!
+        if !is_exact_sort(ep.sort, target_sort) && ep.sort > target_sort as f64
+        {
+            let cand_int_sort = ep.sort.round() as u32;
+            let is_preempted = is_exact_sort(ep.sort, cand_int_sort)
+                && batch_targets.contains(&cand_int_sort);
+            let fallback = if is_preempted {
+                ep_list
+                    .data
+                    .iter()
+                    .find(|e| is_exact_sort(e.sort, target_sort))
+            } else {
+                None
+            };
+            if let Some(same_sort_ep) = fallback {
+                debug!(
+                    subject_id,
+                    index,
+                    target_sort,
+                    stolen_sort = ep.sort,
+                    fallback_id = same_sort_ep.id,
+                    "bangumi: preempted forward theft of \
+                     subsequent batch target — reverted to exact sort"
+                );
+                ep = same_sort_ep;
+            }
+        }
+
+        // Tier 1 Retrospective Claim Tracking (后向独占检查):
+        if claimed_ids.contains(&ep.id) {
+            let fallback = ep_list.data.iter().find(|e| {
+                is_exact_sort(e.sort, target_sort)
+                    && !claimed_ids.contains(&e.id)
+            });
+            if let Some(same_sort_ep) = fallback {
+                debug!(
+                    subject_id,
+                    index,
+                    target_sort,
+                    stolen_id = ep.id,
+                    fallback_id = same_sort_ep.id,
+                    "bangumi: candidate already claimed in backfill batch — \
+                     reverted to exact sort"
+                );
+                ep = same_sort_ep;
+            } else {
+                debug!(
+                    subject_id,
+                    index,
+                    ep_id = ep.id,
+                    "bangumi: episode already claimed in this batch, \
+                     skipping duplicate"
+                );
+                continue;
+            }
+        }
+        claimed_ids.insert(ep.id);
+
         outcome.consumed.push(*index);
         let already = user_eps
             .get(&(ep.sort as u64))
@@ -3319,6 +3518,140 @@ mod tests {
         assert!(out.marked.is_empty());
     }
 
+    #[tokio::test]
+    async fn mark_backfill_fanren_metadata_shift_preempts_theft_and_marks_all()
+    {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/313634"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "type": 3, "subject_id": 313634 }),
+            ))
+            .mount(&server)
+            .await;
+        // Bangumi episodes for Fanren: 9 and 10 on 2020-10-11, 11 on 2020-10-18.
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 3,
+                    "data": [
+                        { "id": 962321, "sort": 9.0, "ep": 1.0,
+                          "date": "2020-10-11" },
+                        { "id": 962322, "sort": 10.0, "ep": 2.0,
+                          "date": "2020-10-11" },
+                        { "id": 962323, "sort": 11.0, "ep": 3.0,
+                          "date": "2020-10-18" },
+                    ],
+                }),
+            ))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/313634/episodes"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "data": [] })),
+            )
+            .mount(&server)
+            .await;
+        // Must batch mark all 3 episodes: 962321, 962322, 962323.
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/313634/episodes"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        // Emby/TMDB metadata with Ep 10 mistakenly entered as 2020-10-18.
+        let pending = vec![
+            (9, Some("2020-10-11".to_owned())),
+            (10, Some("2020-10-18".to_owned())),
+            (11, Some("2020-10-18".to_owned())),
+        ];
+        let out = mark_backfill_in_subject(&api, 313634, &pending, 0)
+            .await
+            .unwrap();
+
+        let mut consumed = out.consumed.clone();
+        consumed.sort_unstable();
+        assert_eq!(consumed, vec![9, 10, 11]);
+        assert_eq!(out.marked, vec![962321, 962322, 962323]);
+    }
+
+    #[tokio::test]
+    async fn mark_backfill_retrospective_claim_collision_reverts_to_exact_sort()
+    {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/testuser/collections/500"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "type": 3, "subject_id": 500 }),
+            ))
+            .mount(&server)
+            .await;
+
+        // Two episodes: sort 1 (id 101), sort 2 (id 102).
+        Mock::given(method("GET"))
+            .and(path("/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "total": 2,
+                    "data": [
+                        {
+                            "id": 101,
+                            "sort": 1.0,
+                            "ep": 1.0,
+                            "date": "2024-10-01"
+                        },
+                        {
+                            "id": 102,
+                            "sort": 2.0,
+                            "ep": 2.0,
+                            "date": "2024-10-08"
+                        }
+                    ]
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/users/-/collections/500/episodes"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "data": []
+                }),
+            ))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("PATCH"))
+            .and(path("/users/-/collections/500/episodes"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        // Target 2 erroneously dated as target 1 ("2024-10-01").
+        let pending = vec![
+            (1, Some("2024-10-01".to_owned())),
+            (2, Some("2024-10-01".to_owned())),
+        ];
+        let out = mark_backfill_in_subject(&api, 500, &pending, 0)
+            .await
+            .unwrap();
+
+        let mut consumed = out.consumed.clone();
+        consumed.sort_unstable();
+        assert_eq!(consumed, vec![1, 2]);
+        assert_eq!(out.marked, vec![101, 102]);
+    }
+
     // ── pick_episode_id: same-day batch tie-breaking ──────────────────────────
 
     /// Episodes 1-4 all share the same airdate (premiere week batch release,
@@ -3498,6 +3831,84 @@ mod tests {
     fn pick_episode_returns_none_when_unmatched() {
         let eps = vec![ep(10, 1.0, Some("2020-01-01"))];
         assert_eq!(pick_episode_id(&eps, 5, Some("2024-10-09"), 2), None);
+    }
+
+    #[test]
+    fn pick_episode_fanren_metadata_error_picks_correct_sort() {
+        // Reproduces the exact Fanren (凡人修仙传) bug:
+        // Bangumi has Ep 9 and Ep 10 airing on 2020-10-11, and Ep 11 on 2020-10-18.
+        // TMDB erroneously recorded Ep 10 as 2020-10-18 (shifted by 1 week).
+        // Forward jump guard must prevent Ep 10 from jumping to Ep 11.
+        let eps = vec![
+            ep(962321, 9.0, Some("2020-10-11")),
+            ep(962322, 10.0, Some("2020-10-11")),
+            ep(962323, 11.0, Some("2020-10-18")),
+        ];
+        // For target_sort 10 with air_date 2020-10-18:
+        let id_10 = pick_episode_id(&eps, 10, Some("2020-10-18"), 2);
+        assert_eq!(
+            id_10,
+            Some(962322),
+            "Target 10 must resolve to Ep 10, not 11"
+        );
+
+        // For target_sort 11 with air_date 2020-10-18:
+        let id_11 = pick_episode_id(&eps, 11, Some("2020-10-18"), 2);
+        assert_eq!(id_11, Some(962323), "Target 11 must resolve to Ep 11");
+    }
+
+    #[test]
+    fn pick_episode_backward_metadata_error_picks_correct_sort() {
+        // Ep 1 is 2024-10-01, Ep 2 is 2024-10-08.
+        // Target 2 air_date is erroneously entered as 2024-10-01 (-1 week).
+        let eps = vec![
+            ep(101, 1.0, Some("2024-10-01")),
+            ep(102, 2.0, Some("2024-10-08")),
+        ];
+        let id_2 = pick_episode_id(&eps, 2, Some("2024-10-01"), 2);
+        assert_eq!(id_2, Some(102), "Target 2 must resolve to Ep 2, not 1");
+    }
+
+    #[test]
+    fn pick_episode_monogatari_special_allows_jump() {
+        // Reproduces Monogatari Off & Monster Season:
+        // Bangumi Ep 1 is 2024-07-06, Ep 6 is 2024-08-10, Ep 6.5 is 2024-08-17.
+        // Emby plays S17E01 (target_sort 1) with air date 2024-08-17.
+        // Step is 5.5 (not 1) and diff to Ep 1 is 42 days (not <= 7).
+        // Must allow jump and pick Ep 6.5!
+        let eps = vec![
+            ep(1319027, 1.0, Some("2024-07-06")),
+            ep(1364718, 6.0, Some("2024-08-10")),
+            ep(1364719, 6.5, Some("2024-08-17")),
+            ep(1364720, 7.0, Some("2024-08-24")),
+        ];
+        let id = pick_episode_id(&eps, 1, Some("2024-08-17"), 2);
+        assert_eq!(
+            id,
+            Some(1364719),
+            "Target 1 on 2024-08-17 must resolve to Ep 6.5"
+        );
+    }
+
+    #[test]
+    fn pick_episode_recap_same_sort_allows_forward_jump() {
+        // Anime has a recap at Sort 7, while regular Ep 7 is Sort 8.
+        // Emby plays S01E07 (target_sort 7) with air date 2024-10-15.
+        let mut ep7 = ep(107, 7.0, Some("2024-10-08"));
+        ep7.name_cn = "总集篇".to_owned();
+        let eps = vec![
+            ep(106, 6.0, Some("2024-10-01")),
+            ep7,
+            ep(108, 8.0, Some("2024-10-15")),
+        ];
+        let id = pick_episode_id(&eps, 7, Some("2024-10-15"), 2);
+        assert_eq!(id, Some(108), "Must jump over recap to regular Ep 8");
+    }
+
+    #[test]
+    fn pick_episode_exact_float_sort_does_not_match_decimal() {
+        let eps = vec![ep(200, 10.5, None)];
+        assert_eq!(pick_episode_id(&eps, 10, None, 2), None);
     }
 
     // ── SubjectCache ──────────────────────────────────────────────────────────
