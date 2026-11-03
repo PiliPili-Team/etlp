@@ -1977,16 +1977,35 @@ pub async fn resolve_by_web_scrape_with_chain(
             }
         }
 
-        return match hits.as_slice() {
+        match hits.as_slice() {
             [] => {
-                warn!(
+                let all_candidates_have_dates = !details.is_empty()
+                    && details.iter().all(|d| {
+                        !d.episodes.is_empty()
+                            && d.episodes.iter().any(|ep| {
+                                ep.airdate
+                                    .as_deref()
+                                    .is_some_and(|a| !a.trim().is_empty())
+                            })
+                    });
+
+                if all_candidates_have_dates {
+                    warn!(
+                        series = req.series,
+                        episode_air_date = ep_date,
+                        "bangumi: no subject contains an episode matching \
+                         target air_date — \
+                         add an ID mapping in Settings → Bangumi"
+                    );
+                    return None;
+                }
+
+                debug!(
                     series = req.series,
                     episode_air_date = ep_date,
-                    "bangumi: no subject contains an episode matching \
-                     target air_date — \
-                     add an ID mapping in Settings → Bangumi"
+                    "bangumi: candidate episodes lack air dates; \
+                     falling back to season premiere date / title"
                 );
-                None
             }
             [single] => {
                 let name = scrape_cache
@@ -2000,7 +2019,7 @@ pub async fn resolve_by_web_scrape_with_chain(
                     episode_air_date = ep_date,
                     "bangumi: subject selected — episode air_date matched"
                 );
-                Some(*single)
+                return Some(*single);
             }
             tied => {
                 // Multiple subjects share an episode on this date → break tie
@@ -2098,7 +2117,7 @@ pub async fn resolve_by_web_scrape_with_chain(
                             "bangumi: subject selected — \
                              episode-date tie broken by title"
                         );
-                        Some(*id)
+                        return Some(*id);
                     }
                     _ => {
                         warn!(
@@ -2108,7 +2127,7 @@ pub async fn resolve_by_web_scrape_with_chain(
                              and title — \
                              add an ID mapping in Settings → Bangumi"
                         );
-                        None
+                        return None;
                     }
                 }
             }
@@ -4845,5 +4864,56 @@ mod tests {
             BangumiApi::percent_encode_path("hello world"),
             "hello%20world"
         );
+    }
+
+    #[tokio::test]
+    async fn resolve_falls_back_to_season_premiere_when_episodes_lack_air_dates()
+     {
+        let server = MockServer::start().await;
+        mount_api_search(&server, vec![(400, "Family Guy")]).await;
+        mount_api_subject(&server, 400, "Family Guy", Some("1999-01-31")).await;
+        mount_api_episodes_with_dates(&server, 400, vec![(1, "")]).await;
+
+        Mock::given(method("GET"))
+            .and(path("/subjects/400/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 401, "name": "Family Guy (Season 15)",
+                      "name_cn": "恶搞之家 第十五季", "relation": "续集" }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+        mount_api_subject(
+            &server,
+            401,
+            "Family Guy (Season 15)",
+            Some("2016-09-25"),
+        )
+        .await;
+        mount_api_episodes_with_dates(&server, 401, vec![(1, ""), (2, "")])
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/401/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["Family Guy"];
+        let req = WebScrapeReq {
+            series: "Family Guy",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("1999-01-31"),
+            season_premiere_date: Some("2016-09-25"),
+            episode_air_date: Some("2016-10-02"),
+        };
+
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, Some(401));
     }
 }
