@@ -195,7 +195,7 @@ export const zhCN = {
         "预加载与下载模式由浏览器油猴脚本的指令触发，不在此处开关：脚本发起「边播边缓存」即为预加载，发起「仅下载」即为下载模式；其中下载模式还要求你的媒体服务器账号本身具备资源下载权限",
     sys_trakt: "Trakt.tv 播放记录同步",
     sys_trakt_sync_note:
-        "播放结束后自动同步到 Trakt：进度约 80% 以上才标记为「已看」，不足 80% 则不标记；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。不足 80% 时会记住播放位置方便下次接着看，并在「继续观看」里显示同剧下一集；重看同一集会再记录一次，是否受时间间隔限制由下方的「允许重复标记」开关控制",
+        "播放结束后自动同步到 Trakt：进度达到已播放判定阈值（默认 90%）才标记为「已看」，不足则不标记；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。不足完播阈值时会记住播放位置方便下次接着看，并在「继续观看」里显示同剧下一集；重看同一集会再记录一次，是否受时间间隔限制由下方的「允许重复标记」开关控制",
     sys_trakt_dashboard: "打开 Trakt 面板",
     sys_trakt_enabled: "启用 Trakt 同步",
     sys_trakt_enabled_desc: "关闭后不再同步任何观看数据到 Trakt",
@@ -225,10 +225,11 @@ export const zhCN = {
     sys_trakt_dup_throttle: "重复标记节流时间（秒）",
     sys_trakt_dup_throttle_desc:
         "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次",
-    sys_trakt_dup_throttle_floored: "节流时间不能小于 120 秒，已修正为 120",
+    sys_trakt_dup_throttle_invalid:
+        "节流时间必须在 0–2592000 秒（30 天）之间，已自动修正",
     sys_bangumi: "Bangumi.tv 追番记录同步",
     sys_bangumi_sync_note:
-        "播放结束后自动同步到 Bangumi：进度 ≥ 80% 才将当前集标记为「看过」，不足 80% 则不标记当前集；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。",
+        "播放结束后自动同步到 Bangumi：进度达到已播放判定阈值（默认 90%）才将当前集标记为「看过」，不足则不标记当前集；媒体服务器中此前已看完的本季其他剧集会一并补标，已标记过的不会重复。",
     sys_bangumi_enabled: "启用 Bangumi 同步",
     sys_bangumi_enabled_desc: "关闭后不再同步任何观看数据到 Bangumi",
     sys_bangumi_host: "启用域名",
@@ -468,7 +469,8 @@ export const zhCN = {
     sys_bangumi_dup_throttle: "重复标记节流时间（秒）",
     sys_bangumi_dup_throttle_desc:
         "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次",
-    sys_bangumi_dup_throttle_floored: "节流时间不能小于 120 秒，已修正为 120",
+    sys_bangumi_dup_throttle_invalid:
+        "节流时间必须在 0–2592000 秒（30 天）之间，已自动修正",
 
     // TMDB
     sys_tmdb: "TMDB 集成",

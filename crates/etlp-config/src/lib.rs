@@ -302,6 +302,9 @@ pub fn trakt_redirect_uri(listen_port: u32) -> String {
 /// Lower bound (seconds) for the repeated-mark throttle window.
 pub const MIN_DUPLICATE_THROTTLE_SECS: u64 = 0;
 
+/// Upper bound (seconds) for the repeated-mark throttle window (30 days).
+pub const MAX_DUPLICATE_THROTTLE_SECS: u64 = 2_592_000;
+
 /// Throttle window (seconds) used when the key is absent, e.g. a config written
 /// before the field existed (older versions hard-coded 600s; migrated installs
 /// adopt this shorter, configurable default).
@@ -345,7 +348,12 @@ impl TraktSection {
     /// Effective repeated-mark throttle window.
     #[must_use]
     pub fn duplicate_throttle(&self) -> Duration {
-        Duration::from_secs(self.duplicate_throttle_secs)
+        Duration::from_secs(
+            self.duplicate_throttle_secs.clamp(
+                MIN_DUPLICATE_THROTTLE_SECS,
+                MAX_DUPLICATE_THROTTLE_SECS,
+            ),
+        )
     }
 }
 
@@ -401,6 +409,10 @@ impl TmdbSection {
 /// Lower bound (seconds) for the Bangumi repeated-mark throttle window.
 /// Mirrors [`MIN_DUPLICATE_THROTTLE_SECS`] used for Trakt.
 pub const MIN_BANGUMI_THROTTLE_SECS: u64 = 0;
+
+/// Upper bound (seconds) for the Bangumi repeated-mark throttle window
+/// (30 days). Mirrors [`MAX_DUPLICATE_THROTTLE_SECS`] used for Trakt.
+pub const MAX_BANGUMI_THROTTLE_SECS: u64 = MAX_DUPLICATE_THROTTLE_SECS;
 
 /// Default Bangumi throttle window when the key is absent from the config.
 pub const DEFAULT_BANGUMI_THROTTLE_SECS: u64 = 300;
@@ -495,7 +507,10 @@ impl BangumiSection {
     /// Effective repeated-mark throttle window.
     #[must_use]
     pub fn duplicate_throttle(&self) -> Duration {
-        Duration::from_secs(self.duplicate_throttle_secs)
+        Duration::from_secs(
+            self.duplicate_throttle_secs
+                .clamp(MIN_BANGUMI_THROTTLE_SECS, MAX_BANGUMI_THROTTLE_SECS),
+        )
     }
 }
 
@@ -698,6 +713,16 @@ impl Config {
 
         let playlist = raw.playlist;
 
+        let mut trakt = raw.trakt;
+        trakt.duplicate_throttle_secs = trakt
+            .duplicate_throttle_secs
+            .clamp(MIN_DUPLICATE_THROTTLE_SECS, MAX_DUPLICATE_THROTTLE_SECS);
+
+        let mut bangumi = raw.bangumi;
+        bangumi.duplicate_throttle_secs = bangumi
+            .duplicate_throttle_secs
+            .clamp(MIN_BANGUMI_THROTTLE_SECS, MAX_BANGUMI_THROTTLE_SECS);
+
         Self {
             server,
             emby: raw.emby,
@@ -705,8 +730,8 @@ impl Config {
             playlist,
             dandan: raw.dandan,
             gui: raw.gui,
-            trakt: raw.trakt,
-            bangumi: raw.bangumi,
+            trakt,
+            bangumi,
             tmdb: raw.tmdb,
             path_map: raw.path_map,
             path,
@@ -871,6 +896,21 @@ speed_dummy = 1.5
         let cfg3 = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg3.trakt.duplicate_throttle_secs, 900);
         assert_eq!(cfg3.trakt.duplicate_throttle().as_secs(), 900);
+
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[trakt]\nduplicate_throttle_secs = 99999999\n",
+        );
+        let cfg4 = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(
+            cfg4.trakt.duplicate_throttle_secs,
+            MAX_DUPLICATE_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg4.trakt.duplicate_throttle().as_secs(),
+            MAX_DUPLICATE_THROTTLE_SECS
+        );
     }
 
     #[test]
@@ -889,13 +929,25 @@ speed_dummy = 1.5
              log_max_files = 0\n\
              completion_percent = 0\n\
              [playlist]\n\
-             item_limit = 5000\n",
+             item_limit = 5000\n\
+             [trakt]\n\
+             duplicate_throttle_secs = 99999999\n\
+             [bangumi]\n\
+             duplicate_throttle_secs = 99999999\n",
         );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
         assert_eq!(cfg.server.listen_port, LISTEN_PORT_MAX);
         assert_eq!(cfg.dev.log_max_size_mb, LOG_MAX_SIZE_MB_MAX);
         assert_eq!(cfg.dev.log_max_files, LOG_MAX_FILES_MIN);
         assert_eq!(cfg.dev.completion_percent, COMPLETION_PERCENT_MIN);
+        assert_eq!(
+            cfg.trakt.duplicate_throttle_secs,
+            MAX_DUPLICATE_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg.bangumi.duplicate_throttle_secs,
+            MAX_BANGUMI_THROTTLE_SECS
+        );
         // item_limit has no upper cap; value is stored as-is.
         assert_eq!(cfg.playlist.item_limit, 5000);
 
@@ -1122,6 +1174,22 @@ speed_dummy = 1.5
         );
         let cfg3 = Config::load_from_dir(dir3.path()).expect("load");
         assert_eq!(cfg3.bangumi.duplicate_throttle_secs, 600);
+
+        let dir4 = tempdir().expect("tempdir");
+        write_config(
+            dir4.path(),
+            "config.toml",
+            "[bangumi]\nduplicate_throttle_secs = 99999999\n",
+        );
+        let cfg4 = Config::load_from_dir(dir4.path()).expect("load");
+        assert_eq!(
+            cfg4.bangumi.duplicate_throttle_secs,
+            MAX_BANGUMI_THROTTLE_SECS
+        );
+        assert_eq!(
+            cfg4.bangumi.duplicate_throttle().as_secs(),
+            MAX_BANGUMI_THROTTLE_SECS
+        );
     }
 
     #[test]

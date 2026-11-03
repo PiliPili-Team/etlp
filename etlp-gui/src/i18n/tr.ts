@@ -234,7 +234,6 @@ export const tr: typeof zhCN = {
     sys_trakt_dup_throttle: "Yeniden İşaretleme Kısıtlaması (saniye)",
     sys_trakt_dup_throttle_desc:
         "'Yeniden İşaretlemeye İzin Ver' devre dışıyken etkin: aynı öğe bu kadar saniye içinde tekrar tamamlandığında yalnızca bir kez işaretlenir. Minimum 120 s",
-    sys_trakt_dup_throttle_floored: "Kısıtlama 120 saniyeden az olamaz; 120'ye ayarlandı",
     sys_bangumi: "Bangumi.tv Takibi",
     sys_bangumi_sync_note:
         "Oynatma tamamlandığında izlemeniz otomatik olarak Bangumi ile senkronize edilir: ≥ %80'e ulaşmak mevcut bölümü izlendi olarak işaretler, daha azı işaretlenmemiş kalır; medya sunucusunda tamamladığınız aynı sezonun diğer bölümleri de eklenir, mevcut olanlar çoğaltılmaz. İşaretlenecek bir şey yoksa (< %80 ve geçmiş yoksa), eserin durumu yalnızca gerçek oynatma süresi ≥ 20 saniyeyse 'izliyorum' olarak ayarlanır, aksi takdirde yanlışlıkla eklemeyi önlemek için atlanır.",
@@ -470,7 +469,6 @@ export const tr: typeof zhCN = {
     sys_bangumi_dup_throttle: "Tekrar işaretleme kısıtlama süresi (saniye)",
     sys_bangumi_dup_throttle_desc:
         "Tekrar işaretlemeye izin ver kapalıyken etkin: aynı öğe bu saniye sayısı içinde en fazla bir kez kaydedilir; en az 120 saniye",
-    sys_bangumi_dup_throttle_floored: "Kısıtlama 120 s'den az olamaz — 120'ye düzeltildi",
 
     // TMDB
     sys_tmdb: "TMDB Entegrasyonu",

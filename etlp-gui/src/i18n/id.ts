@@ -235,8 +235,6 @@ export const id: typeof zhCN = {
     sys_trakt_dup_throttle: "Throttle Penandaan Ulang (detik)",
     sys_trakt_dup_throttle_desc:
         "Aktif saat 'Izinkan Penandaan Ulang' dinonaktifkan: item yang sama diselesaikan lagi dalam jumlah detik ini hanya ditandai sekali. Minimum 120 detik",
-    sys_trakt_dup_throttle_floored:
-        "Throttle tidak boleh kurang dari 120 detik; diperbaiki menjadi 120",
     sys_bangumi: "Pelacakan Bangumi.tv",
     sys_bangumi_sync_note:
         "Saat pemutaran selesai, tontonan Anda secara otomatis disinkronkan dengan Bangumi: mencapai ≥ 80% menandai episode saat ini sebagai ditonton, kurang dari itu tidak ditandai; episode lain dari musim yang sama yang telah Anda selesaikan di server media juga ditambahkan, tanpa menduplikasi yang sudah ada. Jika tidak ada yang ditandai (< 80% dan tidak ada riwayat), karya diatur ke status 'sedang menonton' hanya jika durasi pemutaran efektif ≥ 20 detik, jika tidak dilewati untuk mencegah penambahan tidak sengaja.",
@@ -474,8 +472,6 @@ export const id: typeof zhCN = {
     sys_bangumi_dup_throttle: "Waktu pembatasan penandaan duplikat (detik)",
     sys_bangumi_dup_throttle_desc:
         "Aktif saat Izinkan Penandaan Duplikat dinonaktifkan: entri yang sama dicatat maksimal sekali dalam detik ini; minimal 120 detik",
-    sys_bangumi_dup_throttle_floored:
-        "Pembatasan tidak boleh kurang dari 120 detik — dikoreksi menjadi 120",
 
     // TMDB
     sys_tmdb: "Integrasi TMDB",

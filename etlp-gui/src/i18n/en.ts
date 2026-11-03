@@ -206,7 +206,7 @@ export const en: typeof zhCN = {
         'Preload and download mode are triggered by the browser userscript\'s commands, not toggled here: the script\'s "cache while playing" is preload, and "download only" is download mode; download mode also requires your media server account to permit resource downloads',
     sys_trakt: "Trakt.tv Scrobbling",
     sys_trakt_sync_note:
-        'When playback ends, your viewing is synced to Trakt automatically: reaching about 80% or more marks the episode watched, below that it stays unmarked; other episodes of the same season you already finished in your media server are marked too, without duplicating ones already there. Below 80% your position is remembered so you can pick up later, and the next episode shows under Continue Watching; re-watching the same episode records it again — whether a short time gap is allowed is controlled by the "allow duplicate" switch below.',
+        'When playback ends, your viewing is synced to Trakt automatically: reaching the completion threshold (default 90%) or more marks the episode watched, below that it stays unmarked; other episodes of the same season you already finished in your media server are marked too, without duplicating ones already there. Below the threshold your position is remembered so you can pick up later, and the next episode shows under Continue Watching; re-watching the same episode records it again — whether a short time gap is allowed is controlled by the "allow duplicate" switch below.',
     sys_trakt_dashboard: "Open Trakt dashboard",
     sys_trakt_enabled: "Enable Trakt Sync",
     sys_trakt_enabled_desc: "When off, no viewing data is synced to Trakt",
@@ -238,11 +238,11 @@ export const en: typeof zhCN = {
     sys_trakt_dup_throttle: "Duplicate-Mark Throttle (seconds)",
     sys_trakt_dup_throttle_desc:
         'Effective when "Allow Duplicate Marking" is off: the same item finished again within this many seconds is recorded only once.',
-    sys_trakt_dup_throttle_floored:
-        "Throttle cannot be below 120 seconds; corrected to 120",
+    sys_trakt_dup_throttle_invalid:
+        "Throttle must be between 0 and 2,592,000 seconds (30 days); corrected automatically",
     sys_bangumi: "Bangumi.tv Tracking",
     sys_bangumi_sync_note:
-        "When playback ends, your viewing is synced to Bangumi automatically: ≥ 80% progress marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
+        "When playback ends, your viewing is synced to Bangumi automatically: reaching the completion threshold (default 90%) marks the current episode watched; below that the current episode is not marked, though any earlier episodes you already finished in your media server are still backfilled.",
     sys_bangumi_enabled: "Enable Bangumi Sync",
     sys_bangumi_enabled_desc: "When off, no viewing data is synced to Bangumi",
     sys_bangumi_host: "Enable Host",
@@ -501,8 +501,8 @@ export const en: typeof zhCN = {
     sys_bangumi_dup_throttle: "Duplicate Mark Throttle (seconds)",
     sys_bangumi_dup_throttle_desc:
         "Active when Allow Duplicate Marks is off: the same item is recorded at most once within this many seconds.",
-    sys_bangumi_dup_throttle_floored:
-        "Throttle cannot be less than 120 s, corrected to 120",
+    sys_bangumi_dup_throttle_invalid:
+        "Throttle must be between 0 and 2,592,000 seconds (30 days); corrected automatically",
 
     // TMDB
     sys_tmdb: "TMDB Integration",

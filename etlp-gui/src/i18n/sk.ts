@@ -237,8 +237,6 @@ export const sk: typeof zhCN = {
     sys_trakt_dup_throttle: "Obmedzenie duplicitného označovania (sekundy)",
     sys_trakt_dup_throttle_desc:
         "Účinné, keď je „Povoliť duplicitné označovanie” vypnuté: tá istá položka dokončená znova v rámci tohto počtu sekúnd sa zaznamená iba raz. Minimum 120 s",
-    sys_trakt_dup_throttle_floored:
-        "Obmedzenie nemôže byť nižšie ako 120 sekúnd; opravené na 120",
     sys_bangumi: "Sledovanie Bangumi.tv",
     sys_bangumi_sync_note:
         "Keď sa prehrávanie skončí, vaše sledovanie sa automaticky synchronizuje s Bangumi: dosiahnutie ≥ 80 % označí aktuálnu epizódu ako pozretú, pod tým zostáva neoznačená; označia sa aj ostatné epizódy tej istej série, ktoré ste ukončili na médiaserveri, bez duplikovania. Keď nie je čo označiť (< 80 % a žiadna história), dielo sa nastaví na „pozerám” len ak efektívna doba prehrávania je ≥ 20 sekúnd, inak sa preskočí, aby sa predišlo náhodným zápisom.",
@@ -476,8 +474,6 @@ export const sk: typeof zhCN = {
     sys_bangumi_dup_throttle: "Čas obmedzenia duplicitných označení (sekundy)",
     sys_bangumi_dup_throttle_desc:
         "Aktívne keď Povoliť duplicitné označenia je vypnuté: rovnaká položka sa zaznamená najviac raz v tomto počte sekúnd; minimálne 120 sekúnd",
-    sys_bangumi_dup_throttle_floored:
-        "Obmedzenie nemôže byť menej ako 120 s — opravené na 120",
 
     // TMDB
     sys_tmdb: "Integrácia TMDB",

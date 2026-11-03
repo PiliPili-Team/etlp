@@ -239,8 +239,6 @@ export const de: typeof zhCN = {
     sys_trakt_dup_throttle: "Drosselung für doppeltes Markieren (Sekunden)",
     sys_trakt_dup_throttle_desc:
         "Wirksam, wenn „Doppeltes Markieren zulassen” deaktiviert ist: dasselbe Element, das innerhalb dieser Sekundenzahl erneut beendet wird, wird nur einmal aufgezeichnet. Minimum 120 s",
-    sys_trakt_dup_throttle_floored:
-        "Drosselung darf nicht unter 120 Sekunden liegen; auf 120 korrigiert",
     sys_bangumi: "Bangumi.tv-Verfolgung",
     sys_bangumi_sync_note:
         "Wenn die Wiedergabe endet, wird Ihr Sehverlauf automatisch mit Bangumi synchronisiert: Ab ≥ 80 % wird die aktuelle Episode als gesehen markiert, darunter bleibt sie unmarkiert; weitere bereits abgeschlossene Episoden derselben Staffel im Medienserver werden ebenfalls nachgetragen, ohne Duplikate. Wenn nichts zu markieren ist (< 80 % und keine Verlaufseinträge), wird das Werk nur als „schaue gerade” eingetragen, sofern die effektive Wiedergabezeit ≥ 20 Sekunden beträgt – andernfalls wird der Eintrag übersprungen, um Fehlauslöser zu vermeiden.",
@@ -484,8 +482,6 @@ export const de: typeof zhCN = {
     sys_bangumi_dup_throttle: "Drosselungszeit für Doppelmarkierungen (Sekunden)",
     sys_bangumi_dup_throttle_desc:
         "Aktiv wenn Doppelte Markierungen deaktiviert ist: derselbe Eintrag wird höchstens einmal innerhalb dieser Sekunden aufgezeichnet; mindestens 120 Sekunden",
-    sys_bangumi_dup_throttle_floored:
-        "Drosselung darf nicht unter 120 s liegen — auf 120 korrigiert",
 
     // TMDB
     sys_tmdb: "TMDB-Integration",

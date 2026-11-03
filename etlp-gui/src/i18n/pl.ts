@@ -239,8 +239,6 @@ export const pl: typeof zhCN = {
     sys_trakt_dup_throttle: "Ograniczenie ponownego oznaczania (sekundy)",
     sys_trakt_dup_throttle_desc:
         "Aktywne gdy 'Zezwalaj na ponowne oznaczanie' jest wyłączone: ten sam element ukończony ponownie w ciągu tej liczby sekund jest oznaczany tylko raz. Minimum 120 s",
-    sys_trakt_dup_throttle_floored:
-        "Ograniczenie nie może być mniejsze niż 120 sekund; ustawiono na 120",
     sys_bangumi: "Śledzenie Bangumi.tv",
     sys_bangumi_sync_note:
         "Po zakończeniu odtwarzania Twoje oglądanie jest automatycznie synchronizowane z Bangumi: osiągnięcie ≥ 80% oznacza bieżący odcinek jako obejrzany, poniżej pozostaje nieoznaczony; inne odcinki tego samego sezonu ukończone na serwerze multimediów są również dodawane bez duplikatów. Jeśli nie ma nic do oznaczenia (< 80% i brak historii), dzieło jest ustawiane jako 'oglądam' tylko jeśli efektywny czas odtwarzania wynosi ≥ 20 sekund, w przeciwnym razie jest pomijane, aby zapobiec przypadkowym wpisom.",
@@ -481,8 +479,6 @@ export const pl: typeof zhCN = {
     sys_bangumi_dup_throttle: "Czas ograniczenia zduplikowanych oznaczeń (sekundy)",
     sys_bangumi_dup_throttle_desc:
         "Aktywny gdy Zezwól na zduplikowane oznaczenia jest wyłączone: ten sam wpis jest zapisywany co najwyżej raz w ciągu tej liczby sekund; minimum 120 sekund",
-    sys_bangumi_dup_throttle_floored:
-        "Ograniczenie nie może być mniejsze niż 120 s — poprawione do 120",
 
     // TMDB
     sys_tmdb: "Integracja TMDB",

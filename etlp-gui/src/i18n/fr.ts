@@ -241,8 +241,6 @@ export const fr: typeof zhCN = {
     sys_trakt_dup_throttle: "Limitation du marquage en double (secondes)",
     sys_trakt_dup_throttle_desc:
         "Actif lorsque « Autoriser le marquage en double » est désactivé : le même élément terminé à nouveau dans ce nombre de secondes n'est enregistré qu'une fois. Minimum 120 s",
-    sys_trakt_dup_throttle_floored:
-        "La limitation ne peut être inférieure à 120 secondes ; corrigée à 120",
     sys_bangumi: "Suivi Bangumi.tv",
     sys_bangumi_sync_note:
         "À la fin de la lecture, votre visionnage est synchronisé automatiquement avec Bangumi : atteindre ≥ 80 % marque l'épisode en cours comme vu, en dessous il reste non marqué ; les autres épisodes de la même saison déjà terminés sur votre serveur multimédia sont également ajoutés, sans doublon. S'il n'y a rien à marquer (< 80 % et aucun historique), l'œuvre est mise en « en cours de visionnage » uniquement si la durée de lecture effective est ≥ 20 secondes, sinon elle est ignorée pour éviter les ajouts accidentels.",
@@ -491,8 +489,6 @@ export const fr: typeof zhCN = {
     sys_bangumi_dup_throttle: "Délai de limitation des marquages en double (secondes)",
     sys_bangumi_dup_throttle_desc:
         "Actif quand Autoriser les marquages en double est désactivé : le même élément est enregistré au maximum une fois pendant ce nombre de secondes ; minimum 120 secondes",
-    sys_bangumi_dup_throttle_floored:
-        "La limitation ne peut pas être inférieure à 120 s — corrigée à 120",
 
     // TMDB
     sys_tmdb: "Intégration TMDB",

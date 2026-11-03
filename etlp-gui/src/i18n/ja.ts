@@ -229,8 +229,6 @@ export const ja: typeof zhCN = {
     sys_trakt_dup_throttle: "重複マークのスロットル（秒）",
     sys_trakt_dup_throttle_desc:
         "「重複マークを許可」がオフのとき有効：この秒数以内に同じ項目を再度視聴し終えても 1 回だけ記録します。最小 120 秒",
-    sys_trakt_dup_throttle_floored:
-        "スロットルは 120 秒未満にできません。120 に修正しました",
     sys_bangumi: "Bangumi.tv トラッキング",
     sys_bangumi_sync_note:
         "再生が終わると、視聴状況が自動で Bangumi に同期されます。≥ 80% に達すると現在のエピソードを視聴済みにし、それ未満ならマークしません。同じシーズンのメディアサーバー上ですでに視聴済みの他のエピソードも追加されますが、既存のものは重複しません。マークすべきものがない場合（< 80% かつ履歴なし）、実際の視聴時間が ≥ 20 秒のときのみ作品を「観てる」に設定し、それ以外はスキップして誤った追加を防ぎます。",
@@ -462,8 +460,6 @@ export const ja: typeof zhCN = {
     sys_bangumi_dup_throttle: "重複マークの節流時間（秒）",
     sys_bangumi_dup_throttle_desc:
         "「重複マークを許可」がオフのときに適用：同じ項目を指定秒数内に複数回見ても一度だけ記録；最小 120 秒",
-    sys_bangumi_dup_throttle_floored:
-        "節流時間は 120 秒未満にはできません。120 に修正されました",
 
     // TMDB
     sys_tmdb: "TMDB 連携",

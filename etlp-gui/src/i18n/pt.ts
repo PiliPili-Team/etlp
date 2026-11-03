@@ -239,8 +239,6 @@ export const pt: typeof zhCN = {
     sys_trakt_dup_throttle: "Limitação de marcação duplicada (segundos)",
     sys_trakt_dup_throttle_desc:
         "Eficaz quando «Permitir marcação duplicada» está desativado: o mesmo item terminado novamente dentro destes segundos é registado apenas uma vez. Mínimo 120 s",
-    sys_trakt_dup_throttle_floored:
-        "A limitação não pode ser inferior a 120 segundos; corrigida para 120",
     sys_bangumi: "Rastreio do Bangumi.tv",
     sys_bangumi_sync_note:
         "Quando a reprodução termina, a sua visualização é sincronizada automaticamente com o Bangumi: atingir ≥ 80 % marca o episódio atual como visto, abaixo disso permanece sem marca; outros episódios da mesma temporada já concluídos no servidor multimédia também são adicionados, sem duplicar os existentes. Se não houver nada a marcar (< 80 % e sem histórico), a obra é definida como «a ver» apenas se a duração de reprodução efetiva for ≥ 20 segundos, caso contrário é ignorada para evitar adições acidentais.",
@@ -482,8 +480,6 @@ export const pt: typeof zhCN = {
     sys_bangumi_dup_throttle: "Tempo de limitação de marcações duplicadas (segundos)",
     sys_bangumi_dup_throttle_desc:
         "Ativo quando Permitir marcações duplicadas está desativado: o mesmo item é registrado no máximo uma vez neste número de segundos; mínimo 120 segundos",
-    sys_bangumi_dup_throttle_floored:
-        "A limitação não pode ser menor que 120 s — corrigida para 120",
 
     // TMDB
     sys_tmdb: "Integração TMDB",

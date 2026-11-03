@@ -238,8 +238,6 @@ export const it: typeof zhCN = {
     sys_trakt_dup_throttle: "Limitazione contrassegno duplicato (secondi)",
     sys_trakt_dup_throttle_desc:
         "Attiva quando «Consenti contrassegno duplicato» è disattivo: lo stesso elemento completato di nuovo entro questi secondi viene registrato una sola volta. Minimo 120 s",
-    sys_trakt_dup_throttle_floored:
-        "La limitazione non può essere inferiore a 120 secondi; corretta a 120",
     sys_bangumi: "Tracciamento Bangumi.tv",
     sys_bangumi_sync_note:
         "Al termine della riproduzione, la tua visione viene sincronizzata automaticamente con Bangumi: raggiungere ≥ 80% contrassegna l'episodio corrente come visto, al di sotto non viene contrassegnato; vengono aggiunti anche gli altri episodi della stessa stagione già completati nel tuo server multimediale, senza duplicati. Se non c'è nulla da contrassegnare (< 80% e nessuna cronologia), l'opera viene impostata su «in visione» solo se il tempo di riproduzione effettivo è ≥ 20 secondi, altrimenti viene saltata per evitare aggiunte accidentali.",
@@ -481,8 +479,6 @@ export const it: typeof zhCN = {
     sys_bangumi_dup_throttle: "Tempo di limitazione marcature duplicate (secondi)",
     sys_bangumi_dup_throttle_desc:
         "Attivo quando Consenti marcature duplicate è disattivato: lo stesso elemento viene registrato al massimo una volta entro questo numero di secondi; minimo 120 secondi",
-    sys_bangumi_dup_throttle_floored:
-        "La limitazione non può essere inferiore a 120 s — corretta a 120",
 
     // TMDB
     sys_tmdb: "Integrazione TMDB",

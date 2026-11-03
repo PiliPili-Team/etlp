@@ -229,8 +229,6 @@ export const ko: typeof zhCN = {
     sys_trakt_dup_throttle: "중복 표시 스로틀 (초)",
     sys_trakt_dup_throttle_desc:
         '"중복 표시 허용"이 꺼졌을 때 적용됩니다: 이 초 이내에 같은 항목을 다시 시청 완료해도 한 번만 기록합니다. 최소 120초',
-    sys_trakt_dup_throttle_floored:
-        "스로틀은 120초 미만일 수 없습니다. 120으로 수정했습니다",
     sys_bangumi: "Bangumi.tv 추적",
     sys_bangumi_sync_note:
         '재생이 끝나면 시청 기록이 자동으로 Bangumi에 동기화됩니다. ≥ 80%에 도달하면 현재 에피소드를 시청 완료로 표시하고, 그 미만이면 표시하지 않습니다. 미디어 서버에 이미 시청 완료된 같은 시즌의 다른 에피소드도 추가되며, 기존 항목은 중복되지 않습니다. 표시할 항목이 없는 경우(< 80% 및 기록 없음) 실제 재생 시간이 ≥ 20초일 때만 작품을 "보는 중"으로 설정하고, 그렇지 않으면 건너뜁니다.',
@@ -461,8 +459,6 @@ export const ko: typeof zhCN = {
     sys_bangumi_dup_throttle: "중복 표시 제한 시간 (초)",
     sys_bangumi_dup_throttle_desc:
         "중복 표시 허용이 꺼져 있을 때 적용: 동일한 항목이 이 초 수 내에 최대 한 번만 기록됩니다; 최소 120초",
-    sys_bangumi_dup_throttle_floored:
-        "제한 시간은 120초 미만일 수 없습니다 — 120으로 수정되었습니다",
 
     // TMDB
     sys_tmdb: "TMDB 연동",

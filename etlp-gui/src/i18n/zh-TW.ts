@@ -198,7 +198,7 @@ export const zhTW: typeof zhCN = {
         "預先載入與下載模式由瀏覽器油猴腳本的指令觸發，不在此處開關：腳本發起「邊播邊快取」即為預先載入，發起「僅下載」即為下載模式；其中下載模式還要求你的媒體伺服器帳號本身具備資源下載權限",
     sys_trakt: "Trakt.tv 播放記錄同步",
     sys_trakt_sync_note:
-        "播放結束後自動同步到 Trakt：進度約 80% 以上才標記為「已看」，不足 80% 則不標記；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。不足 80% 時會記住播放位置方便下次接著看，並在「繼續觀看」裡顯示同劇下一集；重看同一集會再記錄一次，是否受時間間隔限制由下方的「允許重複標記」開關控制",
+        "播放結束後自動同步到 Trakt：進度達到已播放判定閾值（預設 90%）以上才標記為「已看」，不足則不標記；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。不足完播閾值時會記住播放位置方便下次接著看，並在「繼續觀看」裡顯示同劇下一集；重看同一集會再記錄一次，是否受時間間隔限制由下方的「允許重複標記」開關控制",
     sys_trakt_dashboard: "開啟 Trakt 儀表板",
     sys_trakt_enabled: "啟用 Trakt 同步",
     sys_trakt_enabled_desc: "關閉後不再同步任何觀看資料到 Trakt",
@@ -228,10 +228,11 @@ export const zhTW: typeof zhCN = {
     sys_trakt_dup_throttle: "重複標記節流時間（秒）",
     sys_trakt_dup_throttle_desc:
         "關閉「允許重複標記」時生效：同一條目在該秒數內重複看完只記錄一次",
-    sys_trakt_dup_throttle_floored: "節流時間不能小於 120 秒，已修正為 120",
+    sys_trakt_dup_throttle_invalid:
+        "節流時間必須在 0–2592000 秒（30 天）之間，已自動修正",
     sys_bangumi: "Bangumi.tv 追番記錄同步",
     sys_bangumi_sync_note:
-        "播放結束後自動同步到 Bangumi：進度 ≥ 80% 才將當前集標記為「看過」，不足 80% 則不標記當前集；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。進度不足 80% 且無可補標歷史時，若有效播放時長 ≥ 20 秒則將條目置為「在看」，否則跳過，避免誤觸發。",
+        "播放結束後自動同步到 Bangumi：進度達到已播放判定閾值（預設 90%）才將當前集標記為「看過」，不足則不標記當前集；媒體伺服器中此前已看完的本季其他劇集會一併補標，已標記過的不會重複。進度不足完播閾值且無可補標歷史時，若有效播放時長 ≥ 20 秒則將條目置為「在看」，否則跳過，避免誤觸發。",
     sys_bangumi_enabled: "啟用 Bangumi 同步",
     sys_bangumi_enabled_desc: "關閉後不再同步任何觀看資料到 Bangumi",
     sys_bangumi_host: "啟用網域",
@@ -454,7 +455,8 @@ export const zhTW: typeof zhCN = {
     sys_bangumi_dup_throttle: "重複標記節流時間（秒）",
     sys_bangumi_dup_throttle_desc:
         "關閉「允許重複標記」時生效：同一條目在該秒數內重複看完只記錄一次",
-    sys_bangumi_dup_throttle_floored: "節流時間不能小於 120 秒，已修正為 120",
+    sys_bangumi_dup_throttle_invalid:
+        "節流時間必須在 0–2592000 秒（30 天）之間，已自動修正",
 
     // TMDB
     sys_tmdb: "TMDB 整合",
