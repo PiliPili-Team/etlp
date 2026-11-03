@@ -334,9 +334,6 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
                 };
                 tracing::debug!(proxy = %proxy_url, "mpv: --http-proxy set");
                 cmd.push(format!("--http-proxy={proxy_url}"));
-                if args.is_multiple_episodes {
-                    cmd.push("--cache=no".into());
-                }
             }
             other => {
                 tracing::debug!(
@@ -1005,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn build_args_proxy_http_with_multiple_episodes_disables_cache() {
+    fn build_args_proxy_http_with_multiple_episodes_does_not_disable_cache() {
         let mut args = default_launch();
         args.is_multiple_episodes = true;
         // Full http:// URL
@@ -1014,7 +1011,7 @@ mod tests {
         let cmd = build_args(&args, &ipc);
         let flat = cmd.join(" ");
         assert!(flat.contains("--http-proxy=http://127.0.0.1:8080"));
-        assert!(flat.contains("--cache=no"));
+        assert!(!flat.contains("--cache=no"));
     }
 
     #[test]
