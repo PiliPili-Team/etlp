@@ -219,7 +219,7 @@ export const zhCN = {
         "开启后每次看完都会再次标记同一剧集 / 影片；关闭则启用节流去重：同一条目在下方设置的节流时间内重复看完只标记一次（补全的历史集数无论开关始终去重）",
     sys_trakt_dup_throttle: "重复标记节流时间（秒）",
     sys_trakt_dup_throttle_desc:
-        "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次；最少 120 秒",
+        "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次",
     sys_trakt_dup_throttle_floored: "节流时间不能小于 120 秒，已修正为 120",
     sys_bangumi: "Bangumi.tv 追番记录同步",
     sys_bangumi_sync_note:
@@ -462,7 +462,7 @@ export const zhCN = {
         "开启后每次看完都会再次标记同一剧集 / 影片；关闭则启用节流去重：同一条目在下方设置的节流时间内重复看完只标记一次",
     sys_bangumi_dup_throttle: "重复标记节流时间（秒）",
     sys_bangumi_dup_throttle_desc:
-        "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次；最少 120 秒",
+        "关闭「允许重复标记」时生效：同一条目在该秒数内重复看完只记录一次",
     sys_bangumi_dup_throttle_floored: "节流时间不能小于 120 秒，已修正为 120",
 
     // TMDB

@@ -386,7 +386,7 @@ function InputRow({
 
 // Log-rotation bounds, mirroring etlp_logging::rotate (the backend clamps to
 // the same range as a defensive backstop for a hand-edited config).
-const DUP_THROTTLE_MIN = 120;
+const DUP_THROTTLE_MIN = 0;
 const LISTEN_PORT_MIN = 1;
 const LISTEN_PORT_MAX = 65535;
 const LOG_MAX_SIZE_MIN = 20;
@@ -3739,10 +3739,6 @@ function BangumiSection({
                     value={cfg.bangumi_duplicate_throttle_secs}
                     min={DUP_THROTTLE_MIN}
                     onCommit={(v) => update("bangumi", "duplicate_throttle_secs", v)}
-                    onClamp={(bound) => {
-                        if (bound === "min")
-                            addToast(t("sys_bangumi_dup_throttle_floored"));
-                    }}
                 />
                 <ButtonRow
                     label={t("sync_test")}
@@ -3973,10 +3969,6 @@ function TraktSection({
                     value={cfg.trakt_duplicate_throttle_secs}
                     min={DUP_THROTTLE_MIN}
                     onCommit={(v) => update("trakt", "duplicate_throttle_secs", v)}
-                    onClamp={(bound) => {
-                        if (bound === "min")
-                            addToast(t("sys_trakt_dup_throttle_floored"));
-                    }}
                 />
                 <ButtonRow
                     label={t("sync_test")}

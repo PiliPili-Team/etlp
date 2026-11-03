@@ -287,10 +287,8 @@ pub fn trakt_redirect_uri(listen_port: u32) -> String {
     format!("http://localhost:{listen_port}/trakt_auth")
 }
 
-/// Lower bound (seconds) for the repeated-mark throttle window. Any configured
-/// value below this — migrated from an old config or hand-edited — is clamped
-/// up to it on read, so a too-short window can never defeat de-duplication.
-pub const MIN_DUPLICATE_THROTTLE_SECS: u64 = 120;
+/// Lower bound (seconds) for the repeated-mark throttle window.
+pub const MIN_DUPLICATE_THROTTLE_SECS: u64 = 0;
 
 /// Throttle window (seconds) used when the key is absent, e.g. a config written
 /// before the field existed (older versions hard-coded 600s; migrated installs
@@ -326,21 +324,16 @@ pub struct TraktSection {
     /// Throttle window, in seconds, for de-duplicating repeated marks of the
     /// same item while `allow_duplicate` is `false`: finishing the same item
     /// again within this window is recorded only once. Configs predating this
-    /// field migrate to [`DEFAULT_DUPLICATE_THROTTLE_SECS`]; the stored value is
-    /// clamped up to [`MIN_DUPLICATE_THROTTLE_SECS`] by [`Self::duplicate_throttle`].
+    /// field migrate to [`DEFAULT_DUPLICATE_THROTTLE_SECS`].
     #[serde(default = "default_duplicate_throttle_secs")]
     pub duplicate_throttle_secs: u64,
 }
 
 impl TraktSection {
-    /// Effective repeated-mark throttle window, clamped to at least
-    /// [`MIN_DUPLICATE_THROTTLE_SECS`] so a too-small configured value can never
-    /// shrink the de-duplication window below the supported floor.
+    /// Effective repeated-mark throttle window.
+    #[must_use]
     pub fn duplicate_throttle(&self) -> Duration {
-        Duration::from_secs(
-            self.duplicate_throttle_secs
-                .max(MIN_DUPLICATE_THROTTLE_SECS),
-        )
+        Duration::from_secs(self.duplicate_throttle_secs)
     }
 }
 
@@ -395,7 +388,7 @@ impl TmdbSection {
 
 /// Lower bound (seconds) for the Bangumi repeated-mark throttle window.
 /// Mirrors [`MIN_DUPLICATE_THROTTLE_SECS`] used for Trakt.
-pub const MIN_BANGUMI_THROTTLE_SECS: u64 = 120;
+pub const MIN_BANGUMI_THROTTLE_SECS: u64 = 0;
 
 /// Default Bangumi throttle window when the key is absent from the config.
 pub const DEFAULT_BANGUMI_THROTTLE_SECS: u64 = 300;
@@ -474,8 +467,7 @@ pub struct BangumiSection {
     #[serde(default)]
     pub allow_duplicate: bool,
     /// Throttle window, in seconds, for de-duplicating repeated marks of the
-    /// same item while `allow_duplicate` is `false`. Clamped up to
-    /// [`MIN_BANGUMI_THROTTLE_SECS`] on load.
+    /// same item while `allow_duplicate` is `false`.
     #[serde(default = "default_bangumi_throttle_secs")]
     pub duplicate_throttle_secs: u64,
     /// Source preference for an episode/movie's air date during Bangumi synchronization.
@@ -691,16 +683,6 @@ impl Config {
 
         let playlist = raw.playlist;
 
-        let mut trakt = raw.trakt;
-        trakt.duplicate_throttle_secs = trakt
-            .duplicate_throttle_secs
-            .max(MIN_DUPLICATE_THROTTLE_SECS);
-
-        let mut bangumi = raw.bangumi;
-        bangumi.duplicate_throttle_secs = bangumi
-            .duplicate_throttle_secs
-            .max(MIN_BANGUMI_THROTTLE_SECS);
-
         Self {
             server,
             emby: raw.emby,
@@ -708,8 +690,8 @@ impl Config {
             playlist,
             dandan: raw.dandan,
             gui: raw.gui,
-            trakt,
-            bangumi,
+            trakt: raw.trakt,
+            bangumi: raw.bangumi,
             tmdb: raw.tmdb,
             path_map: raw.path_map,
             path,
@@ -844,36 +826,36 @@ speed_dummy = 1.5
     }
 
     #[test]
-    fn duplicate_throttle_clamped_on_load() {
+    fn duplicate_throttle_honoured_on_load() {
         let dir = tempdir().expect("tempdir");
-        // A hand-edited value below the floor is normalised at load time, so
-        // the stored field itself — not just the derived window — is clamped.
-        // This prevents bypassing the minimum by editing the config file, and
-        // ensures the GUI never displays a sub-floor value.
+        // Arbitrary throttle values — down to 0 — are preserved as-is at load
+        // time so users have full flexibility without an artificial floor.
+        write_config(
+            dir.path(),
+            "config.toml",
+            "[trakt]\nduplicate_throttle_secs = 0\n",
+        );
+        let cfg = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg.trakt.duplicate_throttle_secs, 0);
+        assert_eq!(cfg.trakt.duplicate_throttle().as_secs(), 0);
+
         write_config(
             dir.path(),
             "config.toml",
             "[trakt]\nduplicate_throttle_secs = 30\n",
         );
-        let cfg = Config::load_from_dir(dir.path()).expect("load");
-        assert_eq!(
-            cfg.trakt.duplicate_throttle_secs,
-            MIN_DUPLICATE_THROTTLE_SECS
-        );
-        assert_eq!(
-            cfg.trakt.duplicate_throttle().as_secs(),
-            MIN_DUPLICATE_THROTTLE_SECS
-        );
+        let cfg2 = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg2.trakt.duplicate_throttle_secs, 30);
+        assert_eq!(cfg2.trakt.duplicate_throttle().as_secs(), 30);
 
-        // A value at or above the floor is honoured as-is.
         write_config(
             dir.path(),
             "config.toml",
             "[trakt]\nduplicate_throttle_secs = 900\n",
         );
-        let cfg = Config::load_from_dir(dir.path()).expect("load");
-        assert_eq!(cfg.trakt.duplicate_throttle_secs, 900);
-        assert_eq!(cfg.trakt.duplicate_throttle().as_secs(), 900);
+        let cfg3 = Config::load_from_dir(dir.path()).expect("load");
+        assert_eq!(cfg3.trakt.duplicate_throttle_secs, 900);
+        assert_eq!(cfg3.trakt.duplicate_throttle().as_secs(), 900);
     }
 
     #[test]
@@ -1094,31 +1076,35 @@ speed_dummy = 1.5
     }
 
     #[test]
-    fn bangumi_throttle_clamped_on_load() {
+    fn bangumi_throttle_honoured_on_load() {
         let dir = tempdir().expect("tempdir");
         write_config(
             dir.path(),
             "config.toml",
-            "[bangumi]\nduplicate_throttle_secs = 10\n",
+            "[bangumi]\nduplicate_throttle_secs = 0\n",
         );
         let cfg = Config::load_from_dir(dir.path()).expect("load");
-        assert_eq!(
-            cfg.bangumi.duplicate_throttle_secs,
-            MIN_BANGUMI_THROTTLE_SECS
-        );
-        assert_eq!(
-            cfg.bangumi.duplicate_throttle().as_secs(),
-            MIN_BANGUMI_THROTTLE_SECS
-        );
+        assert_eq!(cfg.bangumi.duplicate_throttle_secs, 0);
+        assert_eq!(cfg.bangumi.duplicate_throttle().as_secs(), 0);
 
         let dir2 = tempdir().expect("tempdir");
         write_config(
             dir2.path(),
             "config.toml",
-            "[bangumi]\nduplicate_throttle_secs = 600\n",
+            "[bangumi]\nduplicate_throttle_secs = 10\n",
         );
         let cfg2 = Config::load_from_dir(dir2.path()).expect("load");
-        assert_eq!(cfg2.bangumi.duplicate_throttle_secs, 600);
+        assert_eq!(cfg2.bangumi.duplicate_throttle_secs, 10);
+        assert_eq!(cfg2.bangumi.duplicate_throttle().as_secs(), 10);
+
+        let dir3 = tempdir().expect("tempdir");
+        write_config(
+            dir3.path(),
+            "config.toml",
+            "[bangumi]\nduplicate_throttle_secs = 600\n",
+        );
+        let cfg3 = Config::load_from_dir(dir3.path()).expect("load");
+        assert_eq!(cfg3.bangumi.duplicate_throttle_secs, 600);
     }
 
     #[test]
