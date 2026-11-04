@@ -141,8 +141,21 @@ pub struct BangumiEpisodeList {
 pub struct BangumiRelated {
     pub id: u64,
     pub relation: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub name_cn: String,
+    #[serde(default, rename = "type")]
+    pub subject_type: Option<u64>,
+}
+
+impl BangumiRelated {
+    /// True when the related subject is an anime (`type == 2`) or when the
+    /// type field was omitted (e.g. in test fixtures).
+    #[must_use]
+    pub fn is_anime(&self) -> bool {
+        self.subject_type.is_none() || self.subject_type == Some(2)
+    }
 }
 
 /// Episode collection state for a single episode.
@@ -1304,17 +1317,22 @@ async fn enrich_with_chain(
                     }
                 };
 
-                let has_sequel = related.iter().any(|r| r.relation == "续集");
+                let has_sequel = related
+                    .iter()
+                    .any(|r| r.is_anime() && r.relation == "续集");
                 let mut edges: Vec<u64> = related
                     .iter()
-                    .filter(|r| r.relation == "前传" || r.relation == "续集")
+                    .filter(|r| {
+                        r.is_anime()
+                            && (r.relation == "前传" || r.relation == "续集")
+                    })
                     .map(|r| r.id)
                     .collect();
 
                 if !has_sequel {
                     let alt: Vec<u64> = related
                         .iter()
-                        .filter(|r| r.relation == "不同演绎")
+                        .filter(|r| r.is_anime() && r.relation == "不同演绎")
                         .map(|r| r.id)
                         .collect();
                     if !alt.is_empty() {
@@ -1354,6 +1372,205 @@ async fn enrich_with_chain(
             queue.push_back(rid);
         }
     }
+}
+
+const MAX_DIFF_WORLDVIEW_SUBJECTS: usize = 15;
+const MAX_SAME_WORLDVIEW_SUBJECTS: usize = 15;
+/// Pruning tolerance: allows target episode air date to precede a series
+/// premiere by up to 30 days to accommodate advance pre-screenings / early
+/// streams (先行上映/点映). Any series premiering > 30 days after the target
+/// episode is strictly pruned along with all of its sequels.
+const PRUNE_PREMIERE_LEAD_DAYS: i64 = 30;
+
+/// Parameters for fallback traversal across a worldview relation.
+struct WorldviewReq<'a> {
+    relation_name: &'a str,
+    seeds: &'a [u64],
+    max_subjects: usize,
+    ep_date: Option<&'a str>,
+}
+
+/// Collect all subject IDs from `ranked` that contain an episode airing within
+/// ±2 days of `ep_date`.
+fn collect_air_date_hits(
+    ranked: &[u64],
+    ep_date: &str,
+    scrape_cache: &crate::bangumi_web::ScrapeCache,
+) -> Vec<u64> {
+    let mut hits = Vec::new();
+    for &sid in ranked {
+        let Some(d) = scrape_cache.subject_details.get(&sid) else {
+            continue;
+        };
+        let matched = d.episodes.iter().any(|ep| {
+            ep.airdate
+                .as_deref()
+                .and_then(|a| date_diff_days(a, ep_date))
+                .is_some_and(|diff| diff <= 2)
+        });
+        if matched {
+            hits.push(sid);
+        } else {
+            debug!(
+                subject_id = sid,
+                name = %d.name,
+                target_air_date = ep_date,
+                ep_count = d.episodes.len(),
+                "bangumi: subject skipped — no episode matches air_date"
+            );
+        }
+    }
+    hits
+}
+
+/// Fallback BFS expansion from existing seed subjects across a specific
+/// worldview relation (e.g. "不同世界观" or "相同世界观").
+///
+/// Limits lateral cross-worldview jumps to 1 hop, but allows longitudinal
+/// traversal along sequels within the newly-reached worldview up to
+/// `req.max_subjects`.
+///
+/// If `ep_date` is provided and a subject's `start_date` is strictly after
+/// `ep_date` (+30 days tolerance for pre-screenings), both the subject and its
+/// subsequent sequels are pruned from traversal and candidates because sequels
+/// air even later.
+async fn enrich_with_worldview_relation(
+    api: &BangumiApi,
+    req: &WorldviewReq<'_>,
+    details: &mut Vec<crate::bangumi_web::SubjectDetail>,
+    scrape_cache: &mut crate::bangumi_web::ScrapeCache,
+    visited: &mut std::collections::HashSet<u64>,
+) -> Vec<u64> {
+    use std::collections::VecDeque;
+
+    let mut new_subjects: Vec<u64> = Vec::new();
+    let mut sequel_queue: VecDeque<u64> = VecDeque::new();
+
+    let is_strictly_future =
+        |detail: &crate::bangumi_web::SubjectDetail| -> bool {
+            let (Some(target), Some(start)) =
+                (req.ep_date, detail.start_date.as_deref())
+            else {
+                return false;
+            };
+            let (Some(target_days), Some(start_days)) =
+                (date_to_days(target), date_to_days(start))
+            else {
+                return false;
+            };
+            // If target episode aired more than 30 days before the series started,
+            // neither this subject nor its sequels can possibly contain this episode.
+            target_days + PRUNE_PREMIERE_LEAD_DAYS < start_days
+        };
+
+    // Step 1: 1-hop lateral jump across `relation_name` from seeds
+    for &seed in req.seeds {
+        if new_subjects.len() >= req.max_subjects {
+            break;
+        }
+        let related = match api.get_related_subjects(seed).await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(
+                    subject_id = seed,
+                    "bangumi: fallback related subjects error: {e}"
+                );
+                continue;
+            }
+        };
+
+        for r in related {
+            if r.relation == req.relation_name
+                && r.is_anime()
+                && visited.insert(r.id)
+            {
+                let detail = if let Some(d) =
+                    scrape_cache.subject_details.get(&r.id).cloned()
+                {
+                    Some(d)
+                } else if let Some(d) = api.fetch_subject_detail_api(r.id).await
+                {
+                    scrape_cache.subject_details.insert(r.id, d.clone());
+                    Some(d)
+                } else {
+                    None
+                };
+
+                if let Some(d) = detail {
+                    if is_strictly_future(&d) {
+                        debug!(
+                            subject_id = r.id,
+                            name = %d.name,
+                            start_date = ?d.start_date,
+                            target_air_date = ?req.ep_date,
+                            "bangumi: subject premiered after target air_date; skipping candidate and pruning sequels"
+                        );
+                        continue;
+                    }
+                    sequel_queue.push_back(r.id);
+                    details.push(d);
+                    new_subjects.push(r.id);
+                    if new_subjects.len() >= req.max_subjects {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 2: Longitudinal walk along sequels within the new worldview
+    while let Some(id) = sequel_queue.pop_front() {
+        if new_subjects.len() >= req.max_subjects {
+            break;
+        }
+        let related = match api.get_related_subjects(id).await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(
+                    subject_id = id,
+                    "bangumi: fallback sequel walk error: {e}"
+                );
+                continue;
+            }
+        };
+
+        for r in related {
+            if r.relation == "续集" && r.is_anime() && visited.insert(r.id) {
+                let detail = if let Some(d) =
+                    scrape_cache.subject_details.get(&r.id).cloned()
+                {
+                    Some(d)
+                } else if let Some(d) = api.fetch_subject_detail_api(r.id).await
+                {
+                    scrape_cache.subject_details.insert(r.id, d.clone());
+                    Some(d)
+                } else {
+                    None
+                };
+
+                if let Some(d) = detail {
+                    if is_strictly_future(&d) {
+                        debug!(
+                            subject_id = r.id,
+                            name = %d.name,
+                            start_date = ?d.start_date,
+                            target_air_date = ?req.ep_date,
+                            "bangumi: sequel premiered after target air_date; skipping candidate and pruning further sequels"
+                        );
+                        continue;
+                    }
+                    sequel_queue.push_back(r.id);
+                    details.push(d);
+                    new_subjects.push(r.id);
+                    if new_subjects.len() >= req.max_subjects {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    new_subjects
 }
 
 /// Select the subject whose `start_date` is closest to `anchor_date`.
@@ -1842,28 +2059,91 @@ pub async fn resolve_by_web_scrape_with_chain(
             &details,
         );
 
-        // Collect every subject that contains an episode within ±2 days.
-        let mut hits: Vec<u64> = Vec::new();
-        for &sid in &ranked {
-            let Some(d) = scrape_cache.subject_details.get(&sid) else {
-                continue;
+        let mut hits = collect_air_date_hits(&ranked, ep_date, scrape_cache);
+
+        // When the primary prequel/sequel chain fails to match the target episode's
+        // air_date, fall back to alternate worldviews (不同世界观) and then same
+        // worldviews (相同世界观), following sequels within each reached worldview.
+        if hits.is_empty() {
+            let seeds: Vec<u64> =
+                details.iter().map(|d| d.subject_id).collect();
+            let mut visited: std::collections::HashSet<u64> =
+                seeds.iter().copied().collect();
+
+            let before_diff_len = details.len();
+
+            // Fallback stage 1: Different Worldview (不同世界观, e.g. JoJo Part 7 SBR)
+            let diff_req = WorldviewReq {
+                relation_name: "不同世界观",
+                seeds: &seeds,
+                max_subjects: MAX_DIFF_WORLDVIEW_SUBJECTS,
+                ep_date: Some(ep_date),
             };
-            let matched = d.episodes.iter().any(|ep| {
-                ep.airdate
-                    .as_deref()
-                    .and_then(|a| date_diff_days(a, ep_date))
-                    .is_some_and(|diff| diff <= 2)
-            });
-            if matched {
-                hits.push(sid);
-            } else {
-                debug!(
-                    subject_id = sid,
-                    name = %d.name,
-                    target_air_date = ep_date,
-                    ep_count = d.episodes.len(),
-                    "bangumi: subject skipped — no episode matches air_date"
+            let diff_wv = enrich_with_worldview_relation(
+                api,
+                &diff_req,
+                &mut details,
+                scrape_cache,
+                &mut visited,
+            )
+            .await;
+
+            if !diff_wv.is_empty() {
+                info!(
+                    series = req.series,
+                    count = diff_wv.len(),
+                    "bangumi: candidate pool expanded via different worldview"
                 );
+                let new_details =
+                    details.get(before_diff_len..).unwrap_or_default();
+                let ranked_diff = rank_candidates(
+                    req.keywords,
+                    req.alt_titles,
+                    req.season_premiere_date,
+                    new_details,
+                );
+                hits =
+                    collect_air_date_hits(&ranked_diff, ep_date, scrape_cache);
+            }
+
+            // Fallback stage 2: Same Worldview (相同世界观, e.g. Toaru / Railgun)
+            if hits.is_empty() {
+                let before_same_len = details.len();
+                let same_req = WorldviewReq {
+                    relation_name: "相同世界观",
+                    seeds: &seeds,
+                    max_subjects: MAX_SAME_WORLDVIEW_SUBJECTS,
+                    ep_date: Some(ep_date),
+                };
+                let same_wv = enrich_with_worldview_relation(
+                    api,
+                    &same_req,
+                    &mut details,
+                    scrape_cache,
+                    &mut visited,
+                )
+                .await;
+
+                if !same_wv.is_empty() {
+                    info!(
+                        series = req.series,
+                        count = same_wv.len(),
+                        "bangumi: candidate pool expanded via same worldview"
+                    );
+                    let new_details =
+                        details.get(before_same_len..).unwrap_or_default();
+                    let ranked_same = rank_candidates(
+                        req.keywords,
+                        req.alt_titles,
+                        req.season_premiere_date,
+                        new_details,
+                    );
+                    hits = collect_air_date_hits(
+                        &ranked_same,
+                        ep_date,
+                        scrape_cache,
+                    );
+                }
             }
         }
 
@@ -4891,5 +5171,250 @@ mod tests {
 
         let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
         assert_eq!(id, Some(401));
+    }
+
+    // ── BFS: different worldview fallback and sequel traversal ────────────────
+
+    #[tokio::test]
+    async fn bfs_falls_back_to_different_worldview_and_sequels() {
+        let server = MockServer::start().await;
+
+        // Search returns root subject 1000 ("JoJo Root").
+        mount_api_search(&server, vec![(1000, "JoJoAnime")]).await;
+        mount_api_subject(&server, 1000, "JoJoAnime", Some("2012-10-06")).await;
+        mount_api_episodes_with_dates(&server, 1000, vec![(1, "2012-10-06")])
+            .await;
+
+        // Root subject has sequel 1001, a non-anime book 1002, and different worldview anime 2000.
+        Mock::given(method("GET"))
+            .and(path("/subjects/1000/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 1001, "name": "JoJo Part 2", "relation": "续集", "type": 2 },
+                    { "id": 1002, "name": "JoJo Manga", "relation": "不同世界观", "type": 1 },
+                    { "id": 2000, "name": "JoJo SBR 1st", "relation": "不同世界观", "type": 2 }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Main chain sequel 1001 (airs 2014, no match for 2026-09-25).
+        mount_api_subject(&server, 1001, "JoJo Part 2", Some("2014-04-04"))
+            .await;
+        mount_api_episodes_with_dates(&server, 1001, vec![(1, "2014-04-04")])
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/1001/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        // Different worldview node 2000 (SBR 1st STAGE) airs spring 2026.
+        mount_api_subject(&server, 2000, "JoJo SBR 1st", Some("2026-03-19"))
+            .await;
+        mount_api_episodes_with_dates(&server, 2000, vec![(1, "2026-03-19")])
+            .await;
+
+        // Node 2000 has sequel 2001 (SBR 2nd STAGE).
+        Mock::given(method("GET"))
+            .and(path("/subjects/2000/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 2001, "name": "JoJo SBR 2nd", "relation": "续集", "type": 2 }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Sequel 2001 contains the matching episode airing on 2026-09-25!
+        mount_api_subject(&server, 2001, "JoJo SBR 2nd", Some("2026-09-25"))
+            .await;
+        mount_api_episodes_with_dates(
+            &server,
+            2001,
+            vec![(1, "2026-09-18"), (2, "2026-09-25")],
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/2001/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["JoJoAnime"];
+        let req = WebScrapeReq {
+            series: "JoJoAnime",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2012-10-06"),
+            season_premiere_date: Some("2026-09-25"),
+            episode_air_date: Some("2026-09-25"),
+        };
+
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        // Node 2001 should be resolved via different worldview -> sequel traversal.
+        assert_eq!(id, Some(2001));
+    }
+
+    // ── BFS: same worldview fallback ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn bfs_falls_back_to_same_worldview_when_different_worldview_empty() {
+        let server = MockServer::start().await;
+
+        // Search returns root subject 3000 ("Index").
+        mount_api_search(&server, vec![(3000, "IndexAnime")]).await;
+        mount_api_subject(&server, 3000, "IndexAnime", Some("2008-10-04"))
+            .await;
+        mount_api_episodes_with_dates(&server, 3000, vec![(1, "2008-10-04")])
+            .await;
+
+        // Root subject has same worldview node 4000 ("Railgun").
+        Mock::given(method("GET"))
+            .and(path("/subjects/3000/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 4000, "name": "RailgunAnime", "relation": "相同世界观", "type": 2 }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Node 4000 airs on 2020-01-10.
+        mount_api_subject(&server, 4000, "RailgunAnime", Some("2020-01-10"))
+            .await;
+        mount_api_episodes_with_dates(&server, 4000, vec![(1, "2020-01-10")])
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/subjects/4000/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["IndexAnime"];
+        let req = WebScrapeReq {
+            series: "IndexAnime",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2008-10-04"),
+            season_premiere_date: Some("2020-01-10"),
+            episode_air_date: Some("2020-01-10"),
+        };
+
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        // Node 4000 should be resolved via same worldview fallback.
+        assert_eq!(id, Some(4000));
+    }
+
+    // ── BFS: causality pruning when subject premiered after target air_date ───
+
+    #[tokio::test]
+    async fn bfs_prunes_sequels_when_subject_premiered_after_target_air_date() {
+        let server = MockServer::start().await;
+
+        // Search returns root subject 7000 (premiered 2010).
+        mount_api_search(&server, vec![(7000, "OldAnime")]).await;
+        mount_api_subject(&server, 7000, "OldAnime", Some("2010-01-01")).await;
+        mount_api_episodes_with_dates(&server, 7000, vec![(1, "2010-01-08")])
+            .await;
+
+        // Root subject has a different worldview reboot 8000 that premiered in 2024.
+        Mock::given(method("GET"))
+            .and(path("/subjects/7000/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 8000, "name": "RebootAnime", "relation": "不同世界观", "type": 2 }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Reboot 8000 premiered in 2024.
+        mount_api_subject(&server, 8000, "RebootAnime", Some("2024-01-01"))
+            .await;
+        mount_api_episodes_with_dates(&server, 8000, vec![(1, "2024-01-08")])
+            .await;
+
+        // Expect 0 requests to /subjects/8000/subjects because 8000 started in 2024
+        // and target episode is from 2010! Sequels must be pruned before making an API call.
+        Mock::given(method("GET"))
+            .and(path("/subjects/8000/subjects"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([])),
+            )
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["OldAnime"];
+        let req = WebScrapeReq {
+            series: "OldAnime",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2010-01-01"),
+            season_premiere_date: Some("2010-01-01"),
+            episode_air_date: Some("2010-01-15"),
+        };
+
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        assert_eq!(id, None);
+    }
+
+    #[tokio::test]
+    async fn bfs_allows_early_stream_within_30_days_tolerance() {
+        let server = MockServer::start().await;
+
+        // Search returns root subject 8100 (2020).
+        mount_api_search(&server, vec![(8100, "BaseAnime")]).await;
+        mount_api_subject(&server, 8100, "BaseAnime", Some("2020-01-01")).await;
+        mount_api_episodes_with_dates(&server, 8100, vec![(1, "2020-01-08")])
+            .await;
+
+        // 8100 links to a different worldview spinoff 8200 whose TV premiere
+        // is recorded as 2024-10-06 on Bangumi.
+        Mock::given(method("GET"))
+            .and(path("/subjects/8100/subjects"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!([
+                    { "id": 8200, "name": "SpinoffAnime", "relation": "不同世界观", "type": 2 }
+                ]),
+            ))
+            .mount(&server)
+            .await;
+
+        // Spinoff 8200 officially premiered 2024-10-06, but had an advance stream
+        // on 2024-09-20 (16 days earlier).
+        mount_api_subject(&server, 8200, "SpinoffAnime", Some("2024-10-06"))
+            .await;
+        mount_api_episodes_with_dates(&server, 8200, vec![(1, "2024-09-20")])
+            .await;
+
+        let api = make_api(&server).await;
+        let mut cache = crate::bangumi_web::ScrapeCache::default();
+        let kws: &[&str] = &["BaseAnime"];
+        let req = WebScrapeReq {
+            series: "BaseAnime",
+            keywords: kws,
+            alt_titles: &[],
+            search_floor_date: Some("2020-01-01"),
+            season_premiere_date: Some("2020-01-01"),
+            episode_air_date: Some("2024-09-20"),
+        };
+
+        let id = resolve_by_web_scrape_with_chain(&req, &mut cache, &api).await;
+        // Must NOT be pruned by 30-day tolerance, and should successfully resolve 8200.
+        assert_eq!(id, Some(8200));
     }
 }
