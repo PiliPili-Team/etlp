@@ -1231,11 +1231,12 @@ async fn collect_details(
     // Triggered only when primary keywords returned 0 candidates (e.g. rare localized titles).
     if details.is_empty() {
         for alt in alt_titles.iter().filter(|a| !a.trim().is_empty()) {
-            if keywords.contains(&alt.as_str()) {
+            let alt_trimmed = alt.trim();
+            if keywords.iter().any(|k| k.eq_ignore_ascii_case(alt_trimmed)) {
                 continue;
             }
             search_and_collect_keyword_v0(
-                alt.trim(),
+                alt_trimmed,
                 &all_keywords,
                 scrape_cache,
                 api,
@@ -1774,7 +1775,8 @@ pub async fn resolve_by_web_scrape_with_chain(
                 series = req.series,
                 fuzzy_from = %fuzzy_from,
                 fuzzy_to = %fuzzy_to,
-                "bangumi: no subjects found with normal window;                  retrying with ±15 day fuzzy window"
+                "bangumi: no subjects found with normal window; \
+                 retrying with ±15 day fuzzy window"
             );
             details = collect_details(
                 req.keywords,
@@ -1792,10 +1794,11 @@ pub async fn resolve_by_web_scrape_with_chain(
     }
 
     // Stage 3: Unbounded pure-text v0 search fallback if date-windowed searches returned nothing
-    if details.is_empty() {
+    if details.is_empty() && floor.is_some() {
         warn!(
             series = req.series,
-            "bangumi: no subjects found within date windows;              falling back to unbounded pure-text v0 search"
+            "bangumi: no subjects found within date windows; \
+             falling back to unbounded pure-text v0 search"
         );
         details = collect_details(
             req.keywords,
@@ -1806,12 +1809,16 @@ pub async fn resolve_by_web_scrape_with_chain(
             None,
         )
         .await;
+        if !details.is_empty() {
+            is_fuzzy = true;
+        }
     }
 
     if details.is_empty() {
         warn!(
             series = req.series,
-            "bangumi: no subjects found —              add an ID mapping in Settings → Bangumi"
+            "bangumi: no subjects found — \
+             add an ID mapping in Settings → Bangumi"
         );
         return None;
     }

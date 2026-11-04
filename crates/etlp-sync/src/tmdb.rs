@@ -335,29 +335,32 @@ impl TmdbClient {
             .await
         {
             Ok(resp) => {
-                let mut jp: Vec<String> = resp
+                let jp = resp
                     .titles
                     .iter()
-                    .filter(|t| t.country == "JP" && !t.title.is_empty())
-                    .map(|t| t.title.clone())
-                    .collect();
-                let others: Vec<String> = resp
+                    .filter(|t| t.country == "JP" && !t.title.trim().is_empty())
+                    .map(|t| t.title.trim().to_string());
+                let others = resp
                     .titles
                     .iter()
                     .filter(|t| {
                         matches!(t.country.as_str(), "CN" | "TW" | "HK")
                             && !t.title.trim().is_empty()
                     })
-                    .map(|t| t.title.trim().to_string())
-                    .collect();
-                jp.extend(others);
-                jp.dedup();
+                    .map(|t| t.title.trim().to_string());
+                let mut seen = std::collections::HashSet::new();
+                let mut titles = Vec::new();
+                for title in jp.chain(others) {
+                    if seen.insert(title.to_lowercase()) {
+                        titles.push(title);
+                    }
+                }
                 debug!(
                     tmdb_id,
-                    count = jp.len(),
+                    count = titles.len(),
                     "tmdb: fetched movie alternate titles"
                 );
-                jp
+                titles
             }
             Err(e) => {
                 note_tmdb_error("movie alt titles", &e);
@@ -385,29 +388,32 @@ impl TmdbClient {
         };
         match curl::json_logged::<TmdbAltTitlesResponse>(DOMAIN, logged).await {
             Ok(resp) => {
-                let mut jp: Vec<String> = resp
+                let jp = resp
                     .results
                     .iter()
-                    .filter(|t| t.country == "JP" && !t.title.is_empty())
-                    .map(|t| t.title.clone())
-                    .collect();
-                let others: Vec<String> = resp
+                    .filter(|t| t.country == "JP" && !t.title.trim().is_empty())
+                    .map(|t| t.title.trim().to_string());
+                let others = resp
                     .results
                     .iter()
                     .filter(|t| {
                         matches!(t.country.as_str(), "CN" | "TW" | "HK")
                             && !t.title.trim().is_empty()
                     })
-                    .map(|t| t.title.trim().to_string())
-                    .collect();
-                jp.extend(others);
-                jp.dedup();
+                    .map(|t| t.title.trim().to_string());
+                let mut seen = std::collections::HashSet::new();
+                let mut titles = Vec::new();
+                for title in jp.chain(others) {
+                    if seen.insert(title.to_lowercase()) {
+                        titles.push(title);
+                    }
+                }
                 debug!(
                     tmdb_id,
-                    count = jp.len(),
+                    count = titles.len(),
                     "tmdb: fetched series alternate titles"
                 );
-                jp
+                titles
             }
             Err(e) => {
                 note_tmdb_error("series alt titles", &e);
@@ -876,6 +882,10 @@ mod tests {
                           "type": "" },
                         { "iso_3166_1": "CN", "title": "魔法姐妹露露特莉莉",
                           "type": "" },
+                        { "iso_3166_1": "TW", "title": "魔法的姐妹露露和莉莉",
+                          "type": "" },
+                        { "iso_3166_1": "HK", "title": "魔法の姉妹ルルットリリィ",
+                          "type": "" },
                     ],
                 }),
             ))
@@ -884,7 +894,7 @@ mod tests {
 
         let client = make_client(&server).await;
         let titles = client.series_alternative_titles(286361).await;
-        // JP title must come first, non-CJK (KR, DE) must be filtered out.
+        // JP title must come first, non-CJK (KR, DE) and cross-region duplicates (TW, HK) filtered out.
         assert_eq!(
             titles.first().map(String::as_str),
             Some("魔法の姉妹ルルットリリィ")
