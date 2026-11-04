@@ -418,10 +418,10 @@ pub(crate) fn write_server_state(app: &tauri::AppHandle, running: bool) {
         return;
     }
     let state = ServerState { running };
-    if let Ok(body) = serde_json::to_string_pretty(&state) {
-        if let Err(e) = std::fs::write(path, body) {
-            eprintln!("[etlp] write server state: {e}");
-        }
+    if let Ok(body) = serde_json::to_string_pretty(&state)
+        && let Err(e) = std::fs::write(path, body)
+    {
+        eprintln!("[etlp] write server state: {e}");
     }
 }
 

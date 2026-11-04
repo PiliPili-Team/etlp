@@ -246,6 +246,21 @@ impl Default for GuiState {
     }
 }
 
+impl GuiState {
+    /// Return the count of currently active player sessions, or 0 when idle/stopped.
+    #[must_use]
+    pub fn active_players(&self) -> usize {
+        self.app_state
+            .lock()
+            .ok()
+            .and_then(|g| {
+                g.as_ref()
+                    .map(|s| s.active_players.load(Ordering::Acquire))
+            })
+            .unwrap_or(0)
+    }
+}
+
 // ── Config DTO ─────────────────────────────────────────────────────────────────
 
 /// Flat, serialisable representation of all user-visible config fields.
@@ -576,10 +591,12 @@ pub fn get_server_status(state: State<'_, GuiState>) -> serde_json::Value {
                 .and_then(|g| g.map(|t| t.elapsed().as_secs()))
         })
         .flatten();
+    let active_players = state.active_players();
     serde_json::json!({
-        "running":     running,
-        "port":        state.port.load(Ordering::Acquire),
-        "uptime_secs": uptime_secs,
+        "running":        running,
+        "port":           state.port.load(Ordering::Acquire),
+        "uptime_secs":    uptime_secs,
+        "active_players": active_players,
     })
 }
 
@@ -2777,8 +2794,16 @@ fn apply_installer_inner(
 #[tauri::command]
 pub async fn download_and_apply_update(
     app: tauri::AppHandle,
+    state: State<'_, GuiState>,
     version: String,
 ) -> Result<(), String> {
+    let active_players = state.active_players();
+    if active_players > 0 {
+        warn!(
+            active_players,
+            "download_and_apply_update proceeding while player session is active"
+        );
+    }
     let filename = platform_asset_filename(&version);
     if filename.is_empty() {
         return Err(

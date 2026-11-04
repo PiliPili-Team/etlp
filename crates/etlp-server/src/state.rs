@@ -41,6 +41,10 @@ pub struct AppState {
     /// `"{provider}:{netloc}:{item_id}"`. Used to throttle repeated marks of the
     /// same item when it is finished several times in quick succession.
     pub recent_syncs: RwLock<HashMap<String, Instant>>,
+    /// Active player sessions persisted to disk so the service can recover
+    /// tracking across restarts (e.g. updater or crash).
+    pub active_sessions:
+        std::sync::Mutex<HashMap<usize, etlp_core::ActiveSession>>,
 }
 
 /// The shared handle used by every route handler.
@@ -54,6 +58,8 @@ impl AppState {
         http_client: HttpClient,
         working_dir: PathBuf,
     ) -> Self {
+        let initial_sessions =
+            Self::load_active_sessions_from_disk(&working_dir);
         Self {
             active_players: AtomicUsize::new(0),
             redirect_cache: RedirectCache::new(),
@@ -64,6 +70,7 @@ impl AppState {
             working_dir,
             device_id: crate::platform::device_id::load_or_create(),
             recent_syncs: RwLock::new(HashMap::new()),
+            active_sessions: std::sync::Mutex::new(initial_sessions),
         }
     }
 
@@ -98,6 +105,48 @@ impl AppState {
         }
         map.insert(key.to_owned(), now);
         false
+    }
+
+    /// Record a freshly launched player session to memory and disk.
+    pub fn save_active_session(&self, session: etlp_core::ActiveSession) {
+        if let Ok(mut map) = self.active_sessions.lock() {
+            map.insert(session.session_id, session);
+            Self::persist_sessions_to_disk(&self.working_dir, &map);
+        }
+    }
+
+    /// Remove a finished player session from memory and disk.
+    pub fn remove_active_session(&self, session_id: usize) {
+        if let Ok(mut map) = self.active_sessions.lock() {
+            map.remove(&session_id);
+            Self::persist_sessions_to_disk(&self.working_dir, &map);
+        }
+    }
+
+    fn persist_sessions_to_disk(
+        working_dir: &std::path::Path,
+        map: &HashMap<usize, etlp_core::ActiveSession>,
+    ) {
+        let path = working_dir.join("active_sessions.json");
+        if map.is_empty() {
+            let _ = std::fs::remove_file(&path);
+            return;
+        }
+        if let Ok(json) = serde_json::to_string_pretty(map) {
+            let _ = std::fs::write(&path, json);
+        }
+    }
+
+    /// Load persisted active sessions from disk (used on startup).
+    #[must_use]
+    pub fn load_active_sessions_from_disk(
+        working_dir: &std::path::Path,
+    ) -> HashMap<usize, etlp_core::ActiveSession> {
+        let path = working_dir.join("active_sessions.json");
+        let Ok(data) = std::fs::read_to_string(&path) else {
+            return HashMap::new();
+        };
+        serde_json::from_str(&data).unwrap_or_default()
     }
 }
 

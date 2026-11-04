@@ -448,6 +448,8 @@ pub struct MpvHandle {
     pub is_iina: bool,
     /// True when the executable is mpvnet (Windows mpv front-end).
     pub is_mpvnet: bool,
+    /// Path to the IPC socket / named pipe.
+    pub ipc_path: std::path::PathBuf,
 }
 
 impl MpvHandle {
@@ -482,6 +484,7 @@ impl MpvHandle {
             child: Some(child),
             is_iina,
             is_mpvnet,
+            ipc_path: ipc.path.clone(),
         };
 
         // Inject intro chapters into the first episode if available.
@@ -501,6 +504,24 @@ impl MpvHandle {
             .ok(); // non-fatal; no Lua script may be loaded
 
         Ok(handle)
+    }
+
+    /// Construct a handle from an existing IPC client without an owned child process
+    /// (e.g. when reconnecting to an orphaned player after a service restart).
+    #[must_use]
+    pub fn from_client(
+        client: MpvClient,
+        is_iina: bool,
+        is_mpvnet: bool,
+        ipc_path: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            client,
+            child: None,
+            is_iina,
+            is_mpvnet,
+            ipc_path,
+        }
     }
 
     /// Check whether the child process has already exited.
@@ -808,6 +829,7 @@ mod tests {
             child: None,
             is_iina: false,
             is_mpvnet: false,
+            ipc_path: std::path::PathBuf::from("/tmp/test.pipe"),
         };
         (handle, server_io)
     }

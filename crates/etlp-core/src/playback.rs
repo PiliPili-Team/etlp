@@ -216,6 +216,21 @@ impl PlaybackData {
     }
 }
 
+/// Active player session serialized to disk so a restarting etlp service can
+/// reconnect to the still-running player process and finish tracking/sync.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveSession {
+    pub session_id: usize,
+    pub ipc_path: std::path::PathBuf,
+    pub player_kind: crate::PlayerKind,
+    pub data: PlaybackData,
+    pub episode_list: Vec<PlaybackData>,
+    pub ordered_episodes: Vec<PlaybackData>,
+    pub disable_progress_report: bool,
+    #[serde(default)]
+    pub created_at: Option<u64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

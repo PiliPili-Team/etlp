@@ -43,6 +43,10 @@ pub const ROUTE_PLAY_MEDIA_FILE: &str = "/playMediaFile";
 /// Build the complete axum `Router`, wiring up all routes and injecting
 /// `state` as axum [`State`] into every handler.
 pub fn build_router(state: SharedState) -> Router {
+    let state_rec = state.clone();
+    tokio::spawn(async move {
+        crate::routes::play::recover_active_sessions(state_rec).await;
+    });
     Router::new()
         // Health / favicon
         .route(ROUTE_HEALTH, get(health))

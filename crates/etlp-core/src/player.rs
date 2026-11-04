@@ -4,7 +4,10 @@
 ///
 /// Mirrors the keys of the Python `start_player_func_dict`. `iina` is a macOS
 /// front-end for mpv and shares mpv's control path.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PlayerKind {
     Mpv,
     Iina,

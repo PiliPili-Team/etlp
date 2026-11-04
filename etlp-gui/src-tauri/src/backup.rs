@@ -88,7 +88,7 @@ pub fn list_backups() -> Result<Vec<BackupEntry>, String> {
             created_ms: modified_ms(&meta),
         });
     }
-    out.sort_by(|a, b| b.created_ms.cmp(&a.created_ms));
+    out.sort_by_key(|a| std::cmp::Reverse(a.created_ms));
     Ok(out)
 }
 
@@ -117,7 +117,7 @@ fn prune(dir: &Path) {
         return;
     }
     // Oldest first, then drop the leading surplus.
-    zips.sort_by(|a, b| a.1.cmp(&b.1));
+    zips.sort_by_key(|a| a.1);
     for (path, _) in zips.iter().take(zips.len() - MAX_BACKUPS) {
         let _ = std::fs::remove_file(path);
     }

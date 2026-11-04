@@ -14,6 +14,7 @@ mod player;
 pub use agent::{UA_DOWNLOAD, UA_ETLP, UA_PREFETCH};
 pub use error::{CoreError, Result};
 pub use media::{IntroMarkers, Subtitle};
+pub use playback::ActiveSession;
 pub use playback::{
     PLAYBACK_COMPLETION_PERCENT, PLAYBACK_COMPLETION_RATIO, PlaybackData,
 };

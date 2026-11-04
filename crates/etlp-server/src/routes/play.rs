@@ -595,7 +595,25 @@ async fn run_player_chain(
     }
 
     // Register all episodes for progress tracking.
-    mgr.set_ordered_playlist(ordered_episodes);
+    mgr.set_ordered_playlist(ordered_episodes.clone());
+    if let PlayerHandle::Mpv(ref h) = mgr.handle {
+        let active_session = etlp_core::ActiveSession {
+            session_id,
+            ipc_path: h.ipc_path.clone(),
+            player_kind: kind,
+            data: data.clone(),
+            episode_list: episode_list.clone(),
+            ordered_episodes: ordered_episodes.clone(),
+            disable_progress_report: mgr.disable_progress_report,
+            created_at: Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+            ),
+        };
+        state.save_active_session(active_session);
+    }
     for ep in &episode_list {
         mgr.register_playlist(ep.media_title.clone(), ep.clone());
     }
@@ -619,10 +637,125 @@ async fn run_player_chain(
     let entries = mgr.completed_entries();
     sync_trakt(&state, &entries).await;
     sync_bangumi(&state, &entries).await;
+    state.remove_active_session(session_id);
 
     metrics.total_ms = Some(chain_start.elapsed().as_millis());
     metrics.report();
     state.active_players.fetch_sub(1, Ordering::Release);
+}
+
+/// Attempt to reconnect to orphaned player sessions that were still running when
+/// the previous etlp server process exited (e.g. during an application update).
+pub async fn recover_active_sessions(state: SharedState) {
+    let sessions: Vec<(usize, etlp_core::ActiveSession)> = {
+        let Ok(map) = state.active_sessions.lock() else {
+            return;
+        };
+        map.iter().map(|(&k, v)| (k, v.clone())).collect()
+    };
+
+    if sessions.is_empty() {
+        return;
+    }
+
+    let max_id = sessions.iter().map(|(id, _)| *id).max().unwrap_or(0);
+    SESSION_COUNTER.fetch_max(max_id + 1, Ordering::Relaxed);
+
+    for (session_id, session) in sessions {
+        if !session.player_kind.is_mpv_family() {
+            state.remove_active_session(session_id);
+            continue;
+        }
+
+        // Check if the pipe exists and connects.
+        let mut connected_client = None;
+        for _ in 0..3 {
+            match etlp_player::MpvClient::connect(&session.ipc_path, None).await
+            {
+                Ok(c) => {
+                    connected_client = Some(c);
+                    break;
+                }
+                Err(_) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(100))
+                        .await;
+                }
+            }
+        }
+
+        let Some(client) = connected_client else {
+            debug!(
+                session_id,
+                path = %session.ipc_path.display(),
+                "orphaned mpv session is not reachable, pruning"
+            );
+            state.remove_active_session(session_id);
+            continue;
+        };
+
+        // Ping mpv via IPC to confirm responsiveness
+        let pid_val = client
+            .command("get_property", &[serde_json::json!("pid")])
+            .await;
+        if pid_val.is_err() {
+            debug!(
+                session_id,
+                path = %session.ipc_path.display(),
+                "orphaned mpv session did not respond to ping, pruning"
+            );
+            state.remove_active_session(session_id);
+            continue;
+        }
+
+        info!(
+            session_id,
+            title = %session.data.media_title,
+            ipc_path = %session.ipc_path.display(),
+            "reconnected to orphaned mpv session from previous run"
+        );
+
+        state.active_players.fetch_add(1, Ordering::Release);
+
+        let is_iina = session.player_kind == etlp_core::PlayerKind::Iina;
+        let is_mpvnet = false;
+        let handle = MpvHandle::from_client(
+            client,
+            is_iina,
+            is_mpvnet,
+            session.ipc_path.clone(),
+        );
+        let mut mgr =
+            PlayerManager::new(PlayerHandle::Mpv(handle), session.data.clone());
+        mgr.disable_progress_report = session.disable_progress_report;
+        mgr.set_ordered_playlist(session.ordered_episodes.clone());
+        for ep in &session.episode_list {
+            mgr.register_playlist(ep.media_title.clone(), ep.clone());
+        }
+
+        let state_clone = state.clone();
+        tokio::spawn(async move {
+            let (cancel_tx, mut cancel_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let state_dl = state_clone.clone();
+            tokio::spawn(async move {
+                while let Some(id) = cancel_rx.recv().await {
+                    state_dl.dl_manager.lock().await.cancel_only(&id).await;
+                }
+            });
+
+            let http = state_clone.http_client();
+            mgr.start_loops(http.clone(), Some(cancel_tx));
+            mgr.collect_stop_times().await;
+            mgr.write_progress(&http).await;
+
+            let entries = mgr.completed_entries();
+            sync_trakt(&state_clone, &entries).await;
+            sync_bangumi(&state_clone, &entries).await;
+
+            state_clone.active_players.fetch_sub(1, Ordering::Release);
+            state_clone.remove_active_session(session_id);
+        });
+    }
 }
 
 // ── Emby / Jellyfin play ──────────────────────────────────────────────────────
