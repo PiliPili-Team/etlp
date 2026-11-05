@@ -18,7 +18,7 @@ use etlp_media_server::{
     EmbyClient, EmbyParseConfig, ListContext, PlexParseConfig,
     PlexReceivedData, ReceivedData, assemble_episodes, assemble_episodes_alt,
     looks_like_legacy_shape, parse_received_data_emby,
-    parse_received_data_plex,
+    parse_received_data_plex, paths_equal,
 };
 use etlp_metrics::{PlayMetrics, Span};
 use etlp_player::{
@@ -228,7 +228,11 @@ async fn run_player_chain(
             .iter()
             .position(|e| {
                 e.item_id == data.item_id
-                    || e.media_source_id == data.media_source_id
+                    || (!data.media_source_id.is_empty()
+                        && e.media_source_id == data.media_source_id)
+                    || (data.index.is_some() && e.index == data.index)
+                    || (!data.file_path.is_empty()
+                        && paths_equal(&e.file_path, &data.file_path))
             })
             .unwrap_or_else(|| {
                 warn!(
@@ -572,7 +576,11 @@ async fn run_player_chain(
             .iter()
             .position(|e| {
                 e.item_id == data.item_id
-                    || e.media_source_id == data.media_source_id
+                    || (!data.media_source_id.is_empty()
+                        && e.media_source_id == data.media_source_id)
+                    || (data.index.is_some() && e.index == data.index)
+                    || (!data.file_path.is_empty()
+                        && paths_equal(&e.file_path, &data.file_path))
             })
             .unwrap_or_else(|| {
                 warn!(

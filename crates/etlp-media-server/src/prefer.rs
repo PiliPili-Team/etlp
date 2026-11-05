@@ -131,17 +131,17 @@ pub fn version_prefer_for_playlist(
             result.push((*first).clone());
             continue;
         }
-        let (picked, reason): (&Item, &str) = if let Some((_, ep)) =
-            ep_success_map.iter().find(|(k, _)| *k == key)
-        {
-            (ep, "by-filter")
-        } else if key == current_key {
+        let (picked, reason): (&Item, &str) = if key == current_key {
             let played = sources
                 .iter()
                 .find(|s| is_played_version(s, file_path))
                 .copied()
                 .unwrap_or(*first);
             (played, "by-played-file")
+        } else if let Some((_, ep)) =
+            ep_success_map.iter().find(|(k, _)| *k == key)
+        {
+            (ep, "by-filter")
         } else {
             (
                 pick_by_rules(&sources, rules).unwrap_or(*first),
@@ -243,6 +243,35 @@ mod tests {
         .expect("some");
         assert_eq!(res.len(), 1);
         assert_eq!(res.first().expect("entry").id, "baha");
+    }
+
+    #[test]
+    fn current_key_wins_even_if_ep_success_map_has_different_version() {
+        let ep_open = item("open_6", "/m/s02e06.Open.strm");
+        let ep_tg = item("tg_6", "/m/s02e06.TG.strm");
+        let eps = vec![ep_open.clone(), ep_tg.clone()];
+        let keys = vec!["2-6".to_owned(), "2-6".to_owned()];
+
+        // Suppose ep_success_map chose Open version for key 2-6
+        let ep_success_map = vec![("2-6".to_owned(), ep_open.clone())];
+
+        let res = version_prefer_for_playlist(
+            &keys,
+            &eps,
+            &ep_success_map,
+            "2-6",
+            "/m/s02e06.TG.strm",
+            &["open".to_owned()],
+            true,
+        )
+        .expect("some");
+
+        assert_eq!(res.len(), 1);
+        assert_eq!(
+            res.first().expect("entry").id,
+            "tg_6",
+            "Current key MUST pick the played file version (Anchor First) despite ep_success_map"
+        );
     }
 
     #[test]

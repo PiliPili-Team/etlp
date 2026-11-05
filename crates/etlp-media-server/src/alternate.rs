@@ -17,6 +17,7 @@ use tracing::debug;
 use crate::dto::{Item, MediaSource};
 use crate::list_episodes::{ListContext, finalize_playlist};
 use crate::version::select_version_index;
+use crate::version_filter::paths_equal;
 
 /// The final path component, splitting on both separators.
 fn basename(path: &str) -> &str {
@@ -45,6 +46,7 @@ fn version_label(source: &MediaSource) -> String {
 fn pick_alt_source<'a>(
     item: &'a Item,
     current_source_id: &str,
+    current_path: &str,
     preference: &[String],
 ) -> Option<&'a MediaSource> {
     if !current_source_id.is_empty()
@@ -52,6 +54,14 @@ fn pick_alt_source<'a>(
             .media_sources
             .iter()
             .find(|s| s.id == current_source_id)
+    {
+        return Some(found);
+    }
+    if !current_path.is_empty()
+        && let Some(found) = item
+            .media_sources
+            .iter()
+            .find(|s| paths_equal(&s.path, current_path))
     {
         return Some(found);
     }
@@ -121,13 +131,18 @@ pub fn assemble_episodes_alt(
     fetched: &[Item],
 ) -> Vec<PlaybackData> {
     let current_id = ctx.base.media_source_id.as_str();
+    let current_path = ctx.base.file_path.as_str();
     // The label of the version the user is watching takes top preference so the
     // rest of the season follows the same release whenever it is available.
     let mut preference: Vec<String> = Vec::new();
     if let Some(label) = fetched
         .iter()
         .flat_map(|item| &item.media_sources)
-        .find(|s| s.id == current_id)
+        .find(|s| {
+            (!current_id.is_empty() && s.id == current_id)
+                || (!current_path.is_empty()
+                    && paths_equal(&s.path, current_path))
+        })
         .map(version_label)
     {
         preference.push(label);
@@ -137,7 +152,8 @@ pub fn assemble_episodes_alt(
     let mut episodes: Vec<Item> = fetched
         .iter()
         .filter_map(|item| {
-            let source = pick_alt_source(item, current_id, &preference)?;
+            let source =
+                pick_alt_source(item, current_id, current_path, &preference)?;
             Some(version_item(item, source))
         })
         .collect();
@@ -192,11 +208,26 @@ mod tests {
     }
 
     #[test]
+    fn pick_alt_source_falls_back_to_path_when_id_mismatches() {
+        let ep = alt_episode("29", 1);
+        // ID doesn't match, but path matches with alternate separators
+        let chosen = pick_alt_source(
+            &ep,
+            "mismatched_id",
+            r"\mnt\media\S01E0x WEB-DL.LINETV.mkv",
+            &[],
+        )
+        .expect("a source");
+        assert_eq!(chosen.id, "mediasource_291");
+        assert_eq!(chosen.name, "WEB-DL.LINETV");
+    }
+
+    #[test]
     fn pick_alt_source_prefers_current_id() {
         let ep = alt_episode("29", 1);
         // Current selection is the LINETV source -> it wins over preference.
         let chosen =
-            pick_alt_source(&ep, "mediasource_291", &[]).expect("a source");
+            pick_alt_source(&ep, "mediasource_291", "", &[]).expect("a source");
         assert_eq!(chosen.id, "mediasource_291");
         assert_eq!(chosen.name, "WEB-DL.LINETV");
     }
@@ -206,7 +237,7 @@ mod tests {
         let ep = alt_episode("30", 2);
         // Not the current episode (no id match); preference points to LINETV.
         let preference = vec!["web-dl.linetv".to_owned()];
-        let chosen = pick_alt_source(&ep, "mediasource_291", &preference)
+        let chosen = pick_alt_source(&ep, "mediasource_291", "", &preference)
             .expect("a source");
         assert_eq!(chosen.name, "WEB-DL.LINETV");
     }
@@ -214,7 +245,7 @@ mod tests {
     #[test]
     fn pick_alt_source_defaults_to_first_without_preference() {
         let ep = alt_episode("31", 3);
-        let chosen = pick_alt_source(&ep, "absent", &[]).expect("a source");
+        let chosen = pick_alt_source(&ep, "absent", "", &[]).expect("a source");
         assert_eq!(chosen.name, "WEB-DL.Baha");
     }
 

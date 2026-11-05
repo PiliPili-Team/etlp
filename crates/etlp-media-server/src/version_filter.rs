@@ -122,7 +122,7 @@ fn path_contains(item: &Item, rule: &str) -> bool {
 /// Emby on Windows may use backslashes while the userscript sends the same
 /// path with forward slashes. Normalising before comparing avoids a silent
 /// miss that would cause `version_filter` to return all episodes unfiltered.
-fn paths_equal(a: &str, b: &str) -> bool {
+pub fn paths_equal(a: &str, b: &str) -> bool {
     a == b || a.replace('\\', "/") == b.replace('\\', "/")
 }
 
@@ -224,6 +224,136 @@ fn name_rules(file_path: &str) -> (Option<&str>, Option<String>) {
             }
         });
     (official, clean)
+}
+
+/// Construct a regex pattern from `cur_name` where season and episode markers are parameterized.
+fn build_episode_template_regex(
+    cur_name: &str,
+    _parent_index: Option<i64>,
+    index: Option<i64>,
+) -> Option<String> {
+    let mut s = cur_name.to_owned();
+
+    // Placeholders that cannot appear in normal filenames:
+    const SEASON_EP_PH: &str = "\x01SEASON_EP\x01";
+    const EP_PH: &str = "\x01EP\x01";
+
+    // 1. S02E06 / S2E6 style patterns:
+    if let Ok(re_se) = RegexBuilder::new(r"s\d+[-_ ]*e\d+")
+        .case_insensitive(true)
+        .build()
+    {
+        s = re_se.replace_all(&s, SEASON_EP_PH).into_owned();
+    }
+
+    // 2. E06 / EP06 style patterns:
+    if let Ok(re_e) =
+        RegexBuilder::new(r"ep?\d+").case_insensitive(true).build()
+    {
+        s = re_e.replace_all(&s, EP_PH).into_owned();
+    }
+
+    // 3. Chinese episode notations like 第06话 / 第6集:
+    if let Ok(re_zh) = RegexBuilder::new(r"第?\s*\d+\s*[话話集期]").build()
+    {
+        s = re_zh.replace_all(&s, EP_PH).into_owned();
+    }
+
+    // 4. Standalone episode number surrounded by delimiters (e.g. " - 06 " or "[06]"):
+    // Rust regex crate does not support lookaround, so we use capture groups $1 and $2.
+    if let Some(idx) = index {
+        let num_pat = format!(r"([\s\-_.\[(]|^)0*{idx}([\s\-_.\])]|$)");
+        if let Ok(re_num) =
+            RegexBuilder::new(&num_pat).case_insensitive(true).build()
+        {
+            let repl = format!("${{1}}{EP_PH}${{2}}");
+            s = re_num.replace_all(&s, repl.as_str()).into_owned();
+        }
+    }
+
+    // If no placeholders were inserted, we cannot generalize a template.
+    if !s.contains(SEASON_EP_PH) && !s.contains(EP_PH) {
+        return None;
+    }
+
+    // Escape regex special chars in the template skeleton:
+    let escaped = regex::escape(&s);
+
+    // Substitute the placeholders with regex patterns:
+    let escaped_se_ph = regex::escape(SEASON_EP_PH);
+    let escaped_ep_ph = regex::escape(EP_PH);
+
+    let pattern = escaped
+        .replace(&escaped_se_ph, r"[sS]\d+[-_ ]*[eE]\d+")
+        .replace(
+            &escaped_ep_ph,
+            r"(?:\d{1,4}|[eE][pP]?\d+|第?\s*\d+\s*[话話集期]?)",
+        );
+
+    Some(format!("^{pattern}$"))
+}
+
+/// Try to match the whole playlist using a template derived from the current episode's basename.
+///
+/// Abstract the season and episode number into a regex pattern and check whether every episode
+/// in `seq_keys` has exactly one candidate item matching this template. If so, return the
+/// matched items in order.
+fn template_match(
+    episodes: &[Item],
+    ep_current: &Item,
+    seq_keys: &[String],
+    file_path: &str,
+) -> Option<Vec<Item>> {
+    let cur_name = basename(file_path);
+    if cur_name.is_empty() {
+        return None;
+    }
+
+    let pattern = build_episode_template_regex(
+        cur_name,
+        ep_current.parent_index_number,
+        ep_current.index_number,
+    )?;
+    let re = RegexBuilder::new(&pattern)
+        .case_insensitive(true)
+        .build()
+        .ok()?;
+
+    // Sanity check: the current episode itself must match the generated regex.
+    if !re.is_match(cur_name) {
+        debug!(cur_name = ?cur_name, "version_filter: template_match self match failed");
+        return None;
+    }
+
+    // For every key in seq_keys, find candidates matching the template.
+    let mut matched = Vec::with_capacity(seq_keys.len());
+    for key in seq_keys {
+        let candidates: Vec<&Item> = episodes
+            .iter()
+            .filter(|i| episode_key(i).as_deref() == Some(key.as_str()))
+            .filter(|i| {
+                let name = i.path.as_deref().map(basename).unwrap_or("");
+                re.is_match(name)
+            })
+            .collect();
+
+        // Must match exactly one item per key to be an unambiguous template match.
+        if candidates.len() != 1 {
+            return None;
+        }
+        let first = candidates.first()?;
+        matched.push((*first).clone());
+    }
+
+    // Sanity check: must contain the current episode or an item with equal path.
+    if !matched
+        .iter()
+        .any(|i| paths_equal(i.path.as_deref().unwrap_or(""), file_path))
+    {
+        return None;
+    }
+
+    Some(matched)
 }
 
 /// The builtin substring pass over `official_rule` / `clean_path`.
@@ -476,6 +606,19 @@ pub fn version_filter(
         }
     }
 
+    // 0. Template matching pass: derive a season/episode-agnostic template from the played
+    // file's basename. If every unique episode key in the season matches exactly one candidate
+    // file under that template, we have an exact full-season version match.
+    if let Some(matched) =
+        template_match(episodes, ep_current, &seq_keys, input.file_path)
+    {
+        debug!(
+            "version_filter: [DECISION] template match selected {} episodes",
+            matched.len()
+        );
+        return matched;
+    }
+
     let rules = name_rules(input.file_path);
     let builtin_res = match builtin_pass(
         episodes,
@@ -518,32 +661,29 @@ pub fn version_filter(
     };
     let filter_tokens: Vec<String> = outer
         .find_iter(input.file_path)
-        .map(|m| m.as_str().to_owned())
+        .map(|m| m.as_str().to_lowercase())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
         .collect();
     debug!(
         "version_filter: filter-regex extracted tokens {:?} from {:?}",
         filter_tokens, input.file_path
     );
-    let combined = filter_tokens.join("|");
-    let Ok(inner) = RegexBuilder::new(&combined).case_insensitive(true).build()
-    else {
-        return fallback(builtin_res, ep_current);
-    };
-    let token_count = filter_tokens.len();
     let ep_data: Vec<Item> = episodes
         .iter()
         .filter(|i| {
-            let path = i.path.as_deref().unwrap_or("");
-            inner.find_iter(path).count() == token_count
+            let path = i.path.as_deref().unwrap_or("").to_lowercase();
+            !filter_tokens.is_empty()
+                && filter_tokens.iter().all(|t| path.contains(t))
         })
         .cloned()
         .collect();
     debug!(
-        "version_filter: filter-regex result: {}/{} episodes matched token_count={} \
+        "version_filter: filter-regex result: {}/{} episodes matched tokens {:?} \
          (need {} unique for exact)",
         ep_data.len(),
         episodes.len(),
-        token_count,
+        filter_tokens,
         ep_num
     );
     if ep_data.len() == ep_num {
@@ -908,5 +1048,75 @@ mod tests {
         let mut pl = input("/m/a.mkv", "1080p");
         pl.playlist = true;
         assert_eq!(version_filter(&pl, &eps).len(), 1);
+    }
+
+    #[test]
+    fn template_match_sword_isekai_double_dash_with_tg_and_open() {
+        // Reproduces the exact user issue from "转生成为魔剑 (2022)":
+        // Filenames contain double dashes and Chinese characters, with both Open and TG versions.
+        let mut eps = Vec::new();
+        for i in 1..=6 {
+            let open_id = format!("open_{i}");
+            let open_path = format!(
+                "/root/media/emby/ANiStrmEm/Season 2/S02E0{i} - [ANi] 轉生就是劍 第二季 - 0{i} [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4.strm"
+            );
+            eps.push(ep(&open_id, 2, i, &open_path));
+
+            let tg_id = format!("tg_{i}");
+            let tg_path = format!(
+                "/root/media/emby/ANiStrmEm/Season 2/S02E0{i} - [ANi] 轉生就是劍 第二季 - 0{i} [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4_TG.strm"
+            );
+            eps.push(ep(&tg_id, 2, i, &tg_path));
+        }
+
+        let played_tg_ep6 = "/root/media/emby/ANiStrmEm/Season 2/S02E06 - [ANi] 轉生就是劍 第二季 - 06 [1080P][Baha][WEB-DL][AAC AVC][CHT].mp4_TG.strm";
+
+        // Even with a default filter regex that has no TG/Open keywords:
+        let res = version_filter(
+            &input(played_tg_ep6, "喵萌奶茶屋|爱恋字幕社|1080p"),
+            &eps,
+        );
+
+        assert_eq!(res.len(), 6, "Must select all 6 episodes");
+        let matched_ids: Vec<&str> =
+            res.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(
+            matched_ids,
+            vec!["tg_1", "tg_2", "tg_3", "tg_4", "tg_5", "tg_6"],
+            "All selected episodes must be TG version, exactly matching played episode 6"
+        );
+    }
+
+    #[test]
+    fn template_match_cross_season_continuous_playlist() {
+        let eps = vec![
+            ep("s1_e1", 1, 1, "/media/Show S01E01 [1080p][TG].mkv"),
+            ep("s1_e1_alt", 1, 1, "/media/Show S01E01 [720p].mkv"),
+            ep("s2_e1", 2, 1, "/media/Show S02E01 [1080p][TG].mkv"),
+            ep("s2_e1_alt", 2, 1, "/media/Show S02E01 [720p].mkv"),
+        ];
+
+        let played = "/media/Show S02E01 [1080p][TG].mkv";
+        let res = version_filter(&input(played, "1080p"), &eps);
+        assert_eq!(res.len(), 2);
+        let ids: Vec<&str> = res.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["s1_e1", "s2_e1"]);
+    }
+
+    #[test]
+    fn filter_regex_all_tokens_subset_match() {
+        // When played file matches two tokens (Baha and WEB-DL),
+        // another episode having ONLY Baha must NOT be matched.
+        let eps = vec![
+            ep("ep1_both", 1, 1, "/media/Show S01E01 [Baha][WEB-DL].mkv"),
+            ep("ep1_baha_only", 1, 1, "/media/Show S01E01 [Baha].mkv"),
+            ep("ep2_both", 1, 2, "/media/Show S01E02 [Baha][WEB-DL].mkv"),
+            ep("ep2_baha_only", 1, 2, "/media/Show S01E02 [Baha].mkv"),
+        ];
+
+        let played = "/media/Show S01E01 [Baha][WEB-DL].mkv";
+        let res = version_filter(&input(played, "Baha|WEB-DL"), &eps);
+        let ids: Vec<&str> = res.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["ep1_both", "ep2_both"]);
     }
 }

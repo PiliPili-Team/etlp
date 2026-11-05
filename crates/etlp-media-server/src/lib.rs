@@ -47,6 +47,6 @@ pub use received::ReceivedData;
 pub use subtitle::{SubtitleSelection, subtitle_checker};
 pub use version::{match_version_range, select_version_index};
 pub use version_filter::{
-    VersionFilterInput, episode_key, filter_by_raw_name, shortest_episode,
-    version_filter,
+    VersionFilterInput, episode_key, filter_by_raw_name, paths_equal,
+    shortest_episode, version_filter,
 };
