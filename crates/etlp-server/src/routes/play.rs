@@ -306,6 +306,16 @@ async fn run_player_chain(
     };
 
     // `media_path` is the resolved play URL (HTTP stream or translated local path).
+    //
+    // Windows + mpv: the taskbar only yields to a fullscreen window when it
+    // enters fullscreen while already owning the foreground. Launching with
+    // `--fullscreen=yes` makes mpv go fullscreen before we can activate it, so
+    // the taskbar stays on top until some later window reconfigure (often the
+    // first video frame) or never. Instead, fullscreen is requested over IPC
+    // right after the window has been raised to the foreground.
+    let defer_fullscreen = cfg!(target_os = "windows")
+        && cfg.fullscreen
+        && kind == PlayerKind::Mpv;
     let args = LaunchArgs {
         exe: cfg.player_exe.clone(),
         media_path: launch_media_path,
@@ -315,7 +325,7 @@ async fn run_player_chain(
         is_multiple_episodes: play_multiple,
         mount_disk_mode: data.mount_disk_mode,
         intro: data.intro,
-        fullscreen: cfg.fullscreen,
+        fullscreen: cfg.fullscreen && !defer_fullscreen,
         disable_audio: cfg.disable_audio,
         http_proxy: cfg.http_proxy.clone(),
         static_ipc: cfg.static_ipc.clone(),
@@ -368,8 +378,34 @@ async fn run_player_chain(
     // Raise the freshly launched player window to the foreground. On Windows
     // a process spawned from a background service often lands behind the
     // caller or minimised; `activate_window_by_pid` is a no-op elsewhere.
-    if let Some(pid) = handle.pid() {
-        crate::platform::activate_window_by_pid(pid);
+    // Deferred fullscreen (see `defer_fullscreen`) is applied only after the
+    // activation attempt so the window enters fullscreen as the foreground.
+    let fullscreen_client = match &handle {
+        PlayerHandle::Mpv(h) if defer_fullscreen => Some(h.client.clone()),
+        _ => None,
+    };
+    let player_pid = handle.pid();
+    if player_pid.is_some() || fullscreen_client.is_some() {
+        tokio::spawn(async move {
+            let activated = match player_pid {
+                Some(pid) => crate::platform::activate_window_by_pid(pid).await,
+                None => false,
+            };
+            if let Some(client) = fullscreen_client {
+                match client
+                    .command(
+                        "set_property",
+                        &[json!("fullscreen"), json!(true)],
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(activated, "mpv: deferred fullscreen applied")
+                    }
+                    Err(e) => warn!("mpv: deferred fullscreen failed: {e}"),
+                }
+            }
+        });
     }
 
     let mut mgr = PlayerManager::new(handle, data.clone());

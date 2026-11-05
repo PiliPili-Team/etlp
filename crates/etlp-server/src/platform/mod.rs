@@ -31,19 +31,23 @@ pub use path::{
 ///
 /// On all other platforms this is a no-op (macOS players surface themselves
 /// via `--focus-on=open`; Linux desktops vary too much to special-case).
-#[cfg_attr(target_os = "windows", allow(unsafe_code))]
-pub fn activate_window_by_pid(_pid: u32) {
+///
+/// Resolves to `true` once the window is confirmed to own the foreground, or
+/// `false` when the polling budget is exhausted / the platform is unsupported.
+/// Callers that must act after activation (e.g. entering fullscreen so the
+/// taskbar yields to the window) await it; others can simply spawn it.
+pub async fn activate_window_by_pid(_pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
-        tokio::spawn(async move {
-            for _ in 0..30 {
-                if try_activate_window_once(_pid) {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Poll for the initial window creation and activate foreground
+        for _ in 0..30 {
+            if try_activate_window_once(_pid) {
+                return true;
             }
-        });
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
     }
+    false
 }
 
 #[cfg(target_os = "windows")]
@@ -57,7 +61,7 @@ fn try_activate_window_once(pid: u32) -> bool {
         AllowSetForegroundWindow, BringWindowToTop, EnumWindows,
         GetForegroundWindow, GetWindowRect, GetWindowTextLengthW,
         GetWindowThreadProcessId, IsIconic, IsWindowVisible, SW_RESTORE,
-        SW_SHOW, SetForegroundWindow, ShowWindow,
+        SetForegroundWindow, ShowWindow,
     };
     use windows::core::BOOL;
 
@@ -131,8 +135,6 @@ fn try_activate_window_once(pid: u32) -> bool {
 
         if IsIconic(target).as_bool() {
             let _ = ShowWindow(target, SW_RESTORE);
-        } else {
-            let _ = ShowWindow(target, SW_SHOW);
         }
         let _ = BringWindowToTop(target);
         let _ = SetForegroundWindow(target);

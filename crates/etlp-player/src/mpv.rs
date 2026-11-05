@@ -357,7 +357,7 @@ pub fn build_args(args: &LaunchArgs, ipc: &IpcPath) -> Vec<String> {
         cmd.push(format!("--start={sec}"));
     }
 
-    if is_darwin || cfg!(target_os = "windows") {
+    if is_darwin {
         cmd.push("--focus-on=open".into());
     }
 
