@@ -145,6 +145,8 @@ pub struct PlayerManager {
     /// instead, so the episode is still written back as played and synced to
     /// Trakt/Bangumi as watched (instead of being reset / scrobbled as 1 %).
     completed_episodes: Arc<Mutex<HashMap<String, i64>>>,
+    /// Durations probed live by mpv for each episode in the playlist.
+    playlist_durations: Arc<Mutex<HashMap<String, i64>>>,
     /// Active episode currently playing in mpv, updated live by loops.
     active_episode: Arc<Mutex<Option<String>>>,
     /// Set to `true` by the realtime feedback loop when it successfully sends
@@ -169,6 +171,7 @@ impl PlayerManager {
             total_secs: HashMap::new(),
             playlist_stops: Arc::new(Mutex::new(HashMap::new())),
             completed_episodes: Arc::new(Mutex::new(HashMap::new())),
+            playlist_durations: Arc::new(Mutex::new(HashMap::new())),
             active_episode: Arc::new(Mutex::new(initial_active)),
             realtime_started: Arc::new(AtomicBool::new(false)),
             disable_progress_report: false,
@@ -205,21 +208,6 @@ impl PlayerManager {
         let active_title =
             self.active_episode.lock().ok().and_then(|m| m.clone());
 
-        // Update active episode position with final_stop if reported so seeks
-        // right before player exit are never lost to loop polling latency.
-        if let (Some(title), Some(sec)) = (&active_title, final_stop) {
-            if let Ok(mut stops) = self.playlist_stops.lock() {
-                stops.insert(title.clone(), sec);
-            }
-            if let Some(ep) = self.playlist.get(title)
-                && ep.is_complete_at(sec)
-                && let Ok(mut comp) = self.completed_episodes.lock()
-            {
-                let entry = comp.entry(title.clone()).or_insert(sec);
-                *entry = (*entry).max(sec);
-            }
-        }
-
         // Merge per-episode positions captured while the playlist advanced.
         let captured: Vec<(String, i64)> = self
             .playlist_stops
@@ -228,6 +216,37 @@ impl PlayerManager {
             .unwrap_or_default();
 
         let have_playlist_data = !captured.is_empty();
+
+        if let Ok(durs) = self.playlist_durations.lock() {
+            for (k, &v) in durs.iter() {
+                self.total_secs.insert(k.clone(), v);
+            }
+        }
+        if !have_playlist_data
+            && let PlayerHandle::Mpv(ref h) = self.handle
+            && let Ok(Some(dur)) = h.duration().await
+            && dur > 0.0
+        {
+            self.total_secs
+                .insert(self.data.media_title.clone(), dur as i64);
+        }
+
+        // Update active episode position with final_stop if reported so seeks
+        // right before player exit are never lost to loop polling latency.
+        if let (Some(title), Some(sec)) = (&active_title, final_stop) {
+            if let Ok(mut stops) = self.playlist_stops.lock() {
+                stops.insert(title.clone(), sec);
+            }
+            let dur = self.total_secs.get(title).copied().filter(|&d| d > 0);
+            if let Some(ep) = self.playlist.get(title)
+                && ep.is_complete_at_duration(sec, dur.unwrap_or(ep.total_sec))
+                && let Ok(mut comp) = self.completed_episodes.lock()
+            {
+                let entry = comp.entry(title.clone()).or_insert(sec);
+                *entry = (*entry).max(sec);
+            }
+        }
+
         let historically_completed = self
             .completed_episodes
             .lock()
@@ -242,14 +261,17 @@ impl PlayerManager {
             let is_primary = title == self.data.media_title
                 || ep.is_some_and(|e| e.item_id == self.data.item_id);
             let is_active_at_exit = active_title.as_deref() == Some(&title);
-            let completed = ep.is_some_and(|e| e.is_complete_at(pos));
+            let dur = self.total_secs.get(&title).copied().filter(|&d| d > 0);
+            let completed = ep.is_some_and(|e| {
+                e.is_complete_at_duration(pos, dur.unwrap_or(e.total_sec))
+            });
             let historical = historically_completed.get(&title).copied();
             if is_primary
                 || is_active_at_exit
                 || completed
                 || historical.is_some()
             {
-                let effective = effective_stop_sec(ep, pos, historical);
+                let effective = effective_stop_sec(ep, pos, historical, dur);
                 self.stop_times.insert(title, effective);
             }
         }
@@ -278,6 +300,64 @@ impl PlayerManager {
                     }
                 }
             };
+
+            let mut ep_to_write = ep.clone();
+            let emby_strm_miss_runtime =
+                ep.runtime_missing() || ep.total_sec <= 0;
+            let mpv_total_sec = self.total_secs.get(key).copied().unwrap_or(0);
+            if emby_strm_miss_runtime && mpv_total_sec > 0 {
+                ep_to_write.total_sec = mpv_total_sec;
+            }
+
+            // Skip update progress if playback failed or quit immediately (< 20s delta from start)
+            let start_sec = ep_to_write.start_sec;
+            if !ep_to_write.is_complete_at(stop_sec)
+                && (stop_sec - start_sec).abs() < 20
+            {
+                info!(
+                    "skip update progress, {:?} start_sec ({start_sec}s) and stop_sec ({stop_sec}s) too close",
+                    ep.basename
+                );
+                continue;
+            }
+
+            if emby_strm_miss_runtime {
+                let completed_by_mpv =
+                    mpv_total_sec > 0 && ep_to_write.is_complete_at(stop_sec);
+
+                if completed_by_mpv {
+                    ep_to_write.total_sec = mpv_total_sec;
+                } else {
+                    info!("strm: fetching playback info for {:?}", ep.basename);
+                    match etlp_net::fetch_playback_runtime(http, &ep_to_write)
+                        .await
+                    {
+                        Some(info) => {
+                            let server_total_sec = info.total_sec;
+                            ep_to_write.total_sec = server_total_sec;
+                            if let Some(id) = info.item_id {
+                                ep_to_write.item_id = id;
+                            }
+                            if let Some(src_id) = info.media_source_id {
+                                ep_to_write.media_source_id = src_id;
+                            }
+                            info!(
+                                "strm: total_sec ({server_total_sec}s) found by server data for {:?}",
+                                ep.basename
+                            );
+                        }
+                        None => {
+                            info!(
+                                "skip update progress, {:?} miss runtime data on server",
+                                ep.basename
+                            );
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            let ep = &ep_to_write;
 
             if self.disable_progress_report {
                 if ep.is_complete_at(stop_sec) {
@@ -344,7 +424,13 @@ impl PlayerManager {
             .map(|(key, &stop_sec)| {
                 // Fall back to primary data for single-episode playback.
                 let ep = self.playlist.get(key).unwrap_or(&self.data);
-                let progress = ep.progress_percent(stop_sec);
+                let dur = self
+                    .total_secs
+                    .get(key)
+                    .copied()
+                    .filter(|&d| d > 0)
+                    .unwrap_or(ep.total_sec);
+                let progress = ep.progress_percent_duration(stop_sec, dur);
                 let is_historical_completed = self
                     .completed_episodes
                     .lock()
@@ -428,6 +514,7 @@ impl PlayerManager {
             self.playlist_stops.clone(),
             self.completed_episodes.clone(),
             self.active_episode.clone(),
+            self.playlist_durations.clone(),
         ));
         tokio::spawn(redirect_next_ep_loop(client, playlist, http));
     }
@@ -445,8 +532,11 @@ fn effective_stop_sec(
     ep: Option<&PlaybackData>,
     pos: i64,
     historical: Option<i64>,
+    dur: Option<i64>,
 ) -> i64 {
-    let last_visit_completed = ep.is_some_and(|e| e.is_complete_at(pos));
+    let last_visit_completed = ep.is_some_and(|e| {
+        e.is_complete_at_duration(pos, dur.unwrap_or(e.total_sec))
+    });
     match historical {
         Some(done) if !last_visit_completed => done.max(pos),
         _ => pos,
@@ -461,6 +551,13 @@ fn effective_stop_sec(
 /// `completed`. Watching past completion threshold and then seeking back before
 /// leaving therefore does not count, while leaving at threshold+ is remembered
 /// even if the episode is revisited later.
+struct VisitContext<'a> {
+    playlist: &'a HashMap<String, PlaybackData>,
+    stops: &'a Mutex<HashMap<String, i64>>,
+    completed: &'a Mutex<HashMap<String, i64>>,
+    durations: &'a Mutex<HashMap<String, i64>>,
+}
+
 #[derive(Debug, Default)]
 struct VisitTracker {
     current: Option<(Option<i64>, String)>,
@@ -472,12 +569,10 @@ impl VisitTracker {
         pos_idx: Option<i64>,
         title: &str,
         pos_sec: Option<i64>,
-        playlist: &HashMap<String, PlaybackData>,
-        stops: &Mutex<HashMap<String, i64>>,
-        completed: &Mutex<HashMap<String, i64>>,
+        cx: &VisitContext<'_>,
     ) {
         // Ignore the brief window before mpv reports a known title.
-        if !playlist.contains_key(title) {
+        if !cx.playlist.contains_key(title) {
             return;
         }
 
@@ -494,34 +589,30 @@ impl VisitTracker {
 
         if is_different {
             if let Some((_, prev_title)) = self.current.take() {
-                Self::settle(&prev_title, playlist, stops, completed);
+                Self::settle(&prev_title, cx);
             }
             self.current = Some((pos_idx, title.to_owned()));
         }
 
         if let Some(pos) = pos_sec.filter(|p| *p >= 0)
-            && let Ok(mut map) = stops.lock()
+            && let Ok(mut map) = cx.stops.lock()
         {
             map.insert(title.to_owned(), pos);
         }
     }
 
     /// Judge the entry that was left using its last recorded position.
-    fn settle(
-        title: &str,
-        playlist: &HashMap<String, PlaybackData>,
-        stops: &Mutex<HashMap<String, i64>>,
-        completed: &Mutex<HashMap<String, i64>>,
-    ) {
+    fn settle(title: &str, cx: &VisitContext<'_>) {
         let Some(left_at) =
-            stops.lock().ok().and_then(|m| m.get(title).copied())
+            cx.stops.lock().ok().and_then(|m| m.get(title).copied())
         else {
             return;
         };
-        if playlist
-            .get(title)
-            .is_some_and(|ep| ep.is_complete_at(left_at))
-            && let Ok(mut map) = completed.lock()
+        let dur = cx.durations.lock().ok().and_then(|m| m.get(title).copied());
+        if cx.playlist.get(title).is_some_and(|ep| {
+            let total = dur.filter(|&d| d > 0).unwrap_or(ep.total_sec);
+            ep.is_complete_at_duration(left_at, total)
+        }) && let Ok(mut map) = cx.completed.lock()
         {
             let entry = map.entry(title.to_owned()).or_insert(left_at);
             *entry = (*entry).max(left_at);
@@ -546,6 +637,7 @@ pub async fn playlist_completion_loop(
     stops: Arc<Mutex<HashMap<String, i64>>>,
     completed: Arc<Mutex<HashMap<String, i64>>>,
     active_episode: Arc<Mutex<Option<String>>>,
+    durations: Arc<Mutex<HashMap<String, i64>>>,
 ) {
     use serde_json::json;
 
@@ -603,26 +695,41 @@ pub async fn playlist_completion_loop(
         }
 
         if !title.is_empty()
+            && let Ok(Some(dur_val)) =
+                client.command("get_property", &[json!("duration")]).await
+            && let Some(dur_sec) = dur_val.as_f64().map(|d| d as i64)
+            && dur_sec > 0
+            && let Ok(mut durs) = durations.lock()
+        {
+            durs.insert(title.clone(), dur_sec);
+        }
+
+        if !title.is_empty()
             && playlist.contains_key(&title)
             && let Ok(mut act) = active_episode.lock()
         {
             *act = Some(title.clone());
         }
 
-        tracker.observe(
-            playlist_pos,
-            &title,
-            pos_sec,
-            &playlist,
-            &stops,
-            &completed,
-        );
+        let cx = VisitContext {
+            playlist: &playlist,
+            stops: &stops,
+            completed: &completed,
+            durations: &durations,
+        };
+        tracker.observe(playlist_pos, &title, pos_sec, &cx);
 
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
     if let Some((_, last)) = tracker.current.take() {
-        VisitTracker::settle(&last, &playlist, &stops, &completed);
+        let cx = VisitContext {
+            playlist: &playlist,
+            stops: &stops,
+            completed: &completed,
+            durations: &durations,
+        };
+        VisitTracker::settle(&last, &cx);
     }
 }
 
@@ -840,6 +947,7 @@ pub async fn realtime_playing_feedback_loop(
                         Some(&prev_ep),
                         final_req_sec,
                         historical,
+                        None,
                     );
                 }
                 let _ = realtime_progress(
@@ -1370,15 +1478,14 @@ mod tests {
     /// Feed a sequence of `(title, pos)` mpv polls through the tracker.
     fn simulate(mgr: &PlayerManager, polls: &[(&str, Option<i64>)]) {
         let mut tracker = VisitTracker::default();
+        let cx = VisitContext {
+            playlist: &mgr.playlist,
+            stops: &mgr.playlist_stops,
+            completed: &mgr.completed_episodes,
+            durations: &mgr.playlist_durations,
+        };
         for (title, pos) in polls {
-            tracker.observe(
-                None,
-                title,
-                *pos,
-                &mgr.playlist,
-                &mgr.playlist_stops,
-                &mgr.completed_episodes,
-            );
+            tracker.observe(None, title, *pos, &cx);
         }
     }
 
@@ -1493,10 +1600,10 @@ mod tests {
     #[test]
     fn effective_stop_prefers_latest_completed_visit() {
         let ep = dummy_data(EP1, 0);
-        assert_eq!(effective_stop_sec(Some(&ep), 5, None), 5);
-        assert_eq!(effective_stop_sec(Some(&ep), 5, Some(DONE)), DONE);
+        assert_eq!(effective_stop_sec(Some(&ep), 5, None, None), 5);
+        assert_eq!(effective_stop_sec(Some(&ep), 5, Some(DONE), None), DONE);
         // Latest visit itself completed: keep the real position.
-        assert_eq!(effective_stop_sec(Some(&ep), 3500, Some(DONE)), 3500);
+        assert_eq!(effective_stop_sec(Some(&ep), 3500, Some(DONE), None), 3500);
     }
 
     /// Without the old 20 s guard a stop close to the start is still kept.
@@ -1530,5 +1637,173 @@ mod tests {
         let entries = mgr.completed_entries();
         assert!(entry(&entries, EP1).completed);
         assert!(!entry(&entries, EP2).completed);
+    }
+
+    #[tokio::test]
+    async fn write_progress_skips_failed_or_short_delta()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+        // Should NOT receive any Stopped call
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing/Stopped"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().trim_start_matches("http://").to_owned();
+        let mut data = dummy_data("EP1", 0);
+        data.netloc = host;
+        data.start_sec = 100;
+
+        let mut mgr = PlayerManager::new(PlayerHandle::Stub, data);
+        // delta is 5s (< 20s) and realtime_started is true
+        mgr.realtime_started.store(true, Ordering::Release);
+        mgr.stop_times.insert("EP1".into(), 105);
+
+        let http = HttpClient::new()?;
+        mgr.write_progress(&http).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn write_progress_strm_short_video_completed_not_skipped()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing/Stopped"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Users/user/PlayedItems/item-EP1"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().trim_start_matches("http://").to_owned();
+        let mut data = dummy_data("EP1", 0);
+        data.netloc = host;
+        data.total_sec = 86_400; // missing runtime sentinel
+
+        let mut mgr = PlayerManager::new(PlayerHandle::Stub, data);
+        // Short video: mpv probed total duration is 15s (< 20s)
+        mgr.total_secs.insert("EP1".into(), 15);
+        // Watched 15s (100% completed)
+        mgr.stop_times.insert("EP1".into(), 15);
+
+        let http = HttpClient::new()?;
+        mgr.write_progress(&http).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn write_progress_strm_completed_skips_playback_info() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+        // Should NOT receive PlaybackInfo
+        Mock::given(method("GET"))
+            .and(path("/emby/Items/item-EP1/PlaybackInfo"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing/Stopped"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Users/user/PlayedItems/item-EP1"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().trim_start_matches("http://").to_owned();
+        let mut data = dummy_data("EP1", 0);
+        data.netloc = host;
+        data.total_sec = 86_400; // missing runtime sentinel
+
+        let mut mgr = PlayerManager::new(PlayerHandle::Stub, data);
+        mgr.total_secs.insert("EP1".into(), 1000);
+        // 950s out of 1000s (> 90%)
+        mgr.stop_times.insert("EP1".into(), 950);
+
+        let http = HttpClient::new().unwrap();
+        mgr.write_progress(&http).await;
+    }
+
+    #[tokio::test]
+    async fn write_progress_strm_incomplete_fetches_playback_info() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+        // Should call PlaybackInfo once
+        Mock::given(method("GET"))
+            .and(path("/emby/Items/item-EP1/PlaybackInfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({
+                    "MediaSources": [{
+                        "Id": "src1",
+                        "RunTimeTicks": 1000 * 10_000_000i64
+                    }]
+                }),
+            ))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/emby/Sessions/Playing/Stopped"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let host = mock_server.uri().trim_start_matches("http://").to_owned();
+        let mut data = dummy_data("EP1", 0);
+        data.netloc = host;
+        data.total_sec = 86_400; // missing runtime sentinel
+
+        let mut mgr = PlayerManager::new(PlayerHandle::Stub, data);
+        mgr.total_secs.insert("EP1".into(), 1000);
+        // 200s out of 1000s (20% < 90%)
+        mgr.stop_times.insert("EP1".into(), 200);
+
+        let http = HttpClient::new().unwrap();
+        mgr.write_progress(&http).await;
     }
 }

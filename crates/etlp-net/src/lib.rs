@@ -12,7 +12,8 @@ pub use client::{
     HttpClient, HttpClientBuilder, NetError, build_media_download_client,
 };
 pub use progress::{
-    PlaybackEvent, mark_as_played, realtime_progress, update_progress,
+    PlaybackEvent, PlaybackRuntimeInfo, fetch_playback_runtime, mark_as_played,
+    realtime_progress, update_progress,
 };
 pub use redirect::{RedirectCache, cache_key};
 

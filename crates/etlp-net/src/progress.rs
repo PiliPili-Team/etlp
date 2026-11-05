@@ -71,13 +71,24 @@ async fn emby_realtime(
         PlaybackEvent::Playing => "timeupdate",
         PlaybackEvent::End => "stopped",
     };
-    let body = json!({
+    let mut body = json!({
         "PositionTicks": ticks,
         "ItemId": data.item_id,
         "PlaySessionId": data.play_session_id,
+        "PlayMethod": "DirectStream",
+        "CanSeek": true,
         "IsPaused": false,
+        "IsMuted": false,
+        "PlaybackRate": 1.0,
+        "QueueableMediaTypes": ["Video"],
+        "RepeatMode": "RepeatNone",
         "EventName": event_name,
     });
+    if !data.media_source_id.is_empty()
+        && let Some(obj) = body.as_object_mut()
+    {
+        obj.insert("MediaSourceId".to_owned(), json!(data.media_source_id));
+    }
     let path = match event {
         PlaybackEvent::Start => "Sessions/Playing",
         PlaybackEvent::Playing => "Sessions/Playing/Progress",
@@ -260,16 +271,25 @@ async fn emby_stopped(
             )
             .await?;
     }
+    let mut body = json!({
+        "PositionTicks": ticks,
+        "ItemId": data.item_id,
+        "PlaySessionId": data.play_session_id,
+        "PlayMethod": "DirectStream",
+        "CanSeek": true,
+        "IsPaused": false,
+        "IsMuted": false,
+        "PlaybackRate": 1.0,
+        "QueueableMediaTypes": ["Video"],
+        "RepeatMode": "RepeatNone",
+    });
+    if !data.media_source_id.is_empty()
+        && let Some(obj) = body.as_object_mut()
+    {
+        obj.insert("MediaSourceId".to_owned(), json!(data.media_source_id));
+    }
     client
-        .post_json(
-            &format!("{base}/Sessions/Playing/Stopped"),
-            &params,
-            &json!({
-                "PositionTicks": ticks,
-                "ItemId": data.item_id,
-                "PlaySessionId": data.play_session_id,
-            }),
-        )
+        .post_json(&format!("{base}/Sessions/Playing/Stopped"), &params, &body)
         .await
 }
 
@@ -348,6 +368,95 @@ async fn plex_stopped(
         )
         .await
         .map(|_| ())
+}
+
+/// Query the media server's `Items/{item_id}/PlaybackInfo` endpoint to probe
+/// missing runtime ticks (common for newly imported `.strm` media).
+///
+/// Returns `Some((total_sec, matched_source_id))` when the server reports a
+/// non-zero `RunTimeTicks`, or `None` if the runtime is still missing or request failed.
+/// Probed runtime information returned by [etch_playback_runtime].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PlaybackRuntimeInfo {
+    pub total_sec: i64,
+    pub item_id: Option<String>,
+    pub media_source_id: Option<String>,
+}
+
+pub async fn fetch_playback_runtime(
+    client: &HttpClient,
+    data: &PlaybackData,
+) -> Option<PlaybackRuntimeInfo> {
+    let url = match data.server {
+        Server::Emby => {
+            format!(
+                "{}://{}/emby/Items/{}/PlaybackInfo",
+                data.scheme, data.netloc, data.item_id
+            )
+        }
+        Server::Jellyfin => {
+            format!(
+                "{}://{}/Items/{}/PlaybackInfo",
+                data.scheme, data.netloc, data.item_id
+            )
+        }
+        Server::Plex => return None,
+    };
+    let params: Vec<(&str, &str)> = match data.server {
+        Server::Emby => vec![
+            ("X-Emby-Token", data.api_key.as_str()),
+            ("X-Emby-Device-Id", data.device_id.as_str()),
+        ],
+        Server::Jellyfin => vec![("X-Emby-Token", data.api_key.as_str())],
+        _ => return None,
+    };
+
+    let resp: serde_json::Value = match client.get_json(&url, &params).await {
+        Ok(val) => val,
+        Err(e) => {
+            tracing::warn!(
+                "fetch_playback_runtime failed for {:?}: {e}",
+                data.basename
+            );
+            return None;
+        }
+    };
+
+    let sources = resp.get("MediaSources").and_then(|v| v.as_array())?;
+    // Match by media_source_id first, falling back to any source with positive RunTimeTicks
+    let matched = if !data.media_source_id.is_empty() {
+        sources.iter().find(|s| {
+            s.get("Id").and_then(|id| id.as_str())
+                == Some(&data.media_source_id)
+                && s.get("RunTimeTicks").and_then(|t| t.as_i64()).unwrap_or(0)
+                    > 0
+        })
+    } else {
+        None
+    };
+
+    let target = matched.or_else(|| {
+        sources.iter().find(|s| {
+            s.get("RunTimeTicks").and_then(|t| t.as_i64()).unwrap_or(0) > 0
+        })
+    })?;
+
+    let ticks = target.get("RunTimeTicks")?.as_i64()?;
+    if ticks <= 0 {
+        return None;
+    }
+    let total_sec = ticks / EMBY_TICKS_PER_SEC;
+    let item_id = target
+        .get("ItemId")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    let media_source_id =
+        target.get("Id").and_then(|v| v.as_str()).map(str::to_owned);
+    Some(PlaybackRuntimeInfo {
+        total_sec,
+        item_id,
+        media_source_id,
+    })
 }
 
 #[cfg(test)]

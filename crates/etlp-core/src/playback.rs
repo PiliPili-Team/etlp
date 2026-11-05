@@ -197,10 +197,35 @@ impl PlaybackData {
         }
     }
 
+    /// Watched percentage in `[0, 100]` evaluated against an explicit total duration.
+    #[must_use]
+    pub fn progress_percent_duration(
+        &self,
+        stop_sec: i64,
+        total_sec: i64,
+    ) -> f64 {
+        if total_sec <= 0 {
+            0.0
+        } else {
+            ((stop_sec as f64 / total_sec as f64) * 100.0).clamp(0.0, 100.0)
+        }
+    }
+
+    /// Whether `stop_sec` reaches the completion threshold evaluated against an explicit total duration.
+    #[must_use]
+    pub fn is_complete_at_duration(
+        &self,
+        stop_sec: i64,
+        total_sec: i64,
+    ) -> bool {
+        self.progress_percent_duration(stop_sec, total_sec) + 1e-9
+            >= self.completion_threshold()
+    }
+
     /// Whether `stop_sec` reaches the completion threshold.
     #[must_use]
     pub fn is_complete_at(&self, stop_sec: i64) -> bool {
-        self.progress_percent(stop_sec) + 1e-9 >= self.completion_threshold()
+        self.is_complete_at_duration(stop_sec, self.total_sec)
     }
 
     /// Whether a watched percentage reaches the completion threshold.
