@@ -7,6 +7,16 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+fn deserialize_null_string_default<'de, D>(
+    deserializer: D,
+) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}
+
 /// A chapter / marker entry (used for intro detection).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Chapter {
@@ -60,7 +70,11 @@ pub struct MediaSource {
     pub id: String,
     #[serde(rename = "Name", default)]
     pub name: String,
-    #[serde(rename = "Path", default)]
+    #[serde(
+        rename = "Path",
+        default,
+        deserialize_with = "deserialize_null_string_default"
+    )]
     pub path: String,
     #[serde(rename = "Container", default)]
     pub container: Option<String>,
@@ -161,4 +175,18 @@ pub struct PlaybackInfo {
 pub struct ItemList {
     #[serde(rename = "Items", default)]
     pub items: Vec<Item>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_source_null_path_deserializes_to_empty_string()
+    -> Result<(), serde_json::Error> {
+        let json = r#"{"Id": "src1", "Name": "Source", "Path": null}"#;
+        let ms: MediaSource = serde_json::from_str(json)?;
+        assert_eq!(ms.path, "");
+        Ok(())
+    }
 }
